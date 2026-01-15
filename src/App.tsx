@@ -1,49 +1,149 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+interface IndexProgress {
+  processed: number;
+  total_estimate: number;
+  current_path: string;
+  errors: number;
+}
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+function App() {
+  const [folderPath, setFolderPath] = useState("");
+  const [indexing, setIndexing] = useState(false);
+  const [progress, setProgress] = useState<IndexProgress | null>(null);
+  const [result, setResult] = useState("");
+
+  useEffect(() => {
+    // Listen for indexing progress events
+    const unlisten = listen<IndexProgress>("indexing-progress", (event) => {
+      setProgress(event.payload);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  async function indexFolder() {
+    if (!folderPath) {
+      setResult("Please enter a folder path");
+      return;
+    }
+
+    setIndexing(true);
+    setProgress(null);
+    setResult("");
+
+    try {
+      const count = await invoke<number>("index_folder", { path: folderPath });
+      setResult(`Successfully indexed ${count} files and folders!`);
+    } catch (error) {
+      setResult(`Error: ${error}`);
+    } finally {
+      setIndexing(false);
+    }
   }
 
   return (
     <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+      <h1>AI Context Collector - Phase 2</h1>
+      <p>Parallel file indexing with progress reporting</p>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="card">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            indexFolder();
+          }}
+        >
+          <input
+            type="text"
+            value={folderPath}
+            onChange={(e) => setFolderPath(e.target.value)}
+            placeholder="Enter folder path to index..."
+            disabled={indexing}
+            style={{ width: "100%", marginBottom: "10px" }}
+          />
+          <button type="submit" disabled={indexing}>
+            {indexing ? "Indexing..." : "Index Folder"}
+          </button>
+        </form>
+
+        {progress && (
+          <div style={{ marginTop: "20px" }}>
+            <h3>Indexing Progress:</h3>
+            <p>Processed: {progress.processed} files</p>
+            <p>Current: {progress.current_path}</p>
+            <p>Errors: {progress.errors}</p>
+            <div
+              style={{
+                width: "100%",
+                height: "20px",
+                backgroundColor: "#e0e0e0",
+                borderRadius: "10px",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(
+                    (progress.processed / progress.total_estimate) * 100,
+                    100
+                  )}%`,
+                  height: "100%",
+                  backgroundColor: "#4caf50",
+                  transition: "width 0.3s ease",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div
+            style={{
+              marginTop: "20px",
+              padding: "10px",
+              backgroundColor: result.startsWith("Error")
+                ? "#ffebee"
+                : "#e8f5e9",
+              borderRadius: "5px",
+            }}
+          >
+            <p>{result}</p>
+          </div>
+        )}
+
+        <div style={{ marginTop: "30px", textAlign: "left" }}>
+          <h3>Test Examples:</h3>
+          <ul style={{ fontSize: "0.9em" }}>
+            <li>
+              <strong>Small:</strong> ./src (few hundred files)
+            </li>
+            <li>
+              <strong>Medium:</strong> ./node_modules (10k-50k files)
+            </li>
+            <li>
+              <strong>Large:</strong> System folder (platform-specific)
+            </li>
+          </ul>
+          <p style={{ fontSize: "0.8em", color: "#666" }}>
+            <strong>Note:</strong> Progress events are throttled to max 10/sec
+            for performance. Check the browser console for detailed logs.
+          </p>
+        </div>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+      <div style={{ marginTop: "30px", fontSize: "0.8em", color: "#888" }}>
+        <p>
+          <strong>Phase 2 Features:</strong> Parallel traversal with walkdir +
+          rayon • Batch SQLite inserts (1000/transaction) • Progress reporting
+          • Error recovery • Symlink skipping
+        </p>
+      </div>
     </main>
   );
 }
