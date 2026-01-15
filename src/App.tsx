@@ -1,75 +1,68 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { FileTree } from "./components/FileTree";
+import { PromptBuilder } from "./components/PromptBuilder";
 import BrowserAutomation from "./BrowserAutomation";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-  const [showBrowserTest, setShowBrowserTest] = useState(true);
+type View = "main" | "browser";
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+function App() {
+  const [currentView, setCurrentView] = useState<View>("main");
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
+
+  const handleSelectionChange = (paths: string[], ids: number[]) => {
+    setSelectedPaths(paths);
+    setSelectedFileIds(ids);
+    console.log('Selected files:', paths);
+    console.log('Selected IDs:', ids);
+  };
 
   return (
-    <main className="container">
-      <div style={{ marginBottom: "20px" }}>
-        <button
-          onClick={() => setShowBrowserTest(!showBrowserTest)}
-          style={{
-            padding: "10px 20px",
-            fontSize: "14px",
-            backgroundColor: "#28a745",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          {showBrowserTest ? "Show Default Demo" : "Show Browser Automation Test"}
-        </button>
-      </div>
-
-      {showBrowserTest ? (
-        <BrowserAutomation />
-      ) : (
-        <>
-          <h1>Welcome to Tauri + React</h1>
-
-          <div className="row">
-            <a href="https://vite.dev" target="_blank">
-              <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-            </a>
-            <a href="https://tauri.app" target="_blank">
-              <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-            </a>
-            <a href="https://react.dev" target="_blank">
-              <img src={reactLogo} className="logo react" alt="React logo" />
-            </a>
-          </div>
-          <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-          <form
-            className="row"
-            onSubmit={(e) => {
-              e.preventDefault();
-              greet();
+    <div className="app-container">
+      <header className="app-header">
+        <h1>AI Context Collector</h1>
+        <div className="selection-info">
+          <button
+            onClick={() => setCurrentView(currentView === "main" ? "browser" : "main")}
+            style={{
+              padding: "8px 16px",
+              fontSize: "14px",
+              backgroundColor: currentView === "browser" ? "#28a745" : "#007bff",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              marginRight: "10px",
             }}
           >
-            <input
-              id="greet-input"
-              onChange={(e) => setName(e.currentTarget.value)}
-              placeholder="Enter a name..."
-            />
-            <button type="submit">Greet</button>
-          </form>
-          <p>{greetMsg}</p>
-        </>
-      )}
-    </main>
+            {currentView === "main" ? "Browser Automation" : "Back to Main"}
+          </button>
+          {selectedPaths.length > 0 && currentView === "main" && (
+            <span>{selectedPaths.length} file(s) selected</span>
+          )}
+        </div>
+      </header>
+      <main className="app-main">
+        {currentView === "browser" ? (
+          <BrowserAutomation />
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", height: "100%" }}>
+            <div>
+              <FileTree onSelectionChange={handleSelectionChange} />
+            </div>
+            <div style={{ overflowY: "auto" }}>
+              <PromptBuilder 
+                selectedFileIds={selectedFileIds}
+                onPromptBuilt={(prompt) => {
+                  console.log("Built prompt:", prompt);
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
 
