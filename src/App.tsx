@@ -2,6 +2,13 @@ import { useState } from "react";
 import { FileTree } from "./components/FileTree";
 import "./App.css";
 
+interface IndexProgress {
+  processed: number;
+  total_estimate: number;
+  current_path: string;
+  errors: number;
+}
+
 function App() {
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 

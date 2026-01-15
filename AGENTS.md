@@ -115,7 +115,7 @@ ai-copy-paste/
 ### 3. Async Commands
 - All Tauri commands are async
 - Database uses Mutex for thread-safe access
-- Long-running operations (indexing) should report progress (not yet implemented)
+- Long-running operations (indexing) now report progress via Tauri events (Phase 2)
 
 ### 4. Cross-Platform Focus
 - Primary target: Windows (per user request)
