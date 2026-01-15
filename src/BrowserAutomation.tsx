@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 /**
@@ -19,7 +19,7 @@ function BrowserAutomation() {
   const [availableInterfaces, setAvailableInterfaces] = useState<string[]>([]);
 
   // Load available interfaces on mount
-  useState(() => {
+  useEffect(() => {
     invoke<string[]>("get_available_interfaces")
       .then((interfaces) => {
         setAvailableInterfaces(interfaces);
@@ -28,7 +28,7 @@ function BrowserAutomation() {
         console.error("Failed to load interfaces:", err);
         setAvailableInterfaces(["chatgpt", "claude", "gemini", "aistudio"]);
       });
-  });
+  }, []);
 
   async function launchBrowser() {
     if (!prompt.trim()) {
