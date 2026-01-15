@@ -3,6 +3,13 @@ import { FileTree } from "./components/FileTree";
 import { PromptBuilder } from "./components/PromptBuilder";
 import "./App.css";
 
+interface IndexProgress {
+  processed: number;
+  total_estimate: number;
+  current_path: string;
+  errors: number;
+}
+
 function App() {
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
