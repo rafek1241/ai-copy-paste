@@ -31,4 +31,3 @@ impl From<AppError> for String {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
-pub type Result<T> = std::result::Result<T, AppError>;

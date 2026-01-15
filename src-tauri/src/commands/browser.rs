@@ -1,4 +1,4 @@
-use crate::error::{AppError, Result};
+use crate::error::{AppError, AppResult};
 use log::{info, warn};
 use std::process::{Command, Stdio};
 use tauri::Manager;
@@ -43,7 +43,7 @@ pub async fn launch_browser(
     interface: AiInterface,
     text: String,
     custom_url: Option<String>,
-) -> Result<()> {
+) -> AppResult<()> {
     info!(
         "Launching browser for interface: {:?}, text length: {}",
         interface,
@@ -95,7 +95,7 @@ pub async fn launch_browser(
 /// Returns a list of supported AI chat interfaces that can be used
 /// with the launch_browser command.
 #[tauri::command]
-pub async fn get_available_interfaces() -> Result<Vec<String>> {
+pub async fn get_available_interfaces() -> AppResult<Vec<String>> {
     Ok(vec![
         "chatgpt".to_string(),
         "claude".to_string(),
@@ -105,7 +105,7 @@ pub async fn get_available_interfaces() -> Result<Vec<String>> {
 }
 
 /// Get the path to the sidecar automation script
-fn get_sidecar_path() -> Result<std::path::PathBuf> {
+fn get_sidecar_path() -> AppResult<std::path::PathBuf> {
     // In development, the sidecar is in the project root
     // In production, it will be bundled with the app
     
@@ -142,7 +142,15 @@ fn get_sidecar_path() -> Result<std::path::PathBuf> {
     {
         // Production mode: use bundled resource
         // TODO: Implement proper bundling with tauri-build
-        // For now, use the same logic as debug mode
+        // IMPORTANT: Production builds will fail until sidecar is properly bundled.
+        // This is a known limitation documented in AGENTS.md Phase 6 section.
+        // 
+        // To implement:
+        // 1. Add sidecar files to tauri.conf.json resources
+        // 2. Use tauri::Manager::path().resource_dir() to locate bundled files
+        // 3. Ensure Node.js is available on target system or bundle Node runtime
+        //
+        // For now, we use the same logic as debug mode which won't work in production
         let mut path = std::env::current_dir()
             .map_err(|e| AppError::BrowserError(format!("Failed to get current directory: {}", e)))?;
         path.push("sidecar");
