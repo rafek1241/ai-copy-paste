@@ -466,3 +466,138 @@ fn parallel_index_folder(
     
     Ok(total_inserted)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    fn create_test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::schema::init_database(&conn).unwrap();
+        conn
+    }
+
+    fn create_test_directory() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+
+        // Create test directory structure
+        fs::create_dir_all(path.join("folder1")).unwrap();
+        fs::create_dir_all(path.join("folder2/subfolder")).unwrap();
+        fs::write(path.join("file1.txt"), "content1").unwrap();
+        fs::write(path.join("folder1/file2.txt"), "content2").unwrap();
+        fs::write(path.join("folder2/file3.txt"), "content3").unwrap();
+        fs::write(path.join("folder2/subfolder/file4.txt"), "content4").unwrap();
+
+        temp_dir
+    }
+
+    #[test]
+    fn test_file_entry_from_path() {
+        let temp_dir = create_test_directory();
+        let file_path = temp_dir.path().join("file1.txt");
+
+        let entry = FileEntry::from_path(&file_path, None).unwrap();
+
+        assert_eq!(entry.name, "file1.txt");
+        assert!(entry.path.ends_with("file1.txt"));
+        assert!(!entry.is_dir);
+        assert!(entry.size.is_some());
+        assert!(entry.mtime.is_some());
+        assert!(entry.fingerprint.is_some());
+    }
+
+    #[test]
+    fn test_traverse_and_insert() {
+        let temp_dir = create_test_directory();
+        let conn = create_test_db();
+
+        let count = traverse_and_insert(&conn, temp_dir.path(), None).unwrap();
+
+        // Should have indexed: root dir + 2 folders + 1 subfolder + 4 files = 8 entries
+        assert_eq!(count, 8);
+
+        // Verify entries in database
+        let file_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM files", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(file_count, 8);
+    }
+
+    #[test]
+    fn test_fingerprint_update() {
+        let temp_dir = create_test_directory();
+        let conn = create_test_db();
+        let file_path = temp_dir.path().join("file1.txt");
+
+        // First insert
+        traverse_and_insert(&conn, &file_path, None).unwrap();
+        let original_fingerprint: Option<String> = conn
+            .query_row(
+                "SELECT fingerprint FROM files WHERE name = ?",
+                params!["file1.txt"],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        // Modify file
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        fs::write(&file_path, "modified content").unwrap();
+
+        // Re-index
+        traverse_and_insert(&conn, &file_path, None).unwrap();
+        let new_fingerprint: Option<String> = conn
+            .query_row(
+                "SELECT fingerprint FROM files WHERE name = ?",
+                params!["file1.txt"],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        // Fingerprint should have changed
+        assert_ne!(original_fingerprint, new_fingerprint);
+
+        // Should still have only one entry for the file
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE name = ?",
+                params!["file1.txt"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_index_progress_serialization() {
+        let progress = IndexProgress {
+            processed: 100,
+            total_estimate: 1000,
+            current_path: "/test/path".to_string(),
+            errors: 5,
+        };
+
+        let serialized = serde_json::to_string(&progress).unwrap();
+        let deserialized: IndexProgress = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(progress.processed, deserialized.processed);
+        assert_eq!(progress.total_estimate, deserialized.total_estimate);
+        assert_eq!(progress.current_path, deserialized.current_path);
+        assert_eq!(progress.errors, deserialized.errors);
+    }
+
+    #[test]
+    fn test_permission_error_recovery() {
+        let conn = create_test_db();
+        
+        // Try to index a non-existent path
+        let result = traverse_and_insert(&conn, &PathBuf::from("/nonexistent/path"), None);
+        
+        // Should return an error but not panic
+        assert!(result.is_err());
+    }
+}

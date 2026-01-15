@@ -1,6 +1,6 @@
-# Testing Guide for AI Context Collector - Phase 1
+# Testing Guide for AI Context Collector - Phase 1 & 2
 
-This document provides instructions for testing the Phase 1 implementation of the AI Context Collector.
+This document provides instructions for testing the Phase 1 and Phase 2 implementations of the AI Context Collector.
 
 ## Prerequisites
 
@@ -170,14 +170,175 @@ console.log(`Indexed ${count} entries in ${endTime - startTime}ms`);
 - Should complete in reasonable time (< 30 seconds for 10k files)
 - Memory usage should remain stable
 
-## Known Limitations (Phase 1)
+## Testing Phase 2 Features
 
+Phase 2 adds parallel file traversal, batch inserts, and progress reporting.
+
+### 1. Running Unit Tests
+
+Test the core indexing functionality:
+
+```bash
+cd src-tauri
+cargo test
+```
+
+**Expected Result:** All tests should pass, including:
+- `test_file_entry_from_path` - FileEntry creation
+- `test_traverse_and_insert` - Basic traversal
+- `test_fingerprint_update` - Change detection
+- `test_index_progress_serialization` - Progress events
+- `test_permission_error_recovery` - Error handling
+
+### 2. Testing Parallel Indexing
+
+Test with a large directory (e.g., node_modules):
+
+```javascript
+const { invoke } = window.__TAURI__.core;
+
+// Index a large directory with progress tracking
+const startTime = Date.now();
+const count = await invoke('index_folder', { path: './node_modules' });
+const endTime = Date.now();
+console.log(`Indexed ${count} entries in ${endTime - startTime}ms`);
+```
+
+**Expected Result:**
+- Should be significantly faster than Phase 1 (target: < 15s for 100k files)
+- No memory spikes during indexing
+- Database correctly populated with all entries
+
+### 3. Testing Progress Events
+
+Listen for progress events during indexing:
+
+```javascript
+const { listen } = window.__TAURI__.event;
+
+// Set up progress listener
+const unlisten = await listen('indexing-progress', (event) => {
+  console.log('Progress:', event.payload);
+  console.log(`  Processed: ${event.payload.processed}`);
+  console.log(`  Current: ${event.payload.current_path}`);
+  console.log(`  Errors: ${event.payload.errors}`);
+});
+
+// Start indexing
+await invoke('index_folder', { path: '/path/to/large/folder' });
+
+// Clean up listener
+unlisten();
+```
+
+**Expected Result:**
+- Progress events should be emitted during indexing
+- Events should be throttled (max 10 per second)
+- Final event should have `current_path: "Complete"`
+- Error count should be accurate
+
+### 4. Testing Batch Insert Performance
+
+Compare performance between small and large directories:
+
+```javascript
+// Test 1: Small directory (< 100 files)
+let start = Date.now();
+await invoke('index_folder', { path: './src' });
+console.log(`Small dir: ${Date.now() - start}ms`);
+
+// Test 2: Medium directory (1k-10k files)
+start = Date.now();
+await invoke('index_folder', { path: './node_modules' });
+console.log(`Medium dir: ${Date.now() - start}ms`);
+```
+
+**Expected Result:**
+- Batch inserts should show significant speedup
+- Large directories should scale linearly (not exponentially)
+- No database lock errors
+
+### 5. Testing Symlink Handling
+
+Create a test with symlinks:
+
+```bash
+# On Linux/macOS
+mkdir test-symlinks
+cd test-symlinks
+mkdir real-folder
+echo "content" > real-folder/file.txt
+ln -s real-folder symlink-folder
+```
+
+```javascript
+await invoke('index_folder', { path: './test-symlinks' });
+```
+
+**Expected Result:**
+- Symlinks should be skipped (not followed)
+- No infinite loops or crashes
+- Warning logged for skipped symlinks
+
+### 6. Testing Error Recovery
+
+Test with permission errors:
+
+```javascript
+// Try to index a restricted directory (adjust path for your OS)
+try {
+  await invoke('index_folder', { path: '/root' }); // Linux
+  // await invoke('index_folder', { path: 'C:\\System Volume Information' }); // Windows
+} catch (error) {
+  console.log('Expected error:', error);
+}
+
+// Verify app is still responsive
+await invoke('get_children', { parentId: null });
+```
+
+**Expected Result:**
+- Permission errors should be logged but not crash the app
+- Indexing should continue with accessible files
+- Error count should be reflected in progress events
+
+### 7. Performance Benchmarks
+
+Expected performance targets:
+
+| File Count | Expected Time | Memory Usage |
+|-----------|---------------|--------------|
+| 1,000 files | < 1 second | < 50 MB |
+| 10,000 files | < 3 seconds | < 100 MB |
+| 100,000 files | < 15 seconds | < 200 MB |
+
+Test with real directories:
+- Small project: `./src` (few hundred files)
+- Medium project: `./node_modules` (10k-50k files)
+- Large project: System folder (100k+ files)
+
+## Known Limitations (Phase 1 & 2)
+
+**Phase 1 Limitations:**
 1. No UI yet - testing must be done via developer console
-2. No file watching - changes to filesystem are not automatically detected
-3. No text extraction - only file metadata is indexed
-4. No token counting - token_count field will be NULL
-5. No history management UI
-6. No settings UI
+2. No text extraction - only file metadata is indexed
+3. No token counting - token_count field will be NULL
+4. No history management UI
+5. No settings UI
+
+**Phase 2 Improvements:**
+- ✅ Parallel file traversal with rayon
+- ✅ Batch SQLite inserts (1000 records per transaction)
+- ✅ Progress reporting via Tauri events
+- ✅ Symlink handling (skipped to avoid cycles)
+- ✅ Permission error recovery
+
+**Still Missing (Future Phases):**
+- File watching for automatic re-indexing
+- Virtual tree UI with lazy loading
+- Text extraction from PDF, DOCX, etc.
+- Token counting
+- Browser automation
 
 These features will be implemented in subsequent phases.
 
