@@ -1,0 +1,41 @@
+Windows Registry Editor Version 5.00
+
+; AI Context Collector - Windows Explorer Context Menu Integration
+; This file adds "Send to AI Context Collector" to the right-click context menu
+
+; ============================================================================
+; File Context Menu (right-click on files)
+; ============================================================================
+[HKEY_CLASSES_ROOT\*\shell\AIContextCollector]
+@="Send to AI Context Collector"
+"Icon"="C:\\Program Files\\AI Context Collector\\ai-context-collector.exe,0"
+
+[HKEY_CLASSES_ROOT\*\shell\AIContextCollector\command]
+@="\"C:\\Program Files\\AI Context Collector\\ai-context-collector.exe\" \"%1\""
+
+; ============================================================================
+; Directory Context Menu (right-click on folders)
+; ============================================================================
+[HKEY_CLASSES_ROOT\Directory\shell\AIContextCollector]
+@="Send to AI Context Collector"
+"Icon"="C:\\Program Files\\AI Context Collector\\ai-context-collector.exe,0"
+
+[HKEY_CLASSES_ROOT\Directory\shell\AIContextCollector\command]
+@="\"C:\\Program Files\\AI Context Collector\\ai-context-collector.exe\" \"%1\""
+
+; ============================================================================
+; Directory Background Context Menu (right-click on empty space in folder)
+; ============================================================================
+[HKEY_CLASSES_ROOT\Directory\Background\shell\AIContextCollector]
+@="Send Current Folder to AI Context Collector"
+"Icon"="C:\\Program Files\\AI Context Collector\\ai-context-collector.exe,0"
+
+[HKEY_CLASSES_ROOT\Directory\Background\shell\AIContextCollector\command]
+@="\"C:\\Program Files\\AI Context Collector\\ai-context-collector.exe\" \"%V\""
+
+; ============================================================================
+; Multiple Selection Support (Windows 11)
+; ============================================================================
+; Note: For Windows 11 top-level menu support without "Show more options",
+; you would need to implement IExplorerCommand with Sparse Package.
+; This registry approach places the item under "Show more options" in Windows 11.
