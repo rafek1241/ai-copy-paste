@@ -5,7 +5,7 @@ import { TreeNode, FileEntry } from '../../types';
 import './FileTree.css';
 
 interface FileTreeProps {
-  onSelectionChange?: (selectedPaths: string[]) => void;
+  onSelectionChange?: (selectedPaths: string[], selectedIds: number[]) => void;
 }
 
 export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
@@ -111,6 +111,20 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
     return paths;
   }, []);
 
+  // Collect all selected file IDs
+  const collectSelectedIds = useCallback((nodes: TreeNode[]): number[] => {
+    const ids: number[] = [];
+    for (const node of nodes) {
+      if (node.checked && !node.is_dir) {
+        ids.push(node.id);
+      }
+      if (node.children) {
+        ids.push(...collectSelectedIds(node.children));
+      }
+    }
+    return ids;
+  }, []);
+
   // Update parent checkbox states
   const updateParentStates = useCallback((nodes: TreeNode[]): TreeNode[] => {
     return nodes.map(node => {
@@ -155,9 +169,9 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
     
     // Notify parent of selection change
     if (onSelectionChange) {
-      onSelectionChange(collectSelectedPaths(updatedTree));
+      onSelectionChange(collectSelectedPaths(updatedTree), collectSelectedIds(updatedTree));
     }
-  }, [treeData, updateParentStates, collectSelectedPaths, onSelectionChange]);
+  }, [treeData, updateParentStates, collectSelectedPaths, collectSelectedIds, onSelectionChange]);
 
   // Handle folder indexing
   const handleIndexFolder = useCallback(async (folderPath: string) => {

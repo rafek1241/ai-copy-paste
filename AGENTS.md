@@ -6,7 +6,7 @@ This document provides context for AI agents working on different phases of the 
 
 The AI Context Collector is a cross-platform desktop application built with Tauri 2.0 and React. It helps developers collect and organize code context for AI assistants. The project follows the technical blueprint defined in PLAN.md.
 
-## Current Status: Phase 4 Complete ✓
+## Current Status: Phases 1-5 Complete ✓
 
 ### What Has Been Implemented
 
@@ -59,18 +59,39 @@ The AI Context Collector is a cross-platform desktop application built with Taur
 - ✅ Progress reporting for long extractions
 - ✅ Tauri fs plugin integration
 
+**Token Counting and Prompt Building (Phase 5):**
+- ✅ Token counting using gpt-tokenizer
+- ✅ 6 built-in prompt templates (agent, planning, debugging, review, documentation, testing)
+- ✅ Template variable substitution system
+- ✅ Prompt building from selected files
+- ✅ New IPC commands:
+  - `get_templates()` - Get all available prompt templates
+  - `get_file_content(file_id)` - Get content of a single file
+  - `get_file_contents(file_ids)` - Get content of multiple files
+  - `build_prompt_from_files(request)` - Build prompt from template and files
+- ✅ TokenCounter React component with visual indicators
+- ✅ PromptBuilder React component with full UI
+- ✅ Support for 9 AI models with correct token limits
+- ✅ Token limit warnings and color-coded progress bar
+- ✅ Copy to clipboard functionality
+- ✅ Comprehensive documentation (PHASE5.md)
+
 ### Project Structure
 
 ```
 ai-copy-paste/
 ├── src/                          # React frontend
 │   ├── components/
-│   │   └── FileTree/             # Virtual tree component
-│   │       ├── FileTree.tsx      # Main tree with virtual scrolling
-│   │       ├── FileTree.css      # Tree styling
-│   │       └── index.ts          # Exports
+│   │   ├── FileTree/             # Virtual tree component
+│   │   │   ├── FileTree.tsx      # Main tree with virtual scrolling
+│   │   │   ├── FileTree.css      # Tree styling
+│   │   │   └── index.ts          # Exports
+│   │   ├── TokenCounter.tsx      # Token counter with visual indicators
+│   │   └── PromptBuilder.tsx     # Prompt building interface
 │   ├── services/
-│   │   └── extraction.ts         # PDF/DOCX extraction services
+│   │   ├── extraction.ts         # PDF/DOCX extraction services
+│   │   ├── tokenizer.ts          # Token counting utilities
+│   │   └── prompts.ts            # Prompt API wrapper
 │   ├── types.ts                  # TypeScript types
 │   ├── App.tsx                   # Main application
 │   ├── App.css                   # Application styling
@@ -80,20 +101,24 @@ ai-copy-paste/
 │   │   ├── commands/             # Tauri IPC commands
 │   │   │   ├── mod.rs
 │   │   │   ├── indexing.rs       # File indexing commands
-│   │   │   └── extraction.rs     # Text extraction commands
+│   │   │   ├── extraction.rs     # Text extraction commands
+│   │   │   └── prompts.rs        # Prompt and file content commands
 │   │   ├── cache/                # LRU disk cache
 │   │   │   ├── mod.rs
 │   │   │   └── text_cache.rs     # Text cache implementation
 │   │   ├── db/                   # Database layer
 │   │   │   ├── mod.rs            # DB connection management
 │   │   │   └── schema.rs         # Schema definition
+│   │   ├── templates.rs          # Prompt template system
 │   │   ├── error.rs              # Error types
 │   │   ├── lib.rs                # Application entry point
 │   │   └── main.rs               # Binary entry point
 │   └── Cargo.toml                # Rust dependencies
 ├── package.json                  # NPM dependencies
 ├── PLAN.md                       # Complete technical blueprint
-├── TESTING.md                    # Testing instructions (Phases 1-4)
+├── TESTING.md                    # Testing instructions (Phases 1-5)
+├── PHASE5.md                     # Phase 5 documentation
+├── PHASE5_SUMMARY.md             # Phase 5 summary
 └── AGENTS.md                     # This file
 ```
 
@@ -120,6 +145,7 @@ ai-copy-paste/
 - @tanstack/react-virtual = "^3" - Virtual scrolling
 - pdfjs-dist = "^4" - PDF text extraction
 - mammoth = "^1.6" - DOCX text extraction
+- gpt-tokenizer = "^3.4" - Token counting (Phase 5)
 - react = "^19", react-dom = "^19" - Frontend
 - vite = "^7" - Build tool
 

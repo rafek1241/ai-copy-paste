@@ -2,6 +2,7 @@ mod cache;
 mod commands;
 mod db;
 mod error;
+mod templates;
 
 use cache::TextCache;
 use db::DbConnection;
@@ -47,6 +48,10 @@ pub fn run() {
             commands::search_path,
             commands::extract_text,
             commands::get_supported_file_types,
+            commands::get_templates,
+            commands::get_file_content,
+            commands::get_file_contents,
+            commands::build_prompt_from_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

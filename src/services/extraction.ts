@@ -102,8 +102,8 @@ export async function extractDocxText(
  */
 export async function readFileAsArrayBuffer(filePath: string): Promise<ArrayBuffer> {
   // In Tauri, we need to use the fs plugin to read files
-  const { readBinaryFile } = await import('@tauri-apps/plugin-fs');
-  const contents = await readBinaryFile(filePath);
+  const { readFile } = await import('@tauri-apps/plugin-fs');
+  const contents = await readFile(filePath);
   return contents.buffer;
 }
 
