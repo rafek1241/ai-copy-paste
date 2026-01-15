@@ -1,10 +1,25 @@
 use crate::db::DbConnection;
 use crate::error::{AppError, AppResult};
+use rayon::prelude::*;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
+use tauri::{AppHandle, Emitter};
+use walkdir::WalkDir;
+
+/// Progress information for indexing operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexProgress {
+    pub processed: u64,
+    pub total_estimate: u64,
+    pub current_path: String,
+    pub errors: u64,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileEntry {
@@ -59,11 +74,58 @@ impl FileEntry {
             fingerprint,
         })
     }
+
+    /// Create FileEntry from walkdir::DirEntry
+    fn from_dir_entry(entry: &walkdir::DirEntry) -> AppResult<Self> {
+        let path = entry.path();
+        let metadata = entry.metadata()?;
+        
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| AppError::Path("Invalid file name".to_string()))?
+            .to_string();
+
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
+            .to_string();
+
+        let size = if metadata.is_file() {
+            Some(metadata.len() as i64)
+        } else {
+            None
+        };
+
+        let mtime = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
+
+        let fingerprint = size.and_then(|s| mtime.map(|m| format!("{}_{}", m, s)));
+
+        Ok(FileEntry {
+            id: None,
+            parent_id: None, // Will be set later based on path hierarchy
+            name,
+            path: path_str,
+            size,
+            mtime,
+            is_dir: metadata.is_dir(),
+            token_count: None,
+            fingerprint,
+        })
+    }
 }
 
-/// Index a folder and its contents into the database
+/// Index a folder and its contents into the database with parallel processing
 #[tauri::command]
-pub async fn index_folder(path: String, db: tauri::State<'_, DbConnection>) -> Result<u64, String> {
+pub async fn index_folder(
+    path: String,
+    app: AppHandle,
+    db: tauri::State<'_, DbConnection>,
+) -> Result<u64, String> {
     log::info!("Indexing folder: {}", path);
 
     let path_buf = PathBuf::from(&path);
@@ -71,9 +133,8 @@ pub async fn index_folder(path: String, db: tauri::State<'_, DbConnection>) -> R
         return Err(format!("Path does not exist: {}", path));
     }
 
-    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
-
-    let count = traverse_and_insert(&conn, &path_buf, None)
+    // Use parallel traversal and batch inserts
+    let count = parallel_index_folder(&path_buf, &app, &db)
         .map_err(|e| format!("Failed to index folder: {}", e))?;
 
     log::info!("Indexed {} entries from {}", count, path);
@@ -232,4 +293,176 @@ fn traverse_and_insert(
     }
 
     Ok(count)
+}
+
+/// Parallel file system traversal with progress reporting and batch inserts
+fn parallel_index_folder(
+    root: &Path,
+    app: &AppHandle,
+    db: &DbConnection,
+) -> AppResult<u64> {
+    log::info!("Starting parallel traversal of {:?}", root);
+    
+    // First pass: collect all entries using parallel walkdir
+    let processed_count = Arc::new(AtomicU64::new(0));
+    let error_count = Arc::new(AtomicU64::new(0));
+    let last_progress_time = Arc::new(Mutex::new(Instant::now()));
+    
+    // Collect entries with parallel iteration
+    let entries: Vec<FileEntry> = WalkDir::new(root)
+        .follow_links(false) // Don't follow symlinks to avoid cycles
+        .into_iter()
+        .par_bridge() // Enable parallel processing
+        .filter_map(|entry_result| {
+            let count = processed_count.fetch_add(1, Ordering::Relaxed);
+            
+            // Throttle progress events to max 10 per second
+            let should_emit = {
+                let mut last_time = last_progress_time.lock().unwrap();
+                let now = Instant::now();
+                if now.duration_since(*last_time) > Duration::from_millis(100) {
+                    *last_time = now;
+                    true
+                } else {
+                    false
+                }
+            };
+            
+            if should_emit {
+                let current_path = entry_result.as_ref()
+                    .map(|e| e.path().to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "Unknown".to_string());
+                    
+                let progress = IndexProgress {
+                    processed: count,
+                    total_estimate: count + 100, // Rough estimate
+                    current_path,
+                    errors: error_count.load(Ordering::Relaxed),
+                };
+                
+                if let Err(e) = app.emit("indexing-progress", &progress) {
+                    log::warn!("Failed to emit progress event: {}", e);
+                }
+            }
+            
+            match entry_result {
+                Ok(entry) => {
+                    // Skip symlinks
+                    if entry.path_is_symlink() {
+                        log::debug!("Skipping symlink: {:?}", entry.path());
+                        return None;
+                    }
+                    
+                    match FileEntry::from_dir_entry(&entry) {
+                        Ok(file_entry) => Some(file_entry),
+                        Err(e) => {
+                            error_count.fetch_add(1, Ordering::Relaxed);
+                            log::warn!("Failed to process entry {:?}: {}", entry.path(), e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    error_count.fetch_add(1, Ordering::Relaxed);
+                    log::warn!("Error during traversal: {}", e);
+                    None
+                }
+            }
+        })
+        .collect();
+
+    let total_entries = entries.len();
+    log::info!("Collected {} entries, now inserting into database", total_entries);
+
+    // Second pass: batch insert into database
+    let conn = db.lock()
+        .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))?;
+    
+    // Build a path -> parent_path mapping
+    let mut path_to_parent: HashMap<String, Option<String>> = HashMap::new();
+    for entry in &entries {
+        let parent_path = PathBuf::from(&entry.path)
+            .parent()
+            .and_then(|p| p.to_str())
+            .map(|s| s.to_string());
+        path_to_parent.insert(entry.path.clone(), parent_path);
+    }
+    
+    // Insert in batches of 1000
+    const BATCH_SIZE: usize = 1000;
+    let mut total_inserted = 0u64;
+    
+    for (batch_idx, chunk) in entries.chunks(BATCH_SIZE).enumerate() {
+        let tx = conn.transaction()?;
+        
+        for entry in chunk {
+            // Get or insert parent_id
+            let parent_id = if let Some(Some(parent_path)) = path_to_parent.get(&entry.path) {
+                // Look up parent in database
+                tx.query_row(
+                    "SELECT id FROM files WHERE path = ?",
+                    params![parent_path],
+                    |row| row.get::<_, i64>(0),
+                )
+                .ok()
+            } else {
+                None
+            };
+            
+            // Check if entry already exists
+            let existing: Option<(i64, Option<String>)> = tx
+                .query_row(
+                    "SELECT id, fingerprint FROM files WHERE path = ?",
+                    params![&entry.path],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?;
+
+            if let Some((id, existing_fingerprint)) = existing {
+                // Entry exists - check if we need to update
+                if existing_fingerprint != entry.fingerprint {
+                    tx.execute(
+                        "UPDATE files SET size = ?, mtime = ?, fingerprint = ?, name = ?, parent_id = ? WHERE id = ?",
+                        params![entry.size, entry.mtime, entry.fingerprint, entry.name, parent_id, id],
+                    )?;
+                }
+            } else {
+                // Insert new entry
+                tx.execute(
+                    "INSERT INTO files (parent_id, name, path, size, mtime, is_dir, fingerprint) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    params![
+                        parent_id,
+                        entry.name,
+                        entry.path,
+                        entry.size,
+                        entry.mtime,
+                        entry.is_dir as i32,
+                        entry.fingerprint,
+                    ],
+                )?;
+            }
+        }
+        
+        tx.commit()?;
+        total_inserted += chunk.len() as u64;
+        log::debug!("Inserted batch {} ({} entries)", batch_idx + 1, total_inserted);
+    }
+
+    // Send final progress event
+    let final_progress = IndexProgress {
+        processed: total_entries as u64,
+        total_estimate: total_entries as u64,
+        current_path: "Complete".to_string(),
+        errors: error_count.load(Ordering::Relaxed),
+    };
+    
+    if let Err(e) = app.emit("indexing-progress", &final_progress) {
+        log::warn!("Failed to emit final progress event: {}", e);
+    }
+
+    log::info!("Parallel indexing complete: {} entries inserted, {} errors", 
+              total_inserted, error_count.load(Ordering::Relaxed));
+    
+    Ok(total_inserted)
 }
