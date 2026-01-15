@@ -124,10 +124,13 @@ ai-copy-paste/
 - File paths stored as strings (not PathBuf) in database
 
 ### 5. Testing Without Linux Build
-- Linux dependencies (webkit2gtk) not required for development
-- Code can be verified on Windows/macOS
-- CI/CD should test on all platforms
-- Use TESTING.md for manual verification
+- **IMPORTANT: DO NOT INSTALL LINUX DEPENDENCIES** - The firewall blocks package installations
+- **DO NOT VERIFY ON LINUX** - Skip all Linux-specific build/test verification steps
+- Linux dependencies (webkit2gtk, glib, etc.) are not required for development
+- Code syntax can be verified using `cargo check` without full build (will fail on Linux, this is expected)
+- Primary development and testing should be done on Windows/macOS
+- CI/CD will handle Linux platform testing
+- Use TESTING.md for manual verification on supported platforms
 
 ## Phase 4: Text Extraction Service (Next)
 
