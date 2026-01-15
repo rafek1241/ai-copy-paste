@@ -6,7 +6,7 @@ This document provides context for AI agents working on different phases of the 
 
 The AI Context Collector is a cross-platform desktop application built with Tauri 2.0 and React. It helps developers collect and organize code context for AI assistants. The project follows the technical blueprint defined in PLAN.md.
 
-## Current Status: Phases 1-5 Complete ✓
+## Current Status: Phases 1-6 Complete ✓
 
 ### What Has Been Implemented
 
@@ -76,6 +76,21 @@ The AI Context Collector is a cross-platform desktop application built with Taur
 - ✅ Copy to clipboard functionality
 - ✅ Comprehensive documentation (PHASE5.md)
 
+**Browser Automation Sidecar (Phase 6):**
+- ✅ Node.js sidecar with Playwright integration
+- ✅ Persistent browser context (stays open after script exits)
+- ✅ Support for multiple AI interfaces (ChatGPT, Claude, Gemini, AI Studio)
+- ✅ Multiple selector fallbacks for robust input detection
+- ✅ Fill strategy fallbacks (`.fill()` + `.click()` + `.type()`)
+- ✅ Anti-automation mitigations
+- ✅ New IPC commands:
+  - `launch_browser(interface, text, custom_url)` - Launch and fill AI chat
+  - `get_available_interfaces()` - Get list of supported interfaces
+- ✅ BrowserAutomation test component in React
+- ✅ Session persistence in `.browser-data/` directory
+- ✅ Comprehensive documentation (sidecar/README.md)
+- ✅ Disconnect pattern for persistent browser windows
+
 ### Project Structure
 
 ```
@@ -88,6 +103,7 @@ ai-copy-paste/
 │   │   │   └── index.ts          # Exports
 │   │   ├── TokenCounter.tsx      # Token counter with visual indicators
 │   │   └── PromptBuilder.tsx     # Prompt building interface
+│   ├── BrowserAutomation.tsx     # Phase 6: Browser automation test UI
 │   ├── services/
 │   │   ├── extraction.ts         # PDF/DOCX extraction services
 │   │   ├── tokenizer.ts          # Token counting utilities
@@ -102,7 +118,8 @@ ai-copy-paste/
 │   │   │   ├── mod.rs
 │   │   │   ├── indexing.rs       # File indexing commands
 │   │   │   ├── extraction.rs     # Text extraction commands
-│   │   │   └── prompts.rs        # Prompt and file content commands
+│   │   │   ├── prompts.rs        # Prompt and file content commands
+│   │   │   └── browser.rs        # Phase 6: Browser automation commands
 │   │   ├── cache/                # LRU disk cache
 │   │   │   ├── mod.rs
 │   │   │   └── text_cache.rs     # Text cache implementation
@@ -114,10 +131,18 @@ ai-copy-paste/
 │   │   ├── lib.rs                # Application entry point
 │   │   └── main.rs               # Binary entry point
 │   └── Cargo.toml                # Rust dependencies
+├── sidecar/                      # Phase 6: Node.js Playwright process
+│   ├── automation.js             # Browser control logic
+│   ├── selectors.js              # AI interface configurations
+│   ├── package.json              # Sidecar dependencies
+│   ├── .browser-data/            # Persistent browser context (gitignored)
+│   └── README.md                 # Sidecar documentation
 ├── package.json                  # NPM dependencies
 ├── PLAN.md                       # Complete technical blueprint
-├── TESTING.md                    # Testing instructions (Phases 1-5)
+├── TESTING.md                    # Testing instructions (Phases 1-6)
 ├── PHASE5.md                     # Phase 5 documentation
+└── AGENTS.md                     # This file
+```
 ├── PHASE5_SUMMARY.md             # Phase 5 summary
 └── AGENTS.md                     # This file
 ```
@@ -148,6 +173,9 @@ ai-copy-paste/
 - gpt-tokenizer = "^3.4" - Token counting (Phase 5)
 - react = "^19", react-dom = "^19" - Frontend
 - vite = "^7" - Build tool
+
+**Sidecar (sidecar/package.json):**
+- playwright = "^1.57.0" - Browser automation (Phase 6)
 
 ## Important Architectural Decisions
 
@@ -182,6 +210,15 @@ ai-copy-paste/
 - Primary development and testing should be done on Windows/macOS
 - CI/CD will handle Linux platform testing
 - Use TESTING.md for manual verification on supported platforms
+
+### 6. Browser Automation Architecture (Phase 6)
+- Separate Node.js sidecar process for browser control
+- Uses Playwright's persistent context to keep browser open
+- IPC communication via spawned child process (not WebSocket)
+- Sidecar exits via `process.exit(0)` without closing browser
+- Browser data stored in `.browser-data/` for session persistence
+- Multiple selector fallbacks for robust AI interface interaction
+- Anti-automation mitigations to avoid detection
 
 ## Phase 5: Token Counting and Prompt Building (Next)
 
@@ -264,6 +301,10 @@ Real-time token estimation and template-based prompt assembly for AI context.
 5. **Error Swallowing:**
    - ❌ Don't silently ignore errors
    - ✅ Log warnings, propagate critical errors
+
+6. **Browser Context Closing (Phase 6):**
+   - ❌ Don't call `context.close()` in sidecar
+   - ✅ Exit with `process.exit(0)` to keep browser open
 
 ## Questions for Next Agent
 
@@ -365,6 +406,53 @@ When starting Phase 4, consider:
    - Had to convert hierarchical tree to flat array
    - Added level property for indentation
    - Rebuilt flat tree whenever tree data changes
+
+## Phase 6 Implementation Notes (Complete)
+
+### Architecture
+
+The browser automation is implemented as a **separate Node.js sidecar process** that communicates with the main Tauri application. This design was chosen for several reasons:
+
+1. **Browser Persistence**: Playwright's persistent context allows the browser to remain open after the Node.js process exits
+2. **Isolation**: Browser automation logic is isolated from the Rust backend
+3. **Flexibility**: Easy to update selectors without recompiling the entire app
+4. **Dependencies**: Avoids bundling Playwright with the Tauri binary
+
+### Key Implementation Decisions
+
+**1. Persistent Context Pattern**
+```javascript
+const context = await chromium.launchPersistentContext('./browser-data', {
+  headless: false,
+  channel: 'chrome',
+});
+// ... do work ...
+process.exit(0); // Browser stays open!
+```
+
+**2. Selector Fallback Chain**
+Each AI interface has multiple selectors tried in order:
+- Primary selector (most specific)
+- Alternative selectors (for UI variations)
+- Generic fallback (contenteditable)
+
+**3. Fill Strategy Fallback**
+Two strategies for filling input:
+- `element.fill()` - Fast, works most of the time
+- `element.click()` + `keyboard.type()` - Slower but more reliable
+
+**4. Anti-Automation Mitigations**
+- Disable blink features that indicate automation
+- Use system Chrome instead of bundled Chromium
+- Persistent context maintains normal user session
+
+### Known Limitations
+
+1. **No progress reporting** - User doesn't see filling progress
+2. **No reconnection** - Can't reconnect to browser after sidecar exits
+3. **Manual login required** - User must log in to AI interfaces first
+4. **Selector maintenance** - AI interfaces change, selectors need updates
+5. **No bundling yet** - Production builds need proper sidecar bundling
 
 ## Questions for Next Agent
 
