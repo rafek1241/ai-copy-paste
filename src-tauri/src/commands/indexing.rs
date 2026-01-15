@@ -1,7 +1,7 @@
 use crate::db::DbConnection;
 use crate::error::{AppError, AppResult};
 use rayon::prelude::*;
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -375,7 +375,7 @@ fn parallel_index_folder(
     log::info!("Collected {} entries, now inserting into database", total_entries);
 
     // Second pass: batch insert into database
-    let conn = db.lock()
+    let mut conn = db.lock()
         .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))?;
     
     // Build a path -> parent_path mapping

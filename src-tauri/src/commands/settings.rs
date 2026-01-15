@@ -1,5 +1,5 @@
 use crate::db::DbConnection;
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -38,13 +38,8 @@ impl Default for AppSettings {
     }
 }
 
-/// Save a setting to the database
-#[tauri::command]
-pub async fn save_setting(
-    db: tauri::State<'_, DbConnection>,
-    key: String,
-    value: String,
-) -> Result<(), String> {
+/// Internal function to save a setting
+fn save_setting_internal(db: &DbConnection, key: &str, value: &str) -> Result<(), String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     conn.execute(
@@ -56,12 +51,18 @@ pub async fn save_setting(
     Ok(())
 }
 
-/// Get a setting from the database
+/// Save a setting to the database
 #[tauri::command]
-pub async fn get_setting(
+pub async fn save_setting(
     db: tauri::State<'_, DbConnection>,
     key: String,
-) -> Result<Option<String>, String> {
+    value: String,
+) -> Result<(), String> {
+    save_setting_internal(&db, &key, &value)
+}
+
+/// Internal function to get a setting
+fn get_setting_internal(db: &DbConnection, key: &str) -> Result<Option<String>, String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     let result = conn
@@ -76,11 +77,17 @@ pub async fn get_setting(
     Ok(result)
 }
 
-/// Get all settings as a HashMap
+/// Get a setting from the database
 #[tauri::command]
-pub async fn get_all_settings(
+pub async fn get_setting(
     db: tauri::State<'_, DbConnection>,
-) -> Result<HashMap<String, String>, String> {
+    key: String,
+) -> Result<Option<String>, String> {
+    get_setting_internal(&db, &key)
+}
+
+/// Internal function to get all settings
+fn get_all_settings_internal(db: &DbConnection) -> Result<HashMap<String, String>, String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     let mut stmt = conn
@@ -98,10 +105,17 @@ pub async fn get_all_settings(
     Ok(settings)
 }
 
-/// Load application settings with defaults
+/// Get all settings as a HashMap
 #[tauri::command]
-pub async fn load_settings(db: tauri::State<'_, DbConnection>) -> Result<AppSettings, String> {
-    let settings_map = get_all_settings(db).await?;
+pub async fn get_all_settings(
+    db: tauri::State<'_, DbConnection>,
+) -> Result<HashMap<String, String>, String> {
+    get_all_settings_internal(&db)
+}
+
+/// Internal function to load settings
+fn load_settings_internal(db: &DbConnection) -> Result<AppSettings, String> {
+    let settings_map = get_all_settings_internal(db)?;
 
     let mut settings = AppSettings::default();
 
@@ -141,60 +155,57 @@ pub async fn load_settings(db: tauri::State<'_, DbConnection>) -> Result<AppSett
     Ok(settings)
 }
 
+/// Load application settings with defaults
+#[tauri::command]
+pub async fn load_settings(db: tauri::State<'_, DbConnection>) -> Result<AppSettings, String> {
+    load_settings_internal(&db)
+}
+
+/// Internal function to save settings
+fn save_settings_internal(db: &DbConnection, settings: &AppSettings) -> Result<(), String> {
+    // Serialize and save each setting
+    let excluded_ext_json = serde_json::to_string(&settings.excluded_extensions)
+        .map_err(|e| format!("Failed to serialize excluded_extensions: {}", e))?;
+
+    save_setting_internal(db, "excluded_extensions", &excluded_ext_json)?;
+    save_setting_internal(db, "token_limit", &settings.token_limit.to_string())?;
+    save_setting_internal(db, "default_template", &settings.default_template)?;
+    save_setting_internal(db, "auto_save_history", &settings.auto_save_history.to_string())?;
+    save_setting_internal(db, "cache_size_mb", &settings.cache_size_mb.to_string())?;
+
+    Ok(())
+}
+
 /// Save application settings
 #[tauri::command]
 pub async fn save_settings(
     db: tauri::State<'_, DbConnection>,
     settings: AppSettings,
 ) -> Result<(), String> {
-    // Serialize and save each setting
-    let excluded_ext_json = serde_json::to_string(&settings.excluded_extensions)
-        .map_err(|e| format!("Failed to serialize excluded_extensions: {}", e))?;
+    save_settings_internal(&db, &settings)
+}
 
-    save_setting(
-        db.clone(),
-        "excluded_extensions".to_string(),
-        excluded_ext_json,
-    )
-    .await?;
-
-    save_setting(
-        db.clone(),
-        "token_limit".to_string(),
-        settings.token_limit.to_string(),
-    )
-    .await?;
-
-    save_setting(
-        db.clone(),
-        "default_template".to_string(),
-        settings.default_template,
-    )
-    .await?;
-
-    save_setting(
-        db.clone(),
-        "auto_save_history".to_string(),
-        settings.auto_save_history.to_string(),
-    )
-    .await?;
-
-    save_setting(
-        db.clone(),
-        "cache_size_mb".to_string(),
-        settings.cache_size_mb.to_string(),
-    )
-    .await?;
-
-    Ok(())
+/// Internal function to export settings
+fn export_settings_internal(db: &DbConnection) -> Result<String, String> {
+    let settings = load_settings_internal(db)?;
+    serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to export settings: {}", e))
 }
 
 /// Export all settings as JSON
 #[tauri::command]
 pub async fn export_settings(db: tauri::State<'_, DbConnection>) -> Result<String, String> {
-    let settings = load_settings(db).await?;
-    serde_json::to_string_pretty(&settings)
-        .map_err(|e| format!("Failed to export settings: {}", e))
+    export_settings_internal(&db)
+}
+
+/// Internal function to import settings
+fn import_settings_internal(db: &DbConnection, json_data: &str) -> Result<(), String> {
+    let settings: AppSettings =
+        serde_json::from_str(json_data).map_err(|e| format!("Failed to parse settings: {}", e))?;
+
+    save_settings_internal(db, &settings)?;
+
+    Ok(())
 }
 
 /// Import settings from JSON
@@ -203,17 +214,11 @@ pub async fn import_settings(
     db: tauri::State<'_, DbConnection>,
     json_data: String,
 ) -> Result<(), String> {
-    let settings: AppSettings =
-        serde_json::from_str(&json_data).map_err(|e| format!("Failed to parse settings: {}", e))?;
-
-    save_settings(db, settings).await?;
-
-    Ok(())
+    import_settings_internal(&db, &json_data)
 }
 
-/// Delete a setting from the database
-#[tauri::command]
-pub async fn delete_setting(db: tauri::State<'_, DbConnection>, key: String) -> Result<(), String> {
+/// Internal function to delete a setting
+fn delete_setting_internal(db: &DbConnection, key: &str) -> Result<(), String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     conn.execute("DELETE FROM settings WHERE key = ?1", params![key])
@@ -222,15 +227,26 @@ pub async fn delete_setting(db: tauri::State<'_, DbConnection>, key: String) -> 
     Ok(())
 }
 
-/// Reset all settings to defaults
+/// Delete a setting from the database
 #[tauri::command]
-pub async fn reset_settings(db: tauri::State<'_, DbConnection>) -> Result<(), String> {
+pub async fn delete_setting(db: tauri::State<'_, DbConnection>, key: String) -> Result<(), String> {
+    delete_setting_internal(&db, &key)
+}
+
+/// Internal function to reset settings
+fn reset_settings_internal(db: &DbConnection) -> Result<(), String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     conn.execute("DELETE FROM settings", [])
         .map_err(|e| format!("Failed to reset settings: {}", e))?;
 
     Ok(())
+}
+
+/// Reset all settings to defaults
+#[tauri::command]
+pub async fn reset_settings(db: tauri::State<'_, DbConnection>) -> Result<(), String> {
+    reset_settings_internal(&db)
 }
 
 #[cfg(test)]
@@ -246,45 +262,32 @@ mod tests {
         Arc::new(Mutex::new(conn))
     }
 
-    #[tokio::test]
-    async fn test_save_and_get_setting() {
+    #[test]
+    fn test_save_and_get_setting() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
-        save_setting(
-            state.clone(),
-            "test_key".to_string(),
-            "test_value".to_string(),
-        )
-        .await
-        .unwrap();
+        save_setting_internal(&db, "test_key", "test_value").unwrap();
 
-        let value = get_setting(state, "test_key".to_string()).await.unwrap();
+        let value = get_setting_internal(&db, "test_key").unwrap();
         assert_eq!(value, Some("test_value".to_string()));
     }
 
-    #[tokio::test]
-    async fn test_get_all_settings() {
+    #[test]
+    fn test_get_all_settings() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
-        save_setting(state.clone(), "key1".to_string(), "value1".to_string())
-            .await
-            .unwrap();
-        save_setting(state.clone(), "key2".to_string(), "value2".to_string())
-            .await
-            .unwrap();
+        save_setting_internal(&db, "key1", "value1").unwrap();
+        save_setting_internal(&db, "key2", "value2").unwrap();
 
-        let settings = get_all_settings(state).await.unwrap();
+        let settings = get_all_settings_internal(&db).unwrap();
         assert_eq!(settings.len(), 2);
         assert_eq!(settings.get("key1"), Some(&"value1".to_string()));
         assert_eq!(settings.get("key2"), Some(&"value2".to_string()));
     }
 
-    #[tokio::test]
-    async fn test_save_and_load_settings() {
+    #[test]
+    fn test_save_and_load_settings() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
         let settings = AppSettings {
             excluded_extensions: vec![".test".to_string()],
@@ -294,11 +297,9 @@ mod tests {
             cache_size_mb: 50,
         };
 
-        save_settings(state.clone(), settings.clone())
-            .await
-            .unwrap();
+        save_settings_internal(&db, &settings).unwrap();
 
-        let loaded = load_settings(state).await.unwrap();
+        let loaded = load_settings_internal(&db).unwrap();
         assert_eq!(loaded.excluded_extensions, settings.excluded_extensions);
         assert_eq!(loaded.token_limit, settings.token_limit);
         assert_eq!(loaded.default_template, settings.default_template);
@@ -306,10 +307,9 @@ mod tests {
         assert_eq!(loaded.cache_size_mb, settings.cache_size_mb);
     }
 
-    #[tokio::test]
-    async fn test_export_import_settings() {
+    #[test]
+    fn test_export_import_settings() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
         let settings = AppSettings {
             excluded_extensions: vec![".test".to_string()],
@@ -319,68 +319,57 @@ mod tests {
             cache_size_mb: 50,
         };
 
-        save_settings(state.clone(), settings).await.unwrap();
+        save_settings_internal(&db, &settings).unwrap();
 
-        let exported = export_settings(state.clone()).await.unwrap();
+        let exported = export_settings_internal(&db).unwrap();
         assert!(exported.contains("excluded_extensions"));
 
         // Clear settings
-        reset_settings(state.clone()).await.unwrap();
+        reset_settings_internal(&db).unwrap();
 
         // Import settings
-        import_settings(state.clone(), exported).await.unwrap();
+        import_settings_internal(&db, &exported).unwrap();
 
-        let loaded = load_settings(state).await.unwrap();
+        let loaded = load_settings_internal(&db).unwrap();
         assert_eq!(loaded.excluded_extensions, vec![".test".to_string()]);
         assert_eq!(loaded.token_limit, 100000);
     }
 
-    #[tokio::test]
-    async fn test_delete_setting() {
+    #[test]
+    fn test_delete_setting() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
-        save_setting(state.clone(), "test_key".to_string(), "test_value".to_string())
-            .await
-            .unwrap();
+        save_setting_internal(&db, "test_key", "test_value").unwrap();
 
-        delete_setting(state.clone(), "test_key".to_string())
-            .await
-            .unwrap();
+        delete_setting_internal(&db, "test_key").unwrap();
 
-        let value = get_setting(state, "test_key".to_string()).await.unwrap();
+        let value = get_setting_internal(&db, "test_key").unwrap();
         assert_eq!(value, None);
     }
 
-    #[tokio::test]
-    async fn test_reset_settings() {
+    #[test]
+    fn test_reset_settings() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
-        save_setting(state.clone(), "key1".to_string(), "value1".to_string())
-            .await
-            .unwrap();
-        save_setting(state.clone(), "key2".to_string(), "value2".to_string())
-            .await
-            .unwrap();
+        save_setting_internal(&db, "key1", "value1").unwrap();
+        save_setting_internal(&db, "key2", "value2").unwrap();
 
-        reset_settings(state.clone()).await.unwrap();
+        reset_settings_internal(&db).unwrap();
 
-        let settings = get_all_settings(state).await.unwrap();
+        let settings = get_all_settings_internal(&db).unwrap();
         assert_eq!(settings.len(), 0);
     }
 
-    #[tokio::test]
-    async fn test_default_settings() {
+    #[test]
+    fn test_default_settings() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
-        let settings = load_settings(state).await.unwrap();
+        let settings = load_settings_internal(&db).unwrap();
 
         // Should return default settings when database is empty
         assert_eq!(settings.token_limit, 200000);
         assert_eq!(settings.default_template, "agent");
-        assert_eq!(settings.auto_save_history, true);
+        assert!(settings.auto_save_history);
         assert_eq!(settings.cache_size_mb, 100);
         assert!(settings.excluded_extensions.contains(&".exe".to_string()));
     }

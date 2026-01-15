@@ -48,7 +48,7 @@ pub async fn launch_browser(
     interface: AiInterface,
     text: String,
     custom_url: Option<String>,
-) -> AppResult<()> {
+) -> Result<(), String> {
     info!(
         "Launching browser for interface: {:?}, text length: {}",
         interface,
@@ -56,8 +56,8 @@ pub async fn launch_browser(
     );
 
     // Get the resource path for the sidecar
-    let sidecar_path = get_sidecar_path()?;
-    
+    let sidecar_path = get_sidecar_path().map_err(|e| e.to_string())?;
+
     info!("Sidecar path: {}", sidecar_path.display());
 
     // Build command arguments
@@ -80,7 +80,7 @@ pub async fn launch_browser(
         .spawn()
         .map_err(|e| {
             warn!("Failed to spawn sidecar process: {}", e);
-            AppError::BrowserError(format!("Failed to launch browser automation: {}", e))
+            format!("Failed to launch browser automation: {}", e)
         })?;
 
     info!(
@@ -96,11 +96,11 @@ pub async fn launch_browser(
 }
 
 /// Get available AI interfaces
-/// 
+///
 /// Returns a list of supported AI chat interfaces that can be used
 /// with the launch_browser command.
 #[tauri::command]
-pub async fn get_available_interfaces() -> AppResult<Vec<String>> {
+pub async fn get_available_interfaces() -> Result<Vec<String>, String> {
     Ok(vec![
         "chatgpt".to_string(),
         "claude".to_string(),

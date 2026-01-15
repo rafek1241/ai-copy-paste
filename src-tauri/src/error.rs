@@ -11,6 +11,9 @@ pub enum AppError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 
+    #[error("Walkdir error: {0}")]
+    Walkdir(#[from] walkdir::Error),
+
     #[error("Path error: {0}")]
     Path(String),
 

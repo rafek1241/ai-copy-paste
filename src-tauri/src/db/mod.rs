@@ -2,7 +2,7 @@ pub mod schema;
 
 use rusqlite::{Connection, Result};
 use std::sync::{Arc, Mutex};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 pub type DbConnection = Arc<Mutex<Connection>>;
 

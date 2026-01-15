@@ -22,15 +22,13 @@ pub struct ValidationResult {
     pub missing_paths: Vec<String>,
 }
 
-/// Save a new history entry to the database
-/// Maintains a maximum of 10 entries (FIFO eviction)
-#[tauri::command]
-pub async fn save_history(
-    db: tauri::State<'_, DbConnection>,
-    root_paths: Vec<String>,
-    selected_paths: Vec<String>,
-    template_id: Option<String>,
-    custom_prompt: Option<String>,
+/// Internal function to save history
+fn save_history_internal(
+    db: &DbConnection,
+    root_paths: &[String],
+    selected_paths: &[String],
+    template_id: Option<&str>,
+    custom_prompt: Option<&str>,
 ) -> Result<i64, String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
@@ -77,9 +75,27 @@ pub async fn save_history(
     Ok(conn.last_insert_rowid())
 }
 
-/// Load all history entries from the database
+/// Save a new history entry to the database
+/// Maintains a maximum of 10 entries (FIFO eviction)
 #[tauri::command]
-pub async fn load_history(db: tauri::State<'_, DbConnection>) -> Result<Vec<HistoryEntry>, String> {
+pub async fn save_history(
+    db: tauri::State<'_, DbConnection>,
+    root_paths: Vec<String>,
+    selected_paths: Vec<String>,
+    template_id: Option<String>,
+    custom_prompt: Option<String>,
+) -> Result<i64, String> {
+    save_history_internal(
+        &db,
+        &root_paths,
+        &selected_paths,
+        template_id.as_deref(),
+        custom_prompt.as_deref(),
+    )
+}
+
+/// Internal function to load history
+fn load_history_internal(db: &DbConnection) -> Result<Vec<HistoryEntry>, String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     let mut stmt = conn
@@ -116,6 +132,12 @@ pub async fn load_history(db: tauri::State<'_, DbConnection>) -> Result<Vec<Hist
     Ok(entries)
 }
 
+/// Load all history entries from the database
+#[tauri::command]
+pub async fn load_history(db: tauri::State<'_, DbConnection>) -> Result<Vec<HistoryEntry>, String> {
+    load_history_internal(&db)
+}
+
 /// Validate paths in a history entry
 /// Returns a list of missing paths that no longer exist
 #[tauri::command]
@@ -135,9 +157,8 @@ pub async fn validate_history_paths(paths: Vec<String>) -> Result<ValidationResu
     })
 }
 
-/// Delete a history entry by ID
-#[tauri::command]
-pub async fn delete_history(db: tauri::State<'_, DbConnection>, id: i64) -> Result<(), String> {
+/// Internal function to delete history
+fn delete_history_internal(db: &DbConnection, id: i64) -> Result<(), String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     conn.execute("DELETE FROM history WHERE id = ?1", params![id])
@@ -146,15 +167,26 @@ pub async fn delete_history(db: tauri::State<'_, DbConnection>, id: i64) -> Resu
     Ok(())
 }
 
-/// Clear all history entries
+/// Delete a history entry by ID
 #[tauri::command]
-pub async fn clear_history(db: tauri::State<'_, DbConnection>) -> Result<(), String> {
+pub async fn delete_history(db: tauri::State<'_, DbConnection>, id: i64) -> Result<(), String> {
+    delete_history_internal(&db, id)
+}
+
+/// Internal function to clear history
+fn clear_history_internal(db: &DbConnection) -> Result<(), String> {
     let conn = db.lock().map_err(|e| format!("Database lock error: {}", e))?;
 
     conn.execute("DELETE FROM history", [])
         .map_err(|e| format!("Failed to clear history: {}", e))?;
 
     Ok(())
+}
+
+/// Clear all history entries
+#[tauri::command]
+pub async fn clear_history(db: tauri::State<'_, DbConnection>) -> Result<(), String> {
+    clear_history_internal(&db)
 }
 
 #[cfg(test)]
@@ -170,62 +202,75 @@ mod tests {
         Arc::new(Mutex::new(conn))
     }
 
-    #[tokio::test]
-    async fn test_save_and_load_history() {
+    #[test]
+    fn test_save_and_load_history() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
         let root_paths = vec!["/test/path".to_string()];
         let selected_paths = vec!["/test/path/file.txt".to_string()];
-        let template_id = Some("agent".to_string());
-        let custom_prompt = Some("Test prompt".to_string());
+        let template_id = Some("agent");
+        let custom_prompt = Some("Test prompt");
 
-        let id = save_history(
-            state.clone(),
-            root_paths.clone(),
-            selected_paths.clone(),
-            template_id.clone(),
-            custom_prompt.clone(),
+        let id = save_history_internal(
+            &db,
+            &root_paths,
+            &selected_paths,
+            template_id,
+            custom_prompt,
         )
-        .await
         .unwrap();
 
         assert!(id > 0);
 
-        let history = load_history(state).await.unwrap();
+        let history = load_history_internal(&db).unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].root_paths, root_paths);
         assert_eq!(history[0].selected_paths, selected_paths);
-        assert_eq!(history[0].template_id, template_id);
-        assert_eq!(history[0].custom_prompt, custom_prompt);
+        assert_eq!(history[0].template_id, Some("agent".to_string()));
+        assert_eq!(history[0].custom_prompt, Some("Test prompt".to_string()));
     }
 
-    #[tokio::test]
-    async fn test_history_fifo_eviction() {
+    #[test]
+    fn test_history_fifo_eviction() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
         // Add 12 entries
         for i in 0..12 {
-            save_history(
-                state.clone(),
-                vec![format!("/test/path{}", i)],
-                vec![format!("/test/path{}/file.txt", i)],
+            save_history_internal(
+                &db,
+                &[format!("/test/path{}", i)],
+                &[format!("/test/path{}/file.txt", i)],
                 None,
                 None,
             )
-            .await
             .unwrap();
         }
 
         // Should only have 10 entries
-        let history = load_history(state).await.unwrap();
+        let history = load_history_internal(&db).unwrap();
         assert_eq!(history.len(), 10);
 
-        // Should have the 10 most recent entries
+        // Should have the 10 most recent entries (paths 2-11)
         // The oldest entries (0 and 1) should be evicted
-        assert_eq!(history[9].root_paths[0], "/test/path2");
-        assert_eq!(history[0].root_paths[0], "/test/path11");
+        // Note: We check the set of paths rather than order, as entries created
+        // at the same timestamp may have undefined order
+        let paths: std::collections::HashSet<_> = history
+            .iter()
+            .map(|h| h.root_paths[0].clone())
+            .collect();
+
+        // Paths 0 and 1 should be evicted
+        assert!(!paths.contains("/test/path0"), "path0 should be evicted");
+        assert!(!paths.contains("/test/path1"), "path1 should be evicted");
+
+        // Paths 2-11 should remain
+        for i in 2..12 {
+            assert!(
+                paths.contains(&format!("/test/path{}", i)),
+                "path{} should remain",
+                i
+            );
+        }
     }
 
     #[tokio::test]
@@ -247,48 +292,44 @@ mod tests {
         assert_eq!(result.missing_paths[0], "/nonexistent/path.txt");
     }
 
-    #[tokio::test]
-    async fn test_delete_history() {
+    #[test]
+    fn test_delete_history() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
-        let id = save_history(
-            state.clone(),
-            vec!["/test/path".to_string()],
-            vec!["/test/path/file.txt".to_string()],
+        let id = save_history_internal(
+            &db,
+            &["/test/path".to_string()],
+            &["/test/path/file.txt".to_string()],
             None,
             None,
         )
-        .await
         .unwrap();
 
-        delete_history(state.clone(), id).await.unwrap();
+        delete_history_internal(&db, id).unwrap();
 
-        let history = load_history(state).await.unwrap();
+        let history = load_history_internal(&db).unwrap();
         assert_eq!(history.len(), 0);
     }
 
-    #[tokio::test]
-    async fn test_clear_history() {
+    #[test]
+    fn test_clear_history() {
         let db = setup_test_db();
-        let state = tauri::State::from(&db);
 
         // Add 3 entries
         for i in 0..3 {
-            save_history(
-                state.clone(),
-                vec![format!("/test/path{}", i)],
-                vec![format!("/test/path{}/file.txt", i)],
+            save_history_internal(
+                &db,
+                &[format!("/test/path{}", i)],
+                &[format!("/test/path{}/file.txt", i)],
                 None,
                 None,
             )
-            .await
             .unwrap();
         }
 
-        clear_history(state.clone()).await.unwrap();
+        clear_history_internal(&db).unwrap();
 
-        let history = load_history(state).await.unwrap();
+        let history = load_history_internal(&db).unwrap();
         assert_eq!(history.len(), 0);
     }
 }
