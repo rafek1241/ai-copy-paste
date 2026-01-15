@@ -20,6 +20,16 @@ A cross-platform desktop application for collecting and organizing code context 
 - **Selector Fallbacks**: Multiple strategies for robust automation
 - **Session Persistence**: Maintains login state across launches
 
+### Phase 7: History & Persistence ✅
+- **Session History**: Track indexed folders and prompts
+- **User Settings**: Persist preferences across app restarts
+- **Database Schema**: History and settings tables
+
+### Phase 8: Context Menu Installers ✅
+- **Windows**: Registry files + NSIS installer for seamless integration
+- **macOS**: Finder Sync Extension with code signing scripts
+- **Linux**: Nautilus/Dolphin/Nemo extensions with auto-installation
+
 ## Quick Start
 
 ### Prerequisites
@@ -127,6 +137,10 @@ ai-copy-paste/
 ├── sidecar/                      # Phase 6: Browser automation
 │   ├── automation.js             # Playwright script
 │   └── selectors.js              # AI interface configs
+├── installers/                   # Phase 8: Context menu integration
+│   ├── windows/                  # Registry + NSIS installer
+│   ├── macos/                    # Finder Sync Extension
+│   └── linux/                    # Nautilus/Dolphin/Nemo extensions
 ├── PLAN.md                       # Technical blueprint
 ├── TESTING.md                    # Testing guide
 └── AGENTS.md                     # Development context
@@ -154,14 +168,16 @@ See [TESTING.md](TESTING.md) for comprehensive testing instructions, including:
 
 ## Roadmap
 
+All phases complete! ✅
+
 - ✅ Phase 1: Core infrastructure (SQLite, basic commands)
 - ✅ Phase 2: Parallel file traversal with batch inserts
 - ✅ Phase 3: Virtual tree UI with lazy loading
 - ✅ Phase 4: Text extraction (PDF, DOCX, source files)
 - ✅ Phase 5: Token counting and prompt building
 - ✅ Phase 6: Browser automation sidecar
-- 📋 Phase 7: History and persistence
-- 📋 Phase 8: Context menu installers
+- ✅ Phase 7: History and persistence
+- ✅ Phase 8: Context menu installers
 
 See [PLAN.md](PLAN.md) for the complete technical blueprint.
 
