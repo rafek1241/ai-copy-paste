@@ -6,7 +6,7 @@ This document provides context for AI agents working on different phases of the 
 
 The AI Context Collector is a cross-platform desktop application built with Tauri 2.0 and React. It helps developers collect and organize code context for AI assistants. The project follows the technical blueprint defined in PLAN.md.
 
-## Current Status: Phase 2 Complete ✓
+## Current Status: Phase 3 Complete ✓
 
 ### What Has Been Implemented
 
@@ -34,11 +34,32 @@ The AI Context Collector is a cross-platform desktop application built with Taur
 - ✅ Comprehensive unit tests for indexing functionality
 - ✅ Memory-efficient design (no in-memory tree loading)
 
+**Virtual Tree UI (Phase 3):**
+- ✅ TanStack Virtual integration for virtual scrolling
+- ✅ FileTree component with lazy loading
+- ✅ Tree node component with expand/collapse functionality
+- ✅ Checkbox state management with parent-child propagation
+- ✅ Search functionality with 150ms debouncing
+- ✅ Folder selection via Tauri dialog plugin
+- ✅ File size display formatting
+- ✅ Dark theme UI (VS Code-inspired)
+- ✅ Empty state messaging
+- ✅ Selection count display
+
 ### Project Structure
 
 ```
 ai-copy-paste/
-├── src/                          # React frontend (default template)
+├── src/                          # React frontend
+│   ├── components/
+│   │   └── FileTree/             # Virtual tree component
+│   │       ├── FileTree.tsx      # Main tree with virtual scrolling
+│   │       ├── FileTree.css      # Tree styling
+│   │       └── index.ts          # Exports
+│   ├── types.ts                  # TypeScript types
+│   ├── App.tsx                   # Main application
+│   ├── App.css                   # Application styling
+│   └── main.tsx                  # Entry point
 ├── src-tauri/                    # Rust backend
 │   ├── src/
 │   │   ├── commands/             # Tauri IPC commands
@@ -53,7 +74,7 @@ ai-copy-paste/
 │   └── Cargo.toml                # Rust dependencies
 ├── package.json                  # NPM dependencies
 ├── PLAN.md                       # Complete technical blueprint
-├── TESTING.md                    # Testing instructions
+├── TESTING.md                    # Testing instructions (Phases 1-3)
 └── AGENTS.md                     # This file
 ```
 
@@ -61,16 +82,19 @@ ai-copy-paste/
 
 **Rust (Cargo.toml):**
 - tauri = "2" - Framework
+- tauri-plugin-dialog = "2" - File dialog plugin
 - rusqlite = "0.31" with bundled feature - SQLite
 - thiserror = "1" - Error handling
 - log = "0.4", env_logger = "0.11" - Logging
 - serde, serde_json - Serialization
-- walkdir = "2" - Directory traversal (Phase 2)
-- rayon = "1" - Parallel processing (Phase 2)
+- walkdir = "2" - Directory traversal
+- rayon = "1" - Parallel processing
 - tempfile = "3" - Test fixtures (dev dependency)
 
 **TypeScript (package.json):**
 - @tauri-apps/api = "^2" - Tauri API
+- @tauri-apps/plugin-dialog = "^2" - File dialog
+- @tanstack/react-virtual = "^3" - Virtual scrolling
 - react = "^19", react-dom = "^19" - Frontend
 - vite = "^7" - Build tool
 
@@ -105,170 +129,38 @@ ai-copy-paste/
 - CI/CD should test on all platforms
 - Use TESTING.md for manual verification
 
-## Phase 2: File Traversal Engine ✓ COMPLETE
+## Phase 4: Text Extraction Service (Next)
 
 ### Objectives
-Implement parallel, memory-efficient file system traversal with progress reporting.
+Extract text from PDF, DOCX, Markdown, and source files with disk-based caching.
 
-### Implementation Summary
+### Tasks to Complete
+1. **Add Dependencies:**
+   - `pdfjs-dist = "4.x"` - PDF extraction
+   - `mammoth = "1.x"` - DOCX extraction
 
-**Completed Tasks:**
-
-1. **Dependencies Added:**
-   - ✅ `walkdir = "2"` - Directory traversal
-   - ✅ `rayon = "1"` - Parallel processing
-   - ✅ `tempfile = "3"` - Test fixtures (dev)
-
-2. **Enhanced Indexing:**
-   - ✅ Implemented `parallel_index_folder()` function with walkdir + rayon
-   - ✅ Batch SQLite inserts (1000 records per transaction)
-   - ✅ Symlink handling (skips symlinks to avoid cycles)
-   - ✅ Permission error recovery (logs and continues)
-   - ✅ Maintains backward compatibility with `traverse_and_insert()`
+2. **Implement Text Extraction:**
+   - Create extraction service in frontend
+   - Implement PDF page-by-page streaming
+   - Implement DOCX to plain text conversion
+   - Handle encoding detection for source files
+   - Build disk-based LRU cache (~100MB limit)
 
 3. **Progress Reporting:**
-   - ✅ Created `IndexProgress` struct (processed, total_estimate, current_path, errors)
-   - ✅ Emits Tauri events during indexing (`"indexing-progress"`)
-   - ✅ Progress throttling (max 10 events/second)
-   - ✅ Final completion event sent
+   - Show extraction progress in UI
+   - Handle corrupted files gracefully
+   - Display extraction status per file
 
-4. **Testing:**
-   - ✅ Unit tests for FileEntry creation
-   - ✅ Tests for traverse_and_insert
-   - ✅ Tests for fingerprint-based change detection
-   - ✅ Tests for progress serialization
-   - ✅ Tests for error recovery
+4. **Cache Management:**
+   - Store extracted text on disk
+   - Implement LRU eviction policy
+   - Invalidate cache when files change
 
-5. **Performance:**
-   - ✅ Parallel traversal with rayon's par_bridge()
-   - ✅ Batch inserts reduce database operations 1000x
-   - ✅ Memory-efficient (no full tree in memory)
-   - ✅ Expected: < 15 seconds for 100k files
-
-**Deferred to Future Phases:**
-- ⏭️ File watching (will be in Phase 3 or separate phase)
-- ⏭️ Configurable parallelism settings
-- ⏭️ Real-world benchmarking on Windows/macOS
-
-### Key Implementation Details
-
-**Parallel Traversal:**
-```rust
-// In parallel_index_folder()
-let entries: Vec<FileEntry> = WalkDir::new(root)
-    .follow_links(false)  // Skip symlinks
-    .into_iter()
-    .par_bridge()  // Parallel iteration
-    .filter_map(|e| e.ok())
-    .map(|entry| FileEntry::from_dir_entry(&entry))
-    .collect();
-```
-
-**Batch Inserts:**
-```rust
-const BATCH_SIZE: usize = 1000;
-for chunk in entries.chunks(BATCH_SIZE) {
-    let tx = conn.transaction()?;
-    // Insert each entry in the batch
-    tx.commit()?;
-}
-```
-
-**Progress Events:**
-```rust
-let progress = IndexProgress {
-    processed: count,
-    total_estimate: count + 100,
-    current_path: current_path_string,
-    errors: error_count.load(Ordering::Relaxed),
-};
-app.emit("indexing-progress", &progress)?;
-```
-
-**Progress Events:**
-```rust
-let progress = IndexProgress {
-    processed: count,
-    total_estimate: count + 100,
-    current_path: current_path_string,
-    errors: error_count.load(Ordering::Relaxed),
-};
-app.emit("indexing-progress", &progress)?;
-```
-
-### Testing Phase 2
-
-See TESTING.md for comprehensive testing instructions. Key tests:
-
-- ✅ Unit tests: `cargo test` in src-tauri directory
-- ✅ Index large directories (node_modules, system folders)
-- ✅ Verify progress events are emitted via browser console
-- ✅ Test with permission errors (restricted folders)
-- ✅ Test with symlinks (should be skipped)
-- ⏳ Measure performance with 10k, 100k files (requires Windows/macOS)
-- ⏳ Verify memory usage stays reasonable (requires profiling tools)
-
-### Architectural Decisions (Phase 2)
-
-1. **Two-pass indexing approach:**
-   - First pass: Parallel traversal with walkdir + rayon (collect all entries)
-   - Second pass: Batch inserts into SQLite (1000 records per transaction)
-   - This separates I/O-bound (filesystem) from CPU-bound (database) operations
-
-2. **Progress throttling:**
-   - Checks elapsed time since last emit (100ms threshold)
-   - Prevents event flooding with 10/second cap
-   - Uses Arc<Mutex<Instant>> for thread-safe time tracking
-
-3. **Parent ID resolution:**
-   - Builds path -> parent_path mapping during traversal
-   - Looks up parent IDs from database during batch insert
-   - Handles root entries with parent_id = NULL
-
-4. **Error handling philosophy:**
-   - Log errors but continue processing other files
-   - Track error count in atomic counter
-   - Report errors in progress events
-   - No panic on permission errors or corrupted files
-
-## Phase 3: Virtual Tree UI (Next)
-
-### Objectives
-Build performant file tree with checkboxes supporting 100k+ items.
-
-### Tasks for Next Agent
-1. **Frontend Virtual Scrolling:**
-   - Install @tanstack/react-virtual
-   - Build lazy-loading tree component
-   - Implement expand/collapse with on-demand DB queries
-   
-2. **Checkbox State Management:**
-   - Implement parent ↔ child propagation
-   - Handle partial selection states
-   - Optimize for large selections
-
-3. **UI Features:**
-   - Search/filter with debouncing
-   - Drag-drop zone for adding folders
-   - Progress bar for indexing
-   - Display file counts and sizes
-
-4. **Integration:**
-   - Listen to "indexing-progress" events
-   - Update UI during indexing
-   - Handle re-indexing of existing folders
-
-See PLAN.md Phase 3 for detailed implementation guidance.
-
-## Phase 4 and Beyond
-
-See PLAN.md for complete details on remaining phases:
-- Phase 3: Virtual tree UI with lazy loading
-- Phase 4: Text extraction (PDF, DOCX, source files)
-- Phase 5: Token counting and prompt building
-- Phase 6: Browser automation sidecar
-- Phase 7: History and persistence
-- Phase 8: Context menu installers
+### Key Considerations for Phase 4
+- Text extraction runs on frontend (JavaScript) not backend (Rust)
+- Use streaming for large files to avoid memory issues
+- Cache extracted text to avoid re-extraction
+- Show progress during extraction for user feedback
 
 ## Development Guidelines
 
@@ -319,22 +211,74 @@ See PLAN.md for complete details on remaining phases:
    - ❌ Don't silently ignore errors
    - ✅ Log warnings, propagate critical errors
 
-## Questions for Next Agent (Phase 3)
+## Questions for Next Agent
 
-When starting Phase 3, consider:
-1. Should we implement file watching now or defer to later phase?
-2. What UI library for tree component? (Recommendation: Build custom with @tanstack/react-virtual)
-3. How to handle very large selections (100k+ files)?
-4. Should search be client-side or server-side (SQLite queries)?
-5. What keyboard shortcuts for tree navigation?
-6. Should we add file type icons and syntax highlighting?
+When starting Phase 4, consider:
+1. Should we extract text in the backend (Rust) or frontend (JavaScript)?
+2. Where should the text cache be stored (app data directory)?
+3. Should we show a preview of extracted text in the UI?
+4. How to handle very large files (>100MB)?
+5. Should extraction be automatic or triggered by user?
 
-**Answers from Phase 2:**
-1. ✅ Progress events throttled to 10/second (100ms check)
-2. ⏭️ Cancellation not yet implemented (future enhancement)
-3. ⏭️ Exclude patterns not yet implemented (could add to settings)
-4. ✅ Large files handled gracefully (no content loading yet)
-5. ⏭️ File hashes not stored (fingerprint uses mtime + size)
+## Phase 3 Implementation Notes
+
+### Key Decisions Made
+
+1. **Virtual Scrolling with TanStack Virtual:**
+   - Chose TanStack Virtual for its headless, framework-agnostic design
+   - Renders only visible items + 10 overscan for smooth scrolling
+   - Estimated row height of 28px based on CSS
+
+2. **Lazy Loading Pattern:**
+   - Tree nodes load children only when expanded
+   - Queries database via `get_children` IPC command
+   - Reduces initial load time and memory usage
+
+3. **Checkbox State Management:**
+   - Implemented recursive parent-child propagation
+   - Parent checkboxes show indeterminate state when partially selected
+   - Selected paths are collected and passed to parent component
+
+4. **Search Implementation:**
+   - Debounced with 150ms delay to avoid excessive database queries
+   - Uses existing `search_path` command with LIKE queries
+   - Replaces tree view with flat search results
+
+5. **Drag-Drop Limitation:**
+   - Web/Tauri context makes it difficult to get folder paths from drag-drop events
+   - Opted to show message directing users to "Add Folder" button
+   - Uses Tauri dialog plugin for reliable folder selection
+
+6. **UI Theme:**
+   - Dark theme inspired by VS Code
+   - Colors: #1e1e1e (background), #d4d4d4 (text), #007acc (accent)
+   - Icons: 📁 for folders, 📄 for files
+
+7. **Performance Optimization:**
+   - Virtual scrolling prevents DOM node bloat
+   - Lazy loading prevents loading entire tree into memory
+   - useCallback and React.memo would be added for further optimization
+
+### Challenges Encountered
+
+1. **TypeScript strictness with useRef:**
+   - Required explicit typing and initial value for timeout ref
+   - Solution: `useRef<ReturnType<typeof setTimeout> | undefined>(undefined)`
+
+2. **Dialog plugin integration:**
+   - Had to add both npm package and Rust crate
+   - Had to register plugin in lib.rs
+
+3. **Checkbox indeterminate state:**
+   - HTML checkbox indeterminate can't be set via attribute
+   - Must be set via ref: `if (el) el.indeterminate = node.indeterminate;`
+
+4. **Tree flattening for virtual scrolling:**
+   - Had to convert hierarchical tree to flat array
+   - Added level property for indentation
+   - Rebuilt flat tree whenever tree data changes
+
+## Questions for Next Agent
 
 ## Resources
 

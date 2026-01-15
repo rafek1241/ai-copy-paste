@@ -1,6 +1,6 @@
-# Testing Guide for AI Context Collector - Phase 1 & 2
+# Testing Guide for AI Context Collector - Phases 1-3
 
-This document provides instructions for testing the Phase 1 and Phase 2 implementations of the AI Context Collector.
+This document provides instructions for testing the implementation of the AI Context Collector through Phase 3.
 
 ## Prerequisites
 
@@ -170,7 +170,158 @@ console.log(`Indexed ${count} entries in ${endTime - startTime}ms`);
 - Should complete in reasonable time (< 30 seconds for 10k files)
 - Memory usage should remain stable
 
-## Testing Phase 2 Features
+## Known Limitations (Phase 1-3)
+
+1. No text extraction yet - only file metadata is indexed
+2. No token counting - token_count field will be NULL
+3. No history management UI
+4. No settings UI
+5. No browser automation
+6. Drag-and-drop shows a message to use the "Add Folder" button (getting folder paths from drag-drop is limited in Tauri)
+
+These features will be implemented in subsequent phases.
+
+## Testing Phase 3 Features
+
+Phase 3 adds a complete UI with virtual scrolling tree, checkboxes, search, and folder selection.
+
+### 1. Starting the Application
+
+Run the application in development mode:
+```bash
+npm run tauri dev
+```
+
+The application should open with:
+- A header showing "AI Context Collector" 
+- A search bar and "Add Folder" button
+- An empty state message: "No files indexed. Click 'Add Folder' or drag and drop a folder to start."
+
+### 2. Testing Folder Indexing
+
+**Add a folder:**
+1. Click the "Add Folder" button
+2. Select a folder from your filesystem (try a small folder first with ~100 files)
+3. Wait for indexing to complete
+
+**Expected Result:** 
+- The folder and its contents should appear in the tree
+- Folders are shown with 📁 icon
+- Files are shown with 📄 icon
+- The tree should be collapsed by default
+
+### 3. Testing Tree Navigation
+
+**Expand/Collapse:**
+1. Click the ▶ arrow next to a folder
+2. The folder should expand, showing its children
+3. The arrow should rotate to point down (▼)
+4. Click again to collapse
+
+**Expected Result:** 
+- Children are loaded lazily from the database when expanded
+- Folders are sorted before files
+- Items within each category are sorted alphabetically
+
+### 4. Testing Checkbox Selection
+
+**Select files:**
+1. Check a file's checkbox - it should become checked
+2. Check a folder's checkbox - all its children should become checked
+3. Partially check a folder's children - the parent checkbox should show indeterminate state
+4. The header should show "X file(s) selected"
+
+**Expected Result:**
+- Checking a parent checks all children
+- Unchecking a parent unchecks all children
+- Parent checkboxes show indeterminate state when some (but not all) children are checked
+- The selection count updates in the header
+
+### 5. Testing Search
+
+**Search for files:**
+1. Type a search term in the search bar (e.g., "test")
+2. Wait 150ms (debounce delay)
+3. The tree should update to show only matching items
+
+**Expected Result:**
+- Search is debounced (waits 150ms after typing stops)
+- Up to 100 matching items are shown
+- Both file names and paths are searched
+- Clear the search box to return to normal view
+
+### 6. Testing Virtual Scrolling
+
+**Test with large folder:**
+1. Index a folder with many files (e.g., node_modules)
+2. Expand folders with hundreds of children
+3. Scroll through the list
+
+**Expected Result:**
+- Scrolling should be smooth (60fps)
+- Only visible items + ~10 overscan are rendered
+- Memory usage should remain stable even with 100k+ files
+- Tree height adjusts dynamically as you expand/collapse
+
+### 7. Testing File Size Display
+
+**View file sizes:**
+1. Files should show their size on the right side (e.g., "1.2 KB", "5.4 MB")
+2. Folders should not show sizes
+
+**Expected Result:**
+- Sizes are formatted human-readable (B, KB, MB, GB)
+- Sizes update if files change (on re-indexing)
+
+### 8. Testing Persistence
+
+**Database persistence:**
+1. Index a folder
+2. Close the application
+3. Reopen the application
+4. Click "Add Folder" and select the same folder
+
+**Expected Result:**
+- Previously indexed files are still in the database
+- Re-indexing the same folder updates changed files (via fingerprint)
+- The tree should load the existing data on startup
+
+### 9. Performance Testing
+
+Test the application with various folder sizes:
+
+| Folder Type | Expected Files | Target Index Time | UI Responsiveness |
+|-------------|---------------|-------------------|-------------------|
+| Small project | ~100 files | < 1 second | Instant |
+| Medium project | ~1,000 files | < 5 seconds | Smooth scrolling |
+| Large project | ~10,000 files | < 15 seconds | 60fps scrolling |
+| node_modules | ~100,000 files | < 60 seconds | Should remain responsive |
+
+### 10. Testing UI Responsiveness
+
+**Hover effects:**
+- Tree nodes should highlight on hover
+- Buttons should show hover states
+- Expand icons should be interactive
+
+**Keyboard navigation:**
+- Tab should move focus between controls
+- Space/Enter should work on buttons
+- (Tree keyboard navigation not implemented yet)
+
+## Known Issues in Phase 3
+
+1. Drag-and-drop doesn't extract folder paths (shows message to use button)
+2. No way to remove indexed folders from the tree
+3. No way to clear the database
+4. Search doesn't highlight matching text
+5. No keyboard shortcuts for tree navigation
+6. No multi-select with Shift/Ctrl
+7. Root level entries are always shown (no way to start fresh without deleting database)
+
+These will be addressed in future phases or can be added as enhancements.
+
+## Known Limitations (Phase 1)
 
 Phase 2 adds parallel file traversal, batch inserts, and progress reporting.
 
