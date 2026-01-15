@@ -167,6 +167,13 @@ async function fillAndLeaveOpen(interfaceName, text, customUrl = null) {
   
   // CRITICAL: Do NOT close context - this is the key to keeping browser open
   // The browser process will continue running after Node.js exits
+  // 
+  // NOTE: This means the browser context remains in memory indefinitely.
+  // The user must manually close the browser window when done.
+  // In future versions, consider:
+  // - Adding a "close browser" command
+  // - Implementing session timeout
+  // - Storing browser PID for potential cleanup
   console.log('\nScript exiting. Browser persists.');
   process.exit(0);
 }

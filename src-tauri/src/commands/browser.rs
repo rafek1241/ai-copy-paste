@@ -30,6 +30,11 @@ impl AiInterface {
 /// to launch a persistent browser context, navigate to the AI interface,
 /// and fill the prompt. The browser remains open after the sidecar exits.
 /// 
+/// **Disconnect Pattern:** The sidecar process exits via `process.exit(0)` 
+/// without calling `context.close()`. This leaves the browser process running 
+/// independently, allowing the user to review and submit the prompt manually.
+/// The persistent context stores session data in `.browser-data/` for reuse.
+/// 
 /// # Arguments
 /// * `interface` - The AI interface to use (chatgpt, claude, gemini, aistudio)
 /// * `text` - The prompt text to fill
@@ -141,14 +146,15 @@ fn get_sidecar_path() -> AppResult<std::path::PathBuf> {
     #[cfg(not(debug_assertions))]
     {
         // Production mode: use bundled resource
-        // TODO: Implement proper bundling with tauri-build
+        // TODO: Implement proper bundling with tauri-build (tracked in Phase 6 limitations)
         // IMPORTANT: Production builds will fail until sidecar is properly bundled.
         // This is a known limitation documented in AGENTS.md Phase 6 section.
         // 
-        // To implement:
+        // To implement (future work):
         // 1. Add sidecar files to tauri.conf.json resources
         // 2. Use tauri::Manager::path().resource_dir() to locate bundled files
         // 3. Ensure Node.js is available on target system or bundle Node runtime
+        // 4. Consider using pkg or nexe to bundle Node.js with the sidecar
         //
         // For now, we use the same logic as debug mode which won't work in production
         let mut path = std::env::current_dir()

@@ -3,6 +3,10 @@
  * 
  * Defines selectors for different AI chat interfaces to locate
  * the input field where the prompt should be filled.
+ * 
+ * NOTE: These URLs and selectors were last verified: January 2026
+ * AI interfaces update their UIs frequently. If automation fails,
+ * check the actual interface and update selectors accordingly.
  */
 
 export const AI_INTERFACES = {
