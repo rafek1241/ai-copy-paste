@@ -29,3 +29,9 @@ debug
 **/*.rs.bk
 *.pdb
 **/mutants.out*/
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
