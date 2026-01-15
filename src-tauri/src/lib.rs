@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod error;
+mod templates;
 
 use db::DbConnection;
 use tauri::Manager;
@@ -27,6 +28,10 @@ pub fn run() {
             commands::index_folder,
             commands::get_children,
             commands::search_path,
+            commands::get_templates,
+            commands::get_file_content,
+            commands::get_file_contents,
+            commands::build_prompt_from_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
