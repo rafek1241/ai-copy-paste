@@ -1,0 +1,8 @@
+[Nemo Action]
+Name=Send to AI Context Collector
+Comment=Open selected files/folders in AI Context Collector
+Exec=ai-context-collector %F
+Icon-Name=document-send
+Selection=any
+Extensions=any;
+Quote=double

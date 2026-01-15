@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/all;
+Actions=send_to_ai_context_collector;
+
+X-KDE-StartupNotify=false
+X-KDE-Priority=TopLevel
+X-KDE-Submenu=AI Context Collector
+X-KDE-Icon=document-send
+
+[Desktop Action send_to_ai_context_collector]
+Name=Send to AI Context Collector
+Icon=document-send
+Exec=ai-context-collector %U

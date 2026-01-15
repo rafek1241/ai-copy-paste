@@ -1,0 +1,13 @@
+Windows Registry Editor Version 5.00
+
+; AI Context Collector - Uninstall Context Menu Integration
+; This file removes "Send to AI Context Collector" from the right-click context menu
+
+; Remove file context menu
+[-HKEY_CLASSES_ROOT\*\shell\AIContextCollector]
+
+; Remove directory context menu
+[-HKEY_CLASSES_ROOT\Directory\shell\AIContextCollector]
+
+; Remove directory background context menu
+[-HKEY_CLASSES_ROOT\Directory\Background\shell\AIContextCollector]

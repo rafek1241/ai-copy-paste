@@ -1,0 +1,380 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0 or v1.0.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      release_notes:
+        description: 'Release notes (optional)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  validate-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version_tag: ${{ steps.format.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Format version tag
+        id: format
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          # Add 'v' prefix if not present
+          if [[ ! "$VERSION" =~ ^v ]]; then
+            VERSION="v$VERSION"
+          fi
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+          echo "Formatted version tag: $VERSION"
+
+      - name: Check if tag exists
+        run: |
+          TAG="${{ steps.format.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Error: Tag $TAG already exists!"
+            exit 1
+          fi
+          echo "Tag $TAG is available"
+
+      - name: Validate version format
+        run: |
+          TAG="${{ steps.format.outputs.tag }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Invalid version format. Expected format: v1.0.0 or v1.0.0-beta.1"
+            echo "Got: $TAG"
+            exit 1
+          fi
+          echo "Version format is valid"
+
+  create-tag-and-release:
+    needs: validate-version
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        run: |
+          TAG="${{ needs.validate-version.outputs.version_tag }}"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+          echo "Created and pushed tag: $TAG"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          TAG="${{ needs.validate-version.outputs.version_tag }}"
+          NOTES="${{ github.event.inputs.release_notes }}"
+
+          if [ -z "$NOTES" ]; then
+            # Auto-generate release notes from commits since last tag
+            LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [ -n "$LAST_TAG" ]; then
+              NOTES="## What's Changed"$'\n\n'
+              NOTES+=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD)
+            else
+              NOTES="## AI Context Collector $TAG"$'\n\n'"First release! 🎉"
+            fi
+          fi
+
+          # Save to file to preserve newlines
+          echo "$NOTES" > release_notes.txt
+
+          # Add download instructions
+          cat >> release_notes.txt << 'EOF'
+
+## Downloads
+
+### Windows
+- **MSI Installer**: Recommended for most users
+- **NSIS Installer**: Alternative installer with context menu integration
+
+### macOS
+- **DMG**: Universal binary (Intel + Apple Silicon)
+- Requires macOS 10.15 or later
+
+### Linux
+- **AppImage**: Portable, works on most distributions
+- **DEB**: For Debian/Ubuntu-based systems
+- **RPM**: For Fedora/RHEL-based systems (if available)
+
+## Installation
+
+### Windows
+1. Download the `.msi` installer
+2. Double-click to install
+3. (Optional) Run context menu installer from `installers/windows/`
+
+### macOS
+1. Download the `.dmg` file
+2. Open and drag to Applications folder
+3. (Optional) Install Finder Sync Extension from `installers/macos/`
+
+### Linux
+1. Download the `.AppImage` or `.deb` package
+2. Make executable: `chmod +x AI-Context-Collector.AppImage`
+3. Run the application
+4. (Optional) Run installer script from `installers/linux/`
+
+## Context Menu Integration
+
+After installation, you can enable context menu integration:
+- **Windows**: See `installers/windows/README.md`
+- **macOS**: See `installers/macos/README.md`
+- **Linux**: See `installers/linux/README.md`
+
+## What's Included
+
+All 8 project phases are complete:
+- ✅ Phase 1: Core Infrastructure
+- ✅ Phase 2: File Traversal Engine
+- ✅ Phase 3: Virtual Tree UI
+- ✅ Phase 4: Text Extraction
+- ✅ Phase 5: Token Counting & Prompt Building
+- ✅ Phase 6: Browser Automation
+- ✅ Phase 7: History & Persistence
+- ✅ Phase 8: Context Menu Installers
+
+---
+
+**Full Changelog**: https://github.com/${{ github.repository }}/commits/$TAG
+EOF
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.version_tag }}
+          name: Release ${{ needs.validate-version.outputs.version_tag }}
+          body_path: release_notes.txt
+          draft: true
+          prerelease: ${{ github.event.inputs.prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    needs: [validate-version, create-tag-and-release]
+    permissions:
+      contents: write
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-version.outputs.version_tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install sidecar dependencies
+        run: |
+          cd sidecar
+          npm ci
+          cd ..
+
+      - name: Build Tauri application
+        run: npm run tauri build
+
+      - name: Upload Windows MSI
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.version_tag }}
+          files: |
+            src-tauri/target/release/bundle/msi/*.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows NSIS
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.version_tag }}
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  build-macos:
+    needs: [validate-version, create-tag-and-release]
+    permissions:
+      contents: write
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-version.outputs.version_tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install sidecar dependencies
+        run: |
+          cd sidecar
+          npm ci
+          cd ..
+
+      - name: Build Tauri application (Universal)
+        run: npm run tauri build -- --target universal-apple-darwin
+
+      - name: Upload macOS DMG
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.version_tag }}
+          files: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS App
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.version_tag }}
+          files: |
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  build-linux:
+    needs: [validate-version, create-tag-and-release]
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-version.outputs.version_tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install sidecar dependencies
+        run: |
+          cd sidecar
+          npm ci
+          cd ..
+
+      - name: Build Tauri application
+        run: npm run tauri build
+
+      - name: Upload Linux AppImage
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.version_tag }}
+          files: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux DEB
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.version_tag }}
+          files: |
+            src-tauri/target/release/bundle/deb/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  publish-release:
+    needs: [validate-version, create-tag-and-release, build-windows, build-macos, build-linux]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Publish Release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-tag-and-release.outputs.release_id }},
+              draft: false
+            });
+
+            core.info('✅ Release published successfully!');
+            core.info('🎉 Version: ${{ needs.validate-version.outputs.version_tag }}');
+            core.info('📦 Installers uploaded for Windows, macOS, and Linux');

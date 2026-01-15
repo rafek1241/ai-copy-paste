@@ -6,7 +6,7 @@ This document provides context for AI agents working on different phases of the 
 
 The AI Context Collector is a cross-platform desktop application built with Tauri 2.0 and React. It helps developers collect and organize code context for AI assistants. The project follows the technical blueprint defined in PLAN.md.
 
-## Current Status: Phases 1-6 Complete ✓
+## Current Status: Phases 1-8 Complete ✓
 
 ### What Has Been Implemented
 
@@ -91,6 +91,19 @@ The AI Context Collector is a cross-platform desktop application built with Taur
 - ✅ Comprehensive documentation (sidecar/README.md)
 - ✅ Disconnect pattern for persistent browser windows
 
+**History and Persistence (Phase 7):**
+- ✅ History tracking for all indexed folders and prompts
+- ✅ Settings persistence for user preferences
+- ✅ Database schema includes history and settings tables
+- ✅ Session restoration on app restart
+
+**Context Menu Installers (Phase 8):**
+- ✅ Windows: Registry files and NSIS installer script
+- ✅ macOS: Finder Sync Extension with code signing scripts
+- ✅ Linux: Nautilus/Dolphin/Nemo extensions with auto-install script
+- ✅ Comprehensive documentation for all platforms
+- ✅ Distribution checklists and troubleshooting guides
+
 ### Project Structure
 
 ```
@@ -137,13 +150,28 @@ ai-copy-paste/
 │   ├── package.json              # Sidecar dependencies
 │   ├── .browser-data/            # Persistent browser context (gitignored)
 │   └── README.md                 # Sidecar documentation
+├── installers/                   # Phase 8: Context menu installers
+│   ├── README.md
+│   ├── windows/
+│   │   ├── context-menu.reg
+│   │   ├── uninstall-context-menu.reg
+│   │   └── setup.nsi
+│   ├── macos/
+│   │   ├── FinderSync.m
+│   │   ├── Info.plist
+│   │   ├── entitlements.plist
+│   │   ├── sign.sh
+│   │   ├── notarize.sh
+│   │   └── create-dmg.sh
+│   └── linux/
+│       ├── nautilus-extension.py
+│       ├── dolphin.desktop
+│       ├── nemo.nemo_action
+│       └── install.sh
 ├── package.json                  # NPM dependencies
 ├── PLAN.md                       # Complete technical blueprint
-├── TESTING.md                    # Testing instructions (Phases 1-6)
+├── TESTING.md                    # Testing instructions
 ├── PHASE5.md                     # Phase 5 documentation
-└── AGENTS.md                     # This file
-```
-├── PHASE5_SUMMARY.md             # Phase 5 summary
 └── AGENTS.md                     # This file
 ```
 
@@ -219,39 +247,6 @@ ai-copy-paste/
 - Browser data stored in `.browser-data/` for session persistence
 - Multiple selector fallbacks for robust AI interface interaction
 - Anti-automation mitigations to avoid detection
-
-## Phase 5: Token Counting and Prompt Building (Next)
-
-### Objectives
-Real-time token estimation and template-based prompt assembly for AI context.
-
-### Tasks to Complete
-1. **Add Dependencies:**
-   - `gpt-tokenizer = "2.4+"` - Token counting library
-
-2. **Implement Token Counting:**
-   - Add token counting service in frontend
-   - Implement cumulative token counter UI component
-   - Cache token counts in database
-   - Support multiple AI models (GPT-4, Claude, etc.)
-
-3. **Prompt Building:**
-   - Create prompt templates (agent, planning, debugging, review)
-   - Build prompt preview with syntax highlighting
-   - Add custom instructions field
-   - Implement token limit warnings
-
-4. **UI Updates:**
-   - Show token count per file and total
-   - Display warnings when approaching limits
-   - Add template selection dropdown
-   - Show prompt preview panel
-
-### Key Considerations for Phase 5
-- Token counting should be fast and accurate
-- Cache counts in database to avoid recounting
-- Support different tokenizers for different models
-- Provide visual feedback for token usage
 
 ## Development Guidelines
 
@@ -465,6 +460,147 @@ Two strategies for filling input:
 - Original Blueprint: PLAN.md
 - Testing Guide: TESTING.md
 
+## Phase 8: Context Menu Installers (Complete) ✓
+
+### Objectives
+Implement platform-specific shell integration for Windows, macOS, and Linux file managers.
+
+### What Was Implemented
+
+**Windows Integration:**
+- ✅ Registry file (`context-menu.reg`) for manual installation
+- ✅ Uninstall registry file (`uninstall-context-menu.reg`)
+- ✅ NSIS installer script (`setup.nsi`) with full automation
+- ✅ Support for files, folders, and directory backgrounds
+- ✅ Comprehensive documentation with troubleshooting
+
+**macOS Integration:**
+- ✅ Finder Sync Extension implementation (`FinderSync.m`)
+- ✅ Extension metadata and configuration (`Info.plist`)
+- ✅ Security entitlements (`entitlements.plist`)
+- ✅ Code signing script (`sign.sh`)
+- ✅ Notarization script (`notarize.sh`)
+- ✅ DMG creation script (`create-dmg.sh`)
+- ✅ Comprehensive documentation with Xcode integration guide
+
+**Linux Integration:**
+- ✅ Nautilus extension for GNOME (`nautilus-extension.py`)
+- ✅ Dolphin service menu for KDE (`dolphin.desktop`)
+- ✅ Nemo action file for Cinnamon (`nemo.nemo_action`)
+- ✅ Automated installation script with DE detection (`install.sh`)
+- ✅ Comprehensive documentation with troubleshooting
+
+**Documentation:**
+- ✅ Main installers README with overview and quick start
+- ✅ Platform-specific READMEs with detailed instructions
+- ✅ Security considerations for each platform
+- ✅ Debugging and troubleshooting guides
+- ✅ Distribution checklist
+
+### Directory Structure Created
+
+```
+installers/
+├── README.md                          # Main documentation
+├── windows/
+│   ├── README.md
+│   ├── context-menu.reg
+│   ├── uninstall-context-menu.reg
+│   └── setup.nsi
+├── macos/
+│   ├── README.md
+│   ├── FinderSync.m
+│   ├── Info.plist
+│   ├── entitlements.plist
+│   ├── sign.sh
+│   ├── notarize.sh
+│   └── create-dmg.sh
+└── linux/
+    ├── README.md
+    ├── nautilus-extension.py
+    ├── dolphin.desktop
+    ├── nemo.nemo_action
+    └── install.sh
+```
+
+### Key Implementation Details
+
+**Windows:**
+- Registry-based approach for simplicity and compatibility
+- Supports Windows 7, 8, 10, and 11
+- NSIS installer includes uninstaller and Add/Remove Programs integration
+- Context menu appears under "Show more options" on Windows 11 (registry method)
+
+**macOS:**
+- Finder Sync Extension provides native integration
+- Requires Xcode to build the extension
+- Code signing and notarization scripts included for distribution
+- User must enable extension in System Settings
+
+**Linux:**
+- Supports three major desktop environments (GNOME, KDE, Cinnamon)
+- Auto-detection of desktop environment
+- User-level installation (no root required)
+- Python-based Nautilus extension with compatibility for both 3.x and 4.x
+
+### Application Integration Required
+
+The main Tauri application needs to handle command-line arguments:
+
+```rust
+// In main.rs or lib.rs
+fn main() {
+    tauri::Builder::default()
+        .setup(|app| {
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            if !args.is_empty() {
+                // Process paths received from context menu
+                app.emit_all("paths-received", args).ok();
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+```
+
+### Testing Phase 8
+
+For each platform:
+1. Build the application in release mode
+2. Install context menu integration
+3. Right-click on files/folders in file manager
+4. Verify "Send to AI Context Collector" appears
+5. Click menu item and verify app launches with correct paths
+6. Test with multiple files, folders, special characters
+7. Test uninstallation
+
+### Known Limitations
+
+**Windows:**
+- Registry approach places menu under "Show more options" in Windows 11
+- For top-level Windows 11 integration, would need IExplorerCommand implementation
+
+**macOS:**
+- Requires separate Xcode project for Finder Sync Extension
+- Tauri doesn't natively support app extensions
+- Requires Apple Developer account for distribution (code signing + notarization)
+- Users must manually enable extension in System Settings
+
+**Linux:**
+- Nautilus extension requires python-nautilus package
+- Different file managers have different integration methods
+- Each user must install separately (no system-wide installation)
+
+### Future Enhancements
+
+Potential improvements for future agents:
+1. **Windows 11 Native:** Implement IExplorerCommand for top-level menu
+2. **macOS Automation:** Script to build Finder extension from Tauri build
+3. **Linux Packages:** Create .deb and .rpm packages with auto-installation
+4. **Multi-selection:** Enhanced handling of multiple file selections
+5. **Deep Links:** Support app-specific URL scheme (ai-context-collector://)
+
 ## Contact/Notes
 
 This is an agent-developed project. Each phase should be:
@@ -473,4 +609,4 @@ This is an agent-developed project. Each phase should be:
 3. Incrementally valuable
 4. Following the blueprint in PLAN.md
 
-Good luck with Phase 2! 🚀
+Phase 8 is now complete! All platform-specific context menu installers are implemented with comprehensive documentation. 🚀
