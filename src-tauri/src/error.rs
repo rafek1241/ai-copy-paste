@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
 
+    #[error("Browser automation error: {0}")]
+    BrowserError(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
@@ -28,3 +31,4 @@ impl From<AppError> for String {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+pub type Result<T> = std::result::Result<T, AppError>;

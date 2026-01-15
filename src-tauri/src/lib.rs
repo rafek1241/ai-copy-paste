@@ -27,6 +27,8 @@ pub fn run() {
             commands::index_folder,
             commands::get_children,
             commands::search_path,
+            commands::launch_browser,
+            commands::get_available_interfaces,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
