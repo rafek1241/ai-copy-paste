@@ -6,7 +6,7 @@ This document provides context for AI agents working on different phases of the 
 
 The AI Context Collector is a cross-platform desktop application built with Tauri 2.0 and React. It helps developers collect and organize code context for AI assistants. The project follows the technical blueprint defined in PLAN.md.
 
-## Current Status: Phase 1 Complete ✓
+## Current Status: Phase 1 & Phase 5 Complete ✓
 
 ### What Has Been Implemented
 
@@ -23,19 +23,45 @@ The AI Context Collector is a cross-platform desktop application built with Taur
 - ✅ Logging infrastructure using env_logger
 - ✅ Testing documentation (TESTING.md)
 
+**Token Counting and Prompt Building (Phase 5):**
+- ✅ Token counting using gpt-tokenizer
+- ✅ 6 built-in prompt templates (agent, planning, debugging, review, documentation, testing)
+- ✅ Template variable substitution system
+- ✅ Prompt building from selected files
+- ✅ New IPC commands:
+  - `get_templates()` - Get all available prompt templates
+  - `get_file_content(file_id)` - Get content of a single file
+  - `get_file_contents(file_ids)` - Get content of multiple files
+  - `build_prompt_from_files(request)` - Build prompt from template and files
+- ✅ TokenCounter React component with visual indicators
+- ✅ PromptBuilder React component with full UI
+- ✅ Support for 9 AI models with correct token limits
+- ✅ Token limit warnings and color-coded progress bar
+- ✅ Copy to clipboard functionality
+- ✅ Comprehensive documentation (PHASE5.md)
+
 ### Project Structure
 
 ```
 ai-copy-paste/
-├── src/                          # React frontend (default template)
+├── src/                          # React frontend
+│   ├── components/               # React components
+│   │   ├── TokenCounter.tsx      # Token counter with visual indicators
+│   │   └── PromptBuilder.tsx     # Prompt building interface
+│   ├── services/                 # Service layer
+│   │   ├── tokenizer.ts          # Token counting utilities
+│   │   └── prompts.ts            # Prompt API wrapper
+│   └── App.tsx                   # Main application component
 ├── src-tauri/                    # Rust backend
 │   ├── src/
 │   │   ├── commands/             # Tauri IPC commands
 │   │   │   ├── mod.rs
-│   │   │   └── indexing.rs       # File indexing commands
+│   │   │   ├── indexing.rs       # File indexing commands
+│   │   │   └── prompts.rs        # Prompt and file content commands
 │   │   ├── db/                   # Database layer
 │   │   │   ├── mod.rs            # DB connection management
 │   │   │   └── schema.rs         # Schema definition
+│   │   ├── templates.rs          # Prompt template system
 │   │   ├── error.rs              # Error types
 │   │   ├── lib.rs                # Application entry point
 │   │   └── main.rs               # Binary entry point
@@ -43,6 +69,7 @@ ai-copy-paste/
 ├── package.json                  # NPM dependencies
 ├── PLAN.md                       # Complete technical blueprint
 ├── TESTING.md                    # Testing instructions
+├── PHASE5.md                     # Phase 5 documentation
 └── AGENTS.md                     # This file
 ```
 
@@ -59,6 +86,7 @@ ai-copy-paste/
 - @tauri-apps/api = "^2" - Tauri API
 - react = "^19", react-dom = "^19" - Frontend
 - vite = "^7" - Build tool
+- gpt-tokenizer = "^2.4" - Token counting (Phase 5)
 
 ## Important Architectural Decisions
 
@@ -173,12 +201,46 @@ app.emit("indexing-progress", IndexProgress {
 ## Phase 3 and Beyond
 
 See PLAN.md for complete details on remaining phases:
-- Phase 3: Virtual tree UI with lazy loading
-- Phase 4: Text extraction (PDF, DOCX, source files)
-- Phase 5: Token counting and prompt building
-- Phase 6: Browser automation sidecar
-- Phase 7: History and persistence
-- Phase 8: Context menu installers
+- Phase 2: File traversal engine (pending)
+- Phase 3: Virtual tree UI with lazy loading (pending)
+- Phase 4: Text extraction (PDF, DOCX, source files) (pending)
+- **Phase 5: Token counting and prompt building (COMPLETED ✓)** - See details below
+- Phase 6: Browser automation sidecar (pending)
+- Phase 7: History and persistence (pending)
+- Phase 8: Context menu installers (pending)
+
+## Phase 5 Implementation Summary
+
+Phase 5 has been successfully completed! Key achievements:
+
+### Backend Components
+- **templates.rs**: 6 built-in prompt templates with variable substitution
+- **commands/prompts.rs**: Commands for template and file operations
+  - `get_templates()` - Returns all template definitions
+  - `get_file_content(file_id)` - Reads single file
+  - `get_file_contents(file_ids)` - Batch file reading
+  - `build_prompt_from_files(request)` - Assembles prompts
+
+### Frontend Components
+- **services/tokenizer.ts**: Token counting with gpt-tokenizer
+  - Support for 9 AI models (GPT-4o, Claude, Gemini, etc.)
+  - Color-coded usage indicators
+- **services/prompts.ts**: API wrapper for Tauri commands
+- **components/TokenCounter.tsx**: Real-time token counter with visual progress
+- **components/PromptBuilder.tsx**: Complete prompt building interface
+
+### Features Delivered
+✅ Real-time token counting with 300ms debouncing
+✅ Support for 9 AI models with accurate token limits
+✅ 6 built-in prompt templates (agent, planning, debugging, review, docs, testing)
+✅ Custom instructions support
+✅ Visual token limit warnings (color-coded progress bar)
+✅ Prompt preview and copy to clipboard
+✅ Comprehensive error handling
+✅ Full documentation in PHASE5.md
+
+**Testing:** See TESTING.md for Phase 5 testing procedures.
+**Documentation:** See PHASE5.md for detailed architecture and usage guide.
 
 ## Development Guidelines
 

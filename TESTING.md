@@ -1,6 +1,6 @@
-# Testing Guide for AI Context Collector - Phase 1
+# Testing Guide for AI Context Collector
 
-This document provides instructions for testing the Phase 1 implementation of the AI Context Collector.
+This document provides instructions for testing the AI Context Collector implementation.
 
 ## Prerequisites
 
@@ -220,3 +220,211 @@ After verifying Phase 1 works correctly:
 1. Review AGENTS.md for context on implementing Phase 2
 2. Phase 2 will add the file traversal engine with parallel processing
 3. Future phases will add the UI components and user-facing features
+
+## Testing Phase 5 Features
+
+Phase 5 adds token counting and prompt building capabilities. See [PHASE5.md](PHASE5.md) for comprehensive documentation.
+
+### 1. Template Loading Test
+
+Open the application and verify templates are loaded:
+
+```javascript
+const { invoke } = window.__TAURI__.core;
+
+// Get all available templates
+const templates = await invoke('get_templates');
+console.log('Templates:', templates);
+```
+
+**Expected Result:** Should return 6 templates:
+- agent (General purpose AI agent)
+- planning (Project planning and architecture)
+- debugging (Code debugging and troubleshooting)
+- review (Code review)
+- documentation (Generate documentation)
+- testing (Generate test cases)
+
+### 2. File Content Retrieval Test
+
+After indexing some files, test content retrieval:
+
+```javascript
+// Get file content by ID (use an actual file ID from your database)
+const fileContent = await invoke('get_file_content', { fileId: 1 });
+console.log('File content:', fileContent);
+
+// Get multiple file contents
+const contents = await invoke('get_file_contents', { fileIds: [1, 2, 3] });
+console.log('Multiple file contents:', contents);
+```
+
+**Expected Result:** Should return file path and content as text.
+
+### 3. Prompt Building Test
+
+Build a prompt from selected files:
+
+```javascript
+// Build prompt using template
+const response = await invoke('build_prompt_from_files', {
+  request: {
+    template_id: 'agent',
+    custom_instructions: 'Please review this code for bugs',
+    file_ids: [1, 2, 3]
+  }
+});
+
+console.log('Prompt:', response.prompt);
+console.log('File count:', response.file_count);
+console.log('Total chars:', response.total_chars);
+```
+
+**Expected Result:** Should return a formatted prompt containing:
+- Template text
+- Custom instructions
+- File paths and contents
+
+### 4. Token Counting Test (Frontend)
+
+The token counting is done on the frontend using `gpt-tokenizer`. Test in browser console:
+
+```javascript
+// Import tokenizer (if you've exposed it globally)
+import { countTokens } from './services/tokenizer';
+
+const text = "Hello, world! This is a test.";
+const count = countTokens(text);
+console.log('Token count:', count);
+```
+
+Or use the UI components:
+1. Open the demo UI (click "Show Demo UI" button)
+2. Select a template
+3. Enter custom instructions
+4. Click "Build Prompt"
+5. Verify token counter displays
+6. Check color coding:
+   - Green: < 50% of limit
+   - Yellow: 50-75%
+   - Orange: 75-90%
+   - Red: > 90%
+
+### 5. Copy to Clipboard Test
+
+1. Build a prompt using the UI
+2. Click "Copy to Clipboard" button
+3. Paste into text editor
+4. Verify full prompt is copied correctly
+
+### 6. Model Selection Test
+
+1. Select different models from dropdown
+2. Verify token limits update:
+   - GPT-4o: 128,000 tokens
+   - GPT-4: 8,192 tokens
+   - Claude 3: 200,000 tokens
+   - Gemini Pro: 32,768 tokens
+3. Build a large prompt and verify progress bar adjusts based on model
+
+### 7. Error Handling Tests
+
+Test error scenarios:
+
+```javascript
+// Try to build prompt with no files
+await invoke('build_prompt_from_files', {
+  request: {
+    template_id: 'agent',
+    file_ids: []
+  }
+});
+// Should handle gracefully
+
+// Try invalid template ID
+await invoke('build_prompt_from_files', {
+  request: {
+    template_id: 'invalid_template',
+    file_ids: [1]
+  }
+});
+// Should return error: "Template not found"
+
+// Try invalid file ID
+await invoke('get_file_content', { fileId: 999999 });
+// Should return error
+```
+
+### 8. Performance Tests
+
+Test with larger files:
+
+```javascript
+// Build prompt with many files
+const largeFileIds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const startTime = Date.now();
+const response = await invoke('build_prompt_from_files', {
+  request: {
+    template_id: 'agent',
+    file_ids: largeFileIds
+  }
+});
+const endTime = Date.now();
+
+console.log(`Built prompt with ${response.file_count} files in ${endTime - startTime}ms`);
+console.log(`Total characters: ${response.total_chars}`);
+```
+
+**Expected Result:**
+- Should handle 10+ files without issues
+- Should complete in < 5 seconds
+- Token counting should complete in < 1 second
+
+### 9. Integration Test
+
+Full workflow test:
+
+1. Index a folder with code files:
+   ```javascript
+   await invoke('index_folder', { path: '/path/to/your/project' });
+   ```
+
+2. Get root files:
+   ```javascript
+   const files = await invoke('get_children', { parentId: null });
+   ```
+
+3. Build prompt with selected files:
+   ```javascript
+   const fileIds = files.slice(0, 3).map(f => f.id);
+   const response = await invoke('build_prompt_from_files', {
+     request: {
+       template_id: 'review',
+       custom_instructions: 'Focus on security issues',
+       file_ids: fileIds
+     }
+   });
+   ```
+
+4. Verify prompt contains all files
+5. Copy to clipboard and paste into AI chat
+
+## Known Limitations
+
+### Phase 1 Limitations
+1. No UI yet - testing must be done via developer console
+2. No file watching - changes to filesystem are not automatically detected
+3. No text extraction - only file metadata is indexed
+4. No token counting - token_count field will be NULL
+5. No history management UI
+6. No settings UI
+
+### Phase 5 Limitations
+1. Token counting only supports OpenAI encoding (gpt-tokenizer)
+2. Claude/Gemini token counts are estimates (±15% accuracy)
+3. No token count caching in database yet
+4. No custom template creation UI
+5. No syntax highlighting in preview
+6. Limited to text files only (binary files will show error)
+
+These features may be implemented in subsequent phases.
