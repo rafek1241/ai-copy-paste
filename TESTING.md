@@ -1,6 +1,6 @@
-# Testing Guide for AI Context Collector - Phases 1-3
+# Testing Guide for AI Context Collector - Phases 1-4
 
-This document provides instructions for testing the implementation of the AI Context Collector through Phase 3.
+This document provides instructions for testing the implementation of the AI Context Collector through Phase 4.
 
 ## Prerequisites
 
@@ -528,7 +528,275 @@ If you encounter any issues:
 
 ## Next Steps
 
-After verifying Phase 1 works correctly:
-1. Review AGENTS.md for context on implementing Phase 2
-2. Phase 2 will add the file traversal engine with parallel processing
-3. Future phases will add the UI components and user-facing features
+After verifying Phase 1-4 work correctly:
+1. Review AGENTS.md for context on implementing Phase 5
+2. Phase 5 will add token counting and prompt building
+3. Future phases will add browser automation and context menu installers
+
+## Phase 4: Text Extraction Service Testing
+
+Phase 4 adds text extraction capabilities with LRU caching and encoding detection.
+
+### 1. Testing Backend Text Extraction
+
+Test extracting text from source code files:
+
+```javascript
+const { invoke } = window.__TAURI__.core;
+
+// Extract text from a source file
+const result = await invoke('extract_text', { path: './src/App.tsx' });
+console.log('Extraction result:', result);
+console.log('Text length:', result.text.length);
+console.log('Encoding:', result.encoding);
+console.log('Error:', result.error);
+```
+
+**Expected Result:**
+- `text` field should contain the file contents
+- `encoding` should show detected encoding (e.g., "utf-8")
+- `error` should be null for successful extraction
+- Cache should store the result for subsequent calls
+
+### 2. Testing Encoding Detection
+
+Test with files in different encodings:
+
+```javascript
+// Test UTF-8 file
+const utf8 = await invoke('extract_text', { path: './README.md' });
+console.log('UTF-8 encoding:', utf8.encoding);
+
+// Test ASCII file
+const ascii = await invoke('extract_text', { path: './LICENSE' });
+console.log('ASCII encoding:', ascii.encoding);
+
+// Test file with special characters
+const special = await invoke('extract_text', { path: './file-with-unicode.txt' });
+console.log('Special chars:', special.text.includes('你好'));
+```
+
+**Expected Result:**
+- UTF-8 files should be detected correctly
+- ASCII is detected as UTF-8 (compatible)
+- Unicode characters should be preserved
+- No encoding errors or replacement characters
+
+### 3. Testing LRU Cache
+
+Test cache hit/miss behavior:
+
+```javascript
+// First extraction (cache miss)
+console.time('First extraction');
+const result1 = await invoke('extract_text', { path: './src/App.tsx' });
+console.timeEnd('First extraction');
+
+// Second extraction (cache hit)
+console.time('Second extraction');
+const result2 = await invoke('extract_text', { path: './src/App.tsx' });
+console.timeEnd('Second extraction');
+
+// Verify same content
+console.log('Same content:', result1.text === result2.text);
+```
+
+**Expected Result:**
+- First extraction should take longer (reads from disk)
+- Second extraction should be very fast (reads from cache)
+- Content should be identical
+- Check Rust logs for "Cache hit" message
+
+### 4. Testing Cache Invalidation
+
+Test that cache invalidates when files change:
+
+```javascript
+// Extract file
+const before = await invoke('extract_text', { path: './test-file.txt' });
+
+// Manually modify the file (change content)
+// ... wait a moment ...
+
+// Re-index to update fingerprint
+await invoke('index_folder', { path: './test-folder' });
+
+// Extract again
+const after = await invoke('extract_text', { path: './test-file.txt' });
+
+console.log('Content changed:', before.text !== after.text);
+```
+
+**Expected Result:**
+- Changed files should be re-extracted
+- Cache should recognize fingerprint mismatch
+- Check Rust logs for "Cache fingerprint mismatch" message
+
+### 5. Testing Supported File Types
+
+Test getting supported file types:
+
+```javascript
+const types = await invoke('get_supported_file_types');
+console.log('Supported types:', types);
+console.log('Supports .rs:', types.includes('rs'));
+console.log('Supports .pdf:', types.includes('pdf'));
+```
+
+**Expected Result:**
+- Should return array of supported extensions
+- Should include common source code extensions
+- Should include text file extensions
+
+### 6. Testing Error Handling
+
+Test with non-existent files:
+
+```javascript
+try {
+  await invoke('extract_text', { path: './non-existent-file.txt' });
+} catch (error) {
+  console.log('Expected error:', error);
+}
+```
+
+**Expected Result:**
+- Should return error message, not crash
+- Error should indicate file not found
+- App should remain responsive
+
+### 7. Testing PDF Extraction (Frontend)
+
+Test PDF extraction using the frontend service:
+
+```javascript
+import { extractText } from './services/extraction';
+
+// Extract from PDF file
+const result = await extractText('./sample.pdf', (progress) => {
+  console.log(`Extracting: ${progress.current}/${progress.total} pages`);
+  console.log(`Status: ${progress.status}`);
+});
+
+console.log('PDF text:', result.text);
+console.log('Page count:', result.pageCount);
+console.log('Error:', result.error);
+```
+
+**Expected Result:**
+- Progress callback should be called for each page
+- Text should contain PDF content
+- pageCount should match actual pages
+- error should be null for valid PDFs
+
+### 8. Testing DOCX Extraction (Frontend)
+
+Test DOCX extraction:
+
+```javascript
+import { extractText } from './services/extraction';
+
+// Extract from DOCX file
+const result = await extractText('./document.docx');
+
+console.log('DOCX text:', result.text);
+console.log('Error:', result.error);
+```
+
+**Expected Result:**
+- Text should contain document content
+- Formatting should be stripped (plain text)
+- error should be null for valid DOCX files
+
+### 9. Testing Cache Size Limits
+
+Test LRU eviction with large files:
+
+```javascript
+// Extract multiple large files to fill cache
+const files = [
+  './large-file-1.txt',
+  './large-file-2.txt',
+  './large-file-3.txt',
+  // ... add more files to exceed 100MB
+];
+
+for (const file of files) {
+  await invoke('extract_text', { path: file });
+}
+
+// Check cache size (via Rust logs)
+// Should see "Evicting LRU cache entry" messages
+```
+
+**Expected Result:**
+- Cache should stay under 100MB limit
+- Least recently used entries should be evicted
+- Check Rust logs for eviction messages
+- Cache should still function correctly
+
+### 10. Testing Frontend Integration
+
+Test extraction in the UI context:
+
+```javascript
+// In FileTree component or similar
+const handleExtractClick = async (filePath: string) => {
+  try {
+    const result = await invoke('extract_text', { path: filePath });
+    
+    if (result.error) {
+      console.error('Extraction failed:', result.error);
+      return;
+    }
+    
+    console.log(`Extracted ${result.text.length} characters`);
+    // Display in UI or use for token counting
+  } catch (error) {
+    console.error('Error:', error);
+  }
+};
+```
+
+**Expected Result:**
+- Should integrate smoothly with existing UI
+- Errors should be handled gracefully
+- User should see extraction progress
+- Extracted text should be usable for next phases
+
+## Phase 4 Known Limitations
+
+1. PDF and DOCX extraction require files to be readable in Tauri's file system
+2. Very large files (>100MB) may be slow to extract
+3. Cache is disk-based, so first access after app restart may be slow
+4. Some PDF files with complex formatting may not extract perfectly
+5. Binary files are not supported (returns empty text)
+
+## Phase 4 Performance Targets
+
+| Operation | Expected Time |
+|-----------|---------------|
+| Small text file (< 10KB) cache miss | < 50ms |
+| Small text file cache hit | < 5ms |
+| Medium source file (100KB) | < 100ms |
+| Large text file (1MB) | < 500ms |
+| PDF (100 pages) | 2-5 seconds |
+| DOCX (20 pages) | 1-2 seconds |
+
+## Troubleshooting Phase 4
+
+### PDF Extraction Fails
+- Ensure pdfjs-dist is installed: `npm install`
+- Check browser console for worker loading errors
+- Verify file is accessible via Tauri fs plugin
+
+### DOCX Extraction Fails
+- Ensure mammoth is installed: `npm install`
+- Check if file is valid DOCX format
+- Try opening in Word to verify
+
+### Cache Not Working
+- Check app cache directory exists
+- Verify fingerprints are being generated correctly
+- Check Rust logs for cache-related messages
+- Delete cache directory to start fresh
