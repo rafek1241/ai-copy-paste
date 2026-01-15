@@ -18,6 +18,13 @@ A cross-platform desktop application for collecting and organizing code context 
 - Efficient database queries with indices
 - Cross-platform support (Windows, macOS, Linux)
 
+### Phase 2 - Parallel Traversal ✅
+- Parallel file system traversal with walkdir + rayon
+- Batch SQLite inserts (1000 records/transaction)
+- Progress reporting via Tauri events
+- Error recovery and symlink handling
+- Memory-efficient design
+
 ## Quick Start
 
 ### Prerequisites
@@ -77,6 +84,7 @@ See [TESTING.md](TESTING.md) for detailed testing instructions and [AGENTS.md](A
 ## Roadmap
 
 - ✅ Phase 1: Core infrastructure (SQLite, basic commands)
+- ✅ Phase 2: Parallel file traversal with batch inserts
 - ✅ Phase 3: Virtual tree UI with lazy loading
 - 🔄 Phase 4: Text extraction (PDF, DOCX, source files)
 - 📋 Phase 5: Token counting and prompt building

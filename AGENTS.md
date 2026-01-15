@@ -23,6 +23,17 @@ The AI Context Collector is a cross-platform desktop application built with Taur
 - ✅ Logging infrastructure using env_logger
 - ✅ Testing documentation (TESTING.md)
 
+**File Traversal Engine (Phase 2):**
+- ✅ Added walkdir = "2" and rayon = "1" dependencies
+- ✅ Parallel file system traversal using walkdir + rayon
+- ✅ Batch SQLite inserts (1000 records per transaction)
+- ✅ Symlink handling (skipped to avoid cycles)
+- ✅ Permission error recovery with logging
+- ✅ Progress reporting via Tauri events (IndexProgress struct)
+- ✅ Progress event throttling (max 10 events/second)
+- ✅ Comprehensive unit tests for indexing functionality
+- ✅ Memory-efficient design (no in-memory tree loading)
+
 **Virtual Tree UI (Phase 3):**
 - ✅ TanStack Virtual integration for virtual scrolling
 - ✅ FileTree component with lazy loading
@@ -76,6 +87,9 @@ ai-copy-paste/
 - thiserror = "1" - Error handling
 - log = "0.4", env_logger = "0.11" - Logging
 - serde, serde_json - Serialization
+- walkdir = "2" - Directory traversal
+- rayon = "1" - Parallel processing
+- tempfile = "3" - Test fixtures (dev dependency)
 
 **TypeScript (package.json):**
 - @tauri-apps/api = "^2" - Tauri API
@@ -83,14 +97,6 @@ ai-copy-paste/
 - @tanstack/react-virtual = "^3" - Virtual scrolling
 - react = "^19", react-dom = "^19" - Frontend
 - vite = "^7" - Build tool
-
-**Rust (Cargo.toml):**
-- tauri = "2" - Framework
-- tauri-plugin-dialog = "2" - File dialog plugin
-- rusqlite = "0.31" with bundled feature - SQLite
-- thiserror = "1" - Error handling
-- log = "0.4", env_logger = "0.11" - Logging
-- serde, serde_json - Serialization
 
 ## Important Architectural Decisions
 
