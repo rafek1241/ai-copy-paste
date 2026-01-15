@@ -6,7 +6,7 @@ This document provides context for AI agents working on different phases of the 
 
 The AI Context Collector is a cross-platform desktop application built with Tauri 2.0 and React. It helps developers collect and organize code context for AI assistants. The project follows the technical blueprint defined in PLAN.md.
 
-## Current Status: Phase 1 Complete ✓
+## Current Status: Phase 6 Complete ✓
 
 ### What Has Been Implemented
 
@@ -23,16 +23,31 @@ The AI Context Collector is a cross-platform desktop application built with Taur
 - ✅ Logging infrastructure using env_logger
 - ✅ Testing documentation (TESTING.md)
 
+**Browser Automation (Phase 6):**
+- ✅ Node.js sidecar with Playwright integration
+- ✅ Persistent browser context (stays open after script exits)
+- ✅ Support for multiple AI interfaces (ChatGPT, Claude, Gemini, AI Studio)
+- ✅ Multiple selector fallbacks for robust input detection
+- ✅ Anti-automation mitigations
+- ✅ Rust IPC commands:
+  - `launch_browser(interface, text, custom_url)` - Launch and fill AI chat
+  - `get_available_interfaces()` - Get list of supported interfaces
+- ✅ Test UI component for browser automation
+- ✅ Comprehensive testing documentation
+
 ### Project Structure
 
 ```
 ai-copy-paste/
-├── src/                          # React frontend (default template)
+├── src/                          # React frontend
+│   ├── BrowserAutomation.tsx     # Phase 6 test component
+│   └── ...                       # Other frontend components
 ├── src-tauri/                    # Rust backend
 │   ├── src/
 │   │   ├── commands/             # Tauri IPC commands
 │   │   │   ├── mod.rs
-│   │   │   └── indexing.rs       # File indexing commands
+│   │   │   ├── indexing.rs       # File indexing commands
+│   │   │   └── browser.rs        # Browser automation commands (Phase 6)
 │   │   ├── db/                   # Database layer
 │   │   │   ├── mod.rs            # DB connection management
 │   │   │   └── schema.rs         # Schema definition
@@ -40,6 +55,12 @@ ai-copy-paste/
 │   │   ├── lib.rs                # Application entry point
 │   │   └── main.rs               # Binary entry point
 │   └── Cargo.toml                # Rust dependencies
+├── sidecar/                      # Phase 6: Node.js Playwright process
+│   ├── automation.js             # Browser control logic
+│   ├── selectors.js              # AI interface configurations
+│   ├── package.json              # Sidecar dependencies
+│   ├── .browser-data/            # Persistent browser context (gitignored)
+│   └── README.md                 # Sidecar documentation
 ├── package.json                  # NPM dependencies
 ├── PLAN.md                       # Complete technical blueprint
 ├── TESTING.md                    # Testing instructions
@@ -59,6 +80,9 @@ ai-copy-paste/
 - @tauri-apps/api = "^2" - Tauri API
 - react = "^19", react-dom = "^19" - Frontend
 - vite = "^7" - Build tool
+
+**Sidecar (sidecar/package.json):**
+- playwright = "^1.57.0" - Browser automation
 
 ## Important Architectural Decisions
 
@@ -90,6 +114,15 @@ ai-copy-paste/
 - Code can be verified on Windows/macOS
 - CI/CD should test on all platforms
 - Use TESTING.md for manual verification
+
+### 6. Browser Automation Architecture (Phase 6)
+- Separate Node.js sidecar process for browser control
+- Uses Playwright's persistent context to keep browser open
+- IPC communication via spawned child process (not WebSocket)
+- Sidecar exits via `process.exit(0)` without closing browser
+- Browser data stored in `.browser-data/` for session persistence
+- Multiple selector fallbacks for robust AI interface interaction
+- Anti-automation mitigations to avoid detection
 
 ## Phase 2: File Traversal Engine (Next)
 
@@ -170,15 +203,99 @@ app.emit("indexing-progress", IndexProgress {
 - Measure performance with 10k, 100k files
 - Verify memory usage stays reasonable
 
-## Phase 3 and Beyond
+## Phase 2-5 and Phase 7-8 (Remaining Work)
 
 See PLAN.md for complete details on remaining phases:
+- Phase 2: File traversal engine with parallel processing
 - Phase 3: Virtual tree UI with lazy loading
 - Phase 4: Text extraction (PDF, DOCX, source files)
 - Phase 5: Token counting and prompt building
-- Phase 6: Browser automation sidecar
+- **Phase 6: Browser automation sidecar** ✅ **COMPLETE**
 - Phase 7: History and persistence
 - Phase 8: Context menu installers
+
+## Phase 6 Implementation Notes (Completed)
+
+### Architecture
+
+The browser automation is implemented as a **separate Node.js sidecar process** that communicates with the main Tauri application. This design was chosen for several reasons:
+
+1. **Browser Persistence**: Playwright's persistent context allows the browser to remain open after the Node.js process exits
+2. **Isolation**: Browser automation logic is isolated from the Rust backend
+3. **Flexibility**: Easy to update selectors without recompiling the entire app
+4. **Dependencies**: Avoids bundling Playwright with the Tauri binary
+
+### Key Implementation Decisions
+
+**1. Persistent Context Pattern**
+```javascript
+const context = await chromium.launchPersistentContext('./browser-data', {
+  headless: false,
+  channel: 'chrome',
+});
+// ... do work ...
+process.exit(0); // Browser stays open!
+```
+
+**2. Selector Fallback Chain**
+Each AI interface has multiple selectors tried in order:
+- Primary selector (most specific)
+- Alternative selectors (for UI variations)
+- Generic fallback (contenteditable)
+
+**3. Fill Strategy Fallback**
+Two strategies for filling input:
+- `element.fill()` - Fast, works most of the time
+- `element.click()` + `keyboard.type()` - Slower but more reliable
+
+**4. Anti-Automation Mitigations**
+- Disable blink features that indicate automation
+- Use system Chrome instead of bundled Chromium
+- Persistent context maintains normal user session
+
+### Files Added
+
+- `sidecar/automation.js` - Main browser control script
+- `sidecar/selectors.js` - AI interface configurations
+- `sidecar/package.json` - Node.js dependencies
+- `sidecar/README.md` - Sidecar documentation
+- `src-tauri/src/commands/browser.rs` - Rust IPC commands
+- `src/BrowserAutomation.tsx` - Test UI component
+
+### Testing Phase 6
+
+Use the TESTING.md guide for complete testing instructions. Quick start:
+
+```bash
+# Install sidecar dependencies
+cd sidecar
+npm install
+npx playwright install chromium
+cd ..
+
+# Run application
+npm run tauri dev
+
+# Use the "Browser Automation Test" UI to test
+```
+
+### Known Limitations
+
+1. **No progress reporting** - User doesn't see filling progress
+2. **No reconnection** - Can't reconnect to browser after sidecar exits
+3. **Manual login required** - User must log in to AI interfaces first
+4. **Selector maintenance** - AI interfaces change, selectors need updates
+5. **No bundling yet** - Production builds need proper sidecar bundling
+
+### Future Improvements (Out of Scope for Phase 6)
+
+- [ ] Bundle sidecar with Tauri binary
+- [ ] Add progress events during prompt filling
+- [ ] Support for reconnecting to existing browser
+- [ ] Automatic login handling
+- [ ] Multi-tab support
+- [ ] Screenshot capture after filling
+- [ ] Automatic selector updates via AI inspection
 
 ## Development Guidelines
 
@@ -229,6 +346,10 @@ See PLAN.md for complete details on remaining phases:
    - ❌ Don't silently ignore errors
    - ✅ Log warnings, propagate critical errors
 
+6. **Browser Context Closing (Phase 6):**
+   - ❌ Don't call `context.close()` in sidecar
+   - ✅ Exit with `process.exit(0)` to keep browser open
+
 ## Questions for Next Agent
 
 When starting Phase 2, consider:
@@ -238,12 +359,21 @@ When starting Phase 2, consider:
 4. How to handle very large files (>1GB)?
 5. Should we store file hashes for integrity checking?
 
+When continuing Phase 6 work, consider:
+1. How to bundle the sidecar with the production build?
+2. Should we add reconnection capability to running browsers?
+3. How to handle automatic selector updates when AI interfaces change?
+4. Should we support saving browser sessions for later use?
+5. How to handle rate limiting from AI interfaces?
+
 ## Resources
 
 - [Tauri Documentation](https://tauri.app/)
 - [rusqlite Documentation](https://docs.rs/rusqlite/)
 - [walkdir Crate](https://docs.rs/walkdir/)
 - [rayon Crate](https://docs.rs/rayon/)
+- [Playwright Documentation](https://playwright.dev/)
+- [Playwright Node.js API](https://playwright.dev/docs/api/class-playwright)
 - Original Blueprint: PLAN.md
 - Testing Guide: TESTING.md
 

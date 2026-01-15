@@ -1,4 +1,4 @@
-# Testing Guide for AI Context Collector - Phase 1
+# Testing Guide for AI Context Collector - Phase 1-6
 
 This document provides instructions for testing the Phase 1 implementation of the AI Context Collector.
 
@@ -45,6 +45,14 @@ This document provides instructions for testing the Phase 1 implementation of th
 2. Install npm dependencies:
    ```bash
    npm install
+   ```
+
+3. Install sidecar dependencies (for Phase 6 browser automation):
+   ```bash
+   cd sidecar
+   npm install
+   npx playwright install chromium
+   cd ..
    ```
 
 ## Building the Application
@@ -220,3 +228,246 @@ After verifying Phase 1 works correctly:
 1. Review AGENTS.md for context on implementing Phase 2
 2. Phase 2 will add the file traversal engine with parallel processing
 3. Future phases will add the UI components and user-facing features
+
+## Testing Phase 6 Features: Browser Automation
+
+### Prerequisites
+
+Phase 6 requires Node.js and Playwright installed in the sidecar directory:
+
+```bash
+cd sidecar
+npm install
+npx playwright install chromium
+cd ..
+```
+
+### 1. Testing via UI
+
+When you run the application in development mode, you'll see a "Browser Automation Test" interface:
+
+1. Start the application:
+   ```bash
+   npm run tauri dev
+   ```
+
+2. The UI will show:
+   - Dropdown to select AI interface (ChatGPT, Claude, Gemini, AI Studio)
+   - Text area to enter your prompt
+   - Optional custom URL field
+   - Launch button
+
+3. Enter a test prompt (e.g., "Explain how React hooks work")
+
+4. Click "Launch Browser"
+
+**Expected Result:**
+- A browser window should open
+- The browser navigates to the selected AI interface
+- The prompt is automatically filled in the input field
+- The browser remains open for you to review and submit
+- Status message shows "Browser launched successfully"
+
+### 2. Testing via Developer Console
+
+You can test the browser automation commands directly:
+
+```javascript
+const { invoke } = window.__TAURI__.core;
+
+// Get available interfaces
+const interfaces = await invoke('get_available_interfaces');
+console.log('Available interfaces:', interfaces);
+
+// Launch browser with ChatGPT
+await invoke('launch_browser', {
+  interface: 'chatgpt',
+  text: 'Explain how React hooks work in simple terms.',
+  customUrl: null
+});
+
+// Launch with custom URL
+await invoke('launch_browser', {
+  interface: 'claude',
+  text: 'Review this code for security issues:\n\nfunction login(user, pass) { ... }',
+  customUrl: 'https://claude.ai/new'
+});
+```
+
+### 3. Testing Standalone Sidecar
+
+You can test the Node.js sidecar independently:
+
+```bash
+cd sidecar
+node automation.js chatgpt "Test prompt goes here"
+```
+
+**Expected Result:**
+- Browser launches with Chrome/Chromium
+- Navigates to chat.openai.com
+- Logs show selector attempts
+- Prompt is filled in the input field
+- Script exits but browser stays open
+
+### 4. Testing Different AI Interfaces
+
+Test each supported interface:
+
+```bash
+# ChatGPT
+node automation.js chatgpt "Explain quantum computing"
+
+# Claude
+node automation.js claude "Write a Python function to sort a list"
+
+# Gemini
+node automation.js gemini "What is machine learning?"
+
+# AI Studio
+node automation.js aistudio "Summarize this text"
+```
+
+### 5. Testing Persistent Context
+
+The browser should maintain login sessions across launches:
+
+1. Launch browser and log in to an AI interface
+2. Close the application
+3. Launch browser again with a new prompt
+4. **Expected:** You should still be logged in
+
+The session is stored in `sidecar/.browser-data/`
+
+### 6. Testing Error Recovery
+
+Test fallback mechanisms:
+
+```javascript
+// Test with invalid interface (should fail gracefully)
+try {
+  await invoke('launch_browser', {
+    interface: 'unknown',
+    text: 'Test'
+  });
+} catch (error) {
+  console.log('Expected error:', error);
+}
+
+// Test with empty prompt
+await invoke('launch_browser', {
+  interface: 'chatgpt',
+  text: ''
+});
+```
+
+### 7. Verifying Anti-Automation Features
+
+Check that anti-automation mitigations are working:
+
+1. Open browser DevTools in the automated browser
+2. Run in console: `navigator.webdriver`
+3. **Expected:** Should be `undefined` (not detected as automated)
+
+### 8. Performance Tests
+
+Test with large prompts:
+
+```javascript
+// Generate large prompt
+const largePrompt = 'Explain this code:\n\n' + 'console.log("test");\n'.repeat(1000);
+
+await invoke('launch_browser', {
+  interface: 'chatgpt',
+  text: largePrompt
+});
+```
+
+**Expected Result:**
+- Should handle prompts up to 100KB
+- Typing should complete within reasonable time
+- No browser crashes
+
+## Phase 6 Troubleshooting
+
+### Browser Doesn't Launch
+
+**Problem:** Browser fails to launch
+**Solutions:**
+- Check Node.js is installed: `node --version`
+- Install Playwright: `cd sidecar && npm install`
+- Install browsers: `npx playwright install chromium`
+- Check console logs for specific error
+
+### Prompt Not Filled
+
+**Problem:** Browser opens but prompt is not filled
+**Solutions:**
+- Check console output for selector attempts
+- AI interface may have updated their UI - update `sidecar/selectors.js`
+- Try manual selector with DevTools inspection
+- Check if login is required (some interfaces require authentication)
+
+### Browser Closes Immediately
+
+**Problem:** Browser window closes right after opening
+**Solutions:**
+- Verify `automation.js` doesn't call `context.close()`
+- Check that script exits with `process.exit(0)`
+- Ensure persistent context is used (not regular launch)
+- Check for Node.js process crashes in console
+
+### "node: command not found"
+
+**Problem:** Rust can't find Node.js executable
+**Solutions:**
+- Add Node.js to system PATH
+- On Windows: Restart after installing Node.js
+- Verify: `node --version` works in terminal
+
+### Permission Errors
+
+**Problem:** Permission denied errors on `.browser-data/`
+**Solutions:**
+- Check directory permissions
+- Run without elevated privileges (don't use sudo)
+- Delete `.browser-data/` and let it recreate
+
+### Selector Failures
+
+**Problem:** All selectors fail to find input field
+**Solutions:**
+- AI interface may require login first
+- Page may still be loading - increase timeout
+- Inspect element in browser DevTools
+- Update selectors in `sidecar/selectors.js`
+- Try custom URL if default URL changed
+
+## Phase 6 Known Limitations
+
+1. **No multi-tab support** - Opens in single tab/window
+2. **No progress bar** - User doesn't see filling progress for large prompts
+3. **No reconnection** - Can't reconnect to browser after script exits
+4. **Login required** - User must manually log in to AI interfaces
+5. **Selector maintenance** - May need updates when AI interfaces change UI
+
+These limitations may be addressed in future updates.
+
+## Phase 6 Security Considerations
+
+⚠️ **Important Security Notes:**
+
+1. **Credentials**: The browser stores cookies in `.browser-data/`. Keep this directory secure.
+2. **Prompts**: Prompts may contain sensitive data. They are not logged or stored by the sidecar.
+3. **Auto-detection**: Anti-automation features may fail on some sites, leading to detection.
+4. **Updates**: AI interfaces may block automation - keep Playwright updated.
+
+## Reporting Phase 6 Issues
+
+If you encounter browser automation issues:
+1. Check sidecar console output (`node automation.js` logs)
+2. Check browser DevTools console
+3. Note which AI interface you're testing
+4. Provide the selector that failed (from logs)
+5. Note if login is required
+6. Include browser version and OS
