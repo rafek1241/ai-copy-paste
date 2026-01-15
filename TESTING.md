@@ -2,6 +2,58 @@
 
 This document provides instructions for testing the implementation of the AI Context Collector through Phase 4.
 
+## Automated Testing (CI/CD)
+
+The project includes a GitHub Actions workflow that automatically tests the application on all supported platforms.
+
+### Continuous Integration Workflow
+
+The CI workflow runs automatically on:
+- Push to `main`, `master`, or any `claude/**` branches
+- Pull requests to `main` or `master` branches
+
+The workflow performs the following quality checks on **Windows, macOS, and Linux**:
+
+1. **TypeScript Type Checking** - Validates all TypeScript code compiles without errors
+2. **Rust Tests** - Runs the full Rust test suite (backend logic)
+3. **Rust Clippy** - Lints Rust code for common issues and anti-patterns
+4. **Frontend Build** - Builds the React/Vite frontend
+5. **Tauri Build** - Compiles the full desktop application for each platform
+
+### Viewing Test Results
+
+Check the "Actions" tab in the GitHub repository to see test results:
+- ✅ Green checkmark = All tests passed on all platforms
+- ❌ Red X = Tests failed on one or more platforms
+- 🟡 Yellow dot = Tests are currently running
+
+### Running Tests Locally
+
+To run the same checks locally before pushing:
+
+```bash
+# 1. TypeScript type check
+npx tsc --noEmit
+
+# 2. Run Rust tests
+cd src-tauri
+cargo test --verbose
+cd ..
+
+# 3. Run Rust clippy (linter)
+cd src-tauri
+cargo clippy -- -D warnings
+cd ..
+
+# 4. Build frontend
+npm run build
+
+# 5. Build Tauri application
+npm run tauri build
+```
+
+All of these checks must pass for the CI quality gate to succeed.
+
 ## Prerequisites
 
 ### Windows

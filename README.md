@@ -144,7 +144,12 @@ ai-copy-paste/
 
 ## Testing
 
+[![Test and Build](https://github.com/rafek1241/ai-copy-paste/actions/workflows/test.yml/badge.svg)](https://github.com/rafek1241/ai-copy-paste/actions/workflows/test.yml)
+
+The project includes automated testing that runs on every push and pull request, ensuring compatibility across **Windows, macOS, and Linux**.
+
 See [TESTING.md](TESTING.md) for comprehensive testing instructions, including:
+- Automated CI/CD testing on all platforms (Windows, macOS, Linux)
 - Phase 1: Database and file indexing tests
 - Phase 2: Parallel traversal performance tests
 - Phase 3: Virtual tree UI tests
