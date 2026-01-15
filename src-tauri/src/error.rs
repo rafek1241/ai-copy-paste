@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
 
+    #[error("Browser automation error: {0}")]
+    BrowserError(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
