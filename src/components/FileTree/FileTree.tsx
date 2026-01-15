@@ -1,8 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TreeNode, FileEntry } from '../../types';
 import './FileTree.css';
+
+interface DragDropPayload {
+  paths: string[];
+  position: { x: number; y: number };
+}
 
 interface FileTreeProps {
   onSelectionChange?: (selectedPaths: string[], selectedIds: number[]) => void;
@@ -144,34 +150,57 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
     });
   }, []);
 
+  // Recursively load all children for a folder
+  const loadAllChildrenRecursively = useCallback(async (nodeId: number): Promise<TreeNode[]> => {
+    const children = await loadChildren(nodeId);
+    const childrenWithSubChildren = await Promise.all(
+      children.map(async (child) => {
+        if (child.is_dir) {
+          const subChildren = await loadAllChildrenRecursively(child.id);
+          return { ...child, children: subChildren };
+        }
+        return child;
+      })
+    );
+    return childrenWithSubChildren;
+  }, [loadChildren]);
+
   // Toggle checkbox
-  const toggleCheck = useCallback((path: string, checked: boolean) => {
-    const updateNode = (nodes: TreeNode[]): TreeNode[] => {
-      return nodes.map(node => {
+  const toggleCheck = useCallback(async (path: string, checked: boolean) => {
+    // Helper to update a node and all its children
+    const updateAllChildren = (n: TreeNode, isChecked: boolean): TreeNode => ({
+      ...n,
+      checked: isChecked,
+      indeterminate: false,
+      children: n.children?.map(child => updateAllChildren(child, isChecked)),
+    });
+
+    // Update function that loads children if needed
+    const updateNode = async (nodes: TreeNode[]): Promise<TreeNode[]> => {
+      return Promise.all(nodes.map(async node => {
         if (node.path === path) {
-          // Update this node and all children
-          const updateAllChildren = (n: TreeNode): TreeNode => ({
-            ...n,
-            checked,
-            indeterminate: false,
-            children: n.children?.map(updateAllChildren),
-          });
-          return updateAllChildren(node);
+          // If it's a directory and we're checking it, load all children first
+          if (node.is_dir && checked && !node.children) {
+            const children = await loadAllChildrenRecursively(node.id);
+            return updateAllChildren({ ...node, children, expanded: true }, checked);
+          }
+          return updateAllChildren(node, checked);
         } else if (node.children) {
-          return { ...node, children: updateNode(node.children) };
+          return { ...node, children: await updateNode(node.children) };
         }
         return node;
-      });
+      }));
     };
 
-    const updatedTree = updateParentStates(updateNode(treeData));
+    const updatedNodes = await updateNode(treeData);
+    const updatedTree = updateParentStates(updatedNodes);
     setTreeData(updatedTree);
-    
+
     // Notify parent of selection change
     if (onSelectionChange) {
       onSelectionChange(collectSelectedPaths(updatedTree), collectSelectedIds(updatedTree));
     }
-  }, [treeData, updateParentStates, collectSelectedPaths, collectSelectedIds, onSelectionChange]);
+  }, [treeData, updateParentStates, collectSelectedPaths, collectSelectedIds, onSelectionChange, loadAllChildrenRecursively]);
 
   // Handle folder indexing
   const handleIndexFolder = useCallback(async (folderPath: string) => {
@@ -185,20 +214,40 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
     }
   }, [loadRootEntries]);
 
-  // Handle drag and drop
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    // Note: In a web/Tauri context, getting the actual folder path from drag-drop
-    // is limited. We'll just show a message to use the button instead.
-    alert('Please use the "Add Folder" button to select folders');
-  }, []);
-
+  // Handle drag and drop (React events - just for visual feedback)
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   };
+
+  // Listen to Tauri's native drag-drop events
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    const setupDragDrop = async () => {
+      unlisten = await listen<DragDropPayload>('tauri://drag-drop', async (event) => {
+        const paths = event.payload.paths;
+        if (paths && paths.length > 0) {
+          // Index all dropped paths (folders will be indexed, files will show the parent folder)
+          for (const path of paths) {
+            try {
+              await handleIndexFolder(path);
+            } catch (error) {
+              console.error(`Failed to index dropped path ${path}:`, error);
+            }
+          }
+        }
+      });
+    };
+
+    setupDragDrop();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [handleIndexFolder]);
 
   // Handle search with debouncing
   const handleSearch = useCallback((query: string) => {
@@ -274,7 +323,6 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
       <div
         ref={parentRef}
         className="file-tree-scroll"
-        onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
         {flatTree.length === 0 ? (

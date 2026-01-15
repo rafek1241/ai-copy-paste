@@ -57,7 +57,10 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
 
       setBuiltPrompt(response.prompt);
       setBuildResponse(response);
-      
+
+      // Copy to clipboard automatically
+      await navigator.clipboard.writeText(response.prompt);
+
       if (onPromptBuilt) {
         onPromptBuilt(response.prompt);
       }
@@ -185,7 +188,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           padding: "12px 24px",
           fontSize: "16px",
           fontWeight: "bold",
-          backgroundColor: isBuilding ? "#ccc" : "#007bff",
+          backgroundColor: isBuilding ? "#ccc" : "#28a745",
           color: "white",
           border: "none",
           borderRadius: "4px",
@@ -194,7 +197,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           marginBottom: "20px",
         }}
       >
-        {isBuilding ? "Building Prompt..." : "Build Prompt"}
+        {isBuilding ? "Building..." : "Build & Copy to Clipboard"}
       </button>
 
       {/* Error Display */}

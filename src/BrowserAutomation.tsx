@@ -57,7 +57,7 @@ function BrowserAutomation() {
   }
 
   return (
-    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
+    <div style={{ padding: "20px", margin: "0 auto", height: "100%", overflowY: "auto" }}>
       <h1>🤖 AI Context Collector - Browser Automation Test</h1>
       <p style={{ color: "#666", marginBottom: "30px" }}>
         Test Phase 6: Browser automation with Playwright

@@ -19,11 +19,9 @@ pub fn get_builtin_templates() -> Vec<PromptTemplate> {
 
 {{custom_instructions}}
 
-Here are the relevant files:
+---CONTEXT:
 
-{{files}}
-
-Please analyze the code and provide your insights."#.to_string(),
+{{files}}"#.to_string(),
         },
         PromptTemplate {
             id: "planning".to_string(),
@@ -39,7 +37,7 @@ Please review these files and provide:
 3. Potential improvements or concerns
 4. Implementation recommendations
 
-Files:
+---CONTEXT:
 
 {{files}}"#.to_string(),
         },
@@ -57,7 +55,7 @@ Please review the code and:
 3. Explain root causes
 4. Recommend best practices
 
-Code files:
+---CONTEXT:
 
 {{files}}"#.to_string(),
         },
@@ -76,7 +74,7 @@ Please provide:
 4. Performance considerations
 5. Maintainability suggestions
 
-Files to review:
+---CONTEXT:
 
 {{files}}"#.to_string(),
         },
@@ -94,7 +92,7 @@ Please generate comprehensive documentation including:
 3. Usage examples
 4. API documentation
 
-Source files:
+---CONTEXT:
 
 {{files}}"#.to_string(),
         },
@@ -112,7 +110,7 @@ Please generate:
 3. Integration test scenarios
 4. Test data examples
 
-Code to test:
+---CONTEXT:
 
 {{files}}"#.to_string(),
         },
@@ -137,21 +135,27 @@ pub fn build_prompt(
     let instructions = custom_instructions.unwrap_or("No additional instructions provided.");
     prompt = prompt.replace("{{custom_instructions}}", instructions);
 
-    // Build files section
+    // Build files section with markdown code blocks
     let files_section = if file_contents.is_empty() {
         "No files provided.".to_string()
     } else {
         file_contents
             .iter()
             .map(|(path, content)| {
+                // Detect file extension for syntax highlighting
+                let extension = std::path::Path::new(path)
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("txt");
                 format!(
-                    "--- {} ---\n{}\n",
-                    path,
-                    content
+                    "<{path}>\n```{extension}\n{content}\n```",
+                    path = path,
+                    extension = extension,
+                    content = content
                 )
             })
             .collect::<Vec<_>>()
-            .join("\n")
+            .join("\n\n")
     };
 
     prompt = prompt.replace("{{files}}", &files_section);
@@ -183,10 +187,12 @@ mod tests {
         let prompt = build_prompt("agent", Some("Fix bugs"), &file_contents).unwrap();
 
         assert!(prompt.contains("Fix bugs"));
-        assert!(prompt.contains("main.rs"));
+        assert!(prompt.contains("<main.rs>"));
+        assert!(prompt.contains("```rs"));
         assert!(prompt.contains("fn main()"));
-        assert!(prompt.contains("lib.rs"));
+        assert!(prompt.contains("<lib.rs>"));
         assert!(prompt.contains("pub fn foo()"));
+        assert!(prompt.contains("---CONTEXT:"));
     }
 
     #[test]

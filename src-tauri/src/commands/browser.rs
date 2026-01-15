@@ -73,10 +73,11 @@ pub async fn launch_browser(
 
     // Spawn the Node.js sidecar process
     // Note: We use spawn instead of output to avoid blocking
+    // Use Stdio::null() to prevent buffer fill-up which can terminate the child process
     let child = Command::new("node")
         .args(&args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
         .map_err(|e| {
             warn!("Failed to spawn sidecar process: {}", e);

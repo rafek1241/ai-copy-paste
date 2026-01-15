@@ -62,6 +62,7 @@ html,
   flex: 1;
   overflow: hidden;
   position: relative;
+  height: calc(100vh - 60px); /* Account for header height */
 }
 
 /* History Panel Styles */

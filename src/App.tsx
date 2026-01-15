@@ -68,11 +68,11 @@ function App() {
         ) : currentView === "settings" ? (
           <Settings />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", height: "100%" }}>
-            <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", height: "100%", overflow: "hidden" }}>
+            <div style={{ height: "100%", overflowY: "auto" }}>
               <FileTree onSelectionChange={handleSelectionChange} />
             </div>
-            <div style={{ overflowY: "auto" }}>
+            <div style={{ height: "100%", overflowY: "auto" }}>
               <PromptBuilder
                 selectedFileIds={selectedFileIds}
                 onPromptBuilt={(prompt) => {
