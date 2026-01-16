@@ -157,6 +157,9 @@ export const config: Options.Testrunner = {
 
   afterTest: async function (test, _context, { error }) {
     if (error) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const testName = test.title.replace(/[^a-zA-Z0-9]/g, "_");
+
       // Take screenshot on failure
       const screenshotDir = path.join(__dirname, "screenshots");
       if (!fs.existsSync(screenshotDir)) {
@@ -164,15 +167,36 @@ export const config: Options.Testrunner = {
       }
 
       try {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const screenshotPath = path.join(
           screenshotDir,
-          `${test.title.replace(/[^a-zA-Z0-9]/g, "_")}-${timestamp}.png`
+          `${testName}-${timestamp}.png`
         );
         await browser.saveScreenshot(screenshotPath);
         console.log(`Screenshot saved: ${screenshotPath}`);
       } catch (screenshotError) {
         console.error("Failed to take screenshot:", screenshotError);
+      }
+
+      // Capture page source for debugging
+      try {
+        const pageSource = await browser.getPageSource();
+        const logsDir = path.join(__dirname, "logs");
+        if (!fs.existsSync(logsDir)) {
+          fs.mkdirSync(logsDir, { recursive: true });
+        }
+        const sourcePath = path.join(
+          logsDir,
+          `${testName}-${timestamp}.html`
+        );
+        fs.writeFileSync(sourcePath, pageSource);
+        console.log(`Page source saved: ${sourcePath}`);
+
+        // Also log a snippet of the page source to console
+        console.log("=== Page Source Snippet ===");
+        console.log(pageSource.substring(0, 2000));
+        console.log("=== End Snippet ===");
+      } catch (sourceError) {
+        console.error("Failed to capture page source:", sourceError);
       }
     }
   },

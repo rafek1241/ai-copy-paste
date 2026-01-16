@@ -143,21 +143,57 @@ jobs:
       - name: Run E2E tests (Linux)
         if: runner.os == 'Linux'
         run: |
+          # Debug: Check binary exists
+          echo "=== Checking Tauri binary ==="
+          ls -la src-tauri/target/debug/ | head -20 || echo "Debug dir not found"
+          BINARY_PATH="src-tauri/target/debug/ai-context-collector"
+          if [ -f "$BINARY_PATH" ]; then
+            echo "Binary found: $BINARY_PATH"
+            file "$BINARY_PATH"
+          else
+            echo "ERROR: Binary not found at $BINARY_PATH"
+            find src-tauri/target -name "ai-context-collector*" -type f 2>/dev/null || echo "No binary found"
+            exit 1
+          fi
+
           # Start Xvfb
           export DISPLAY=:99
           Xvfb :99 -screen 0 1920x1080x24 &
+          XVFB_PID=$!
           sleep 3
 
-          # Start tauri-driver in background
+          # Verify Xvfb is running
+          if ! ps -p $XVFB_PID > /dev/null; then
+            echo "ERROR: Xvfb failed to start"
+            exit 1
+          fi
+          echo "Xvfb started with PID $XVFB_PID"
+
+          # Start tauri-driver with verbose logging
+          echo "=== Starting tauri-driver ==="
           tauri-driver &
           TAURI_DRIVER_PID=$!
-          sleep 2
+          sleep 3
 
-          # Run tests
-          npx wdio run e2e/wdio.conf.ts || E2E_EXIT_CODE=$?
+          # Verify tauri-driver is running
+          if ! ps -p $TAURI_DRIVER_PID > /dev/null; then
+            echo "ERROR: tauri-driver failed to start"
+            exit 1
+          fi
+          echo "tauri-driver started with PID $TAURI_DRIVER_PID"
+
+          # Check if tauri-driver is listening
+          sleep 2
+          curl -s http://localhost:4444/status || echo "tauri-driver status endpoint not responding (this may be normal)"
+
+          # Run tests with increased verbosity
+          echo "=== Running E2E tests ==="
+          npx wdio run e2e/wdio.conf.ts --logLevel=info || E2E_EXIT_CODE=$?
 
           # Cleanup
+          echo "=== Cleanup ==="
           kill $TAURI_DRIVER_PID 2>/dev/null || true
+          kill $XVFB_PID 2>/dev/null || true
 
           exit ${E2E_EXIT_CODE:-0}
         env:

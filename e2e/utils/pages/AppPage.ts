@@ -8,20 +8,54 @@ export class AppPage extends BasePage {
   /**
    * Wait for application to fully load
    */
-  async waitForLoad(): Promise<void> {
-    await this.waitForAppReady();
+  async waitForLoad(timeout: number = 60000): Promise<void> {
+    console.log("AppPage: Waiting for app to load...");
 
-    // Wait for the main container
+    // Wait for the base app to be ready
+    await this.waitForAppReady(timeout);
+
+    // Wait for either the app container or any meaningful content
     await browser.waitUntil(
       async () => {
-        const container = await $(FallbackSelectors.appContainer);
-        return container.isExisting();
+        try {
+          // Try data-testid first
+          const container = await $(Selectors.appContainer);
+          if (await container.isExisting()) {
+            console.log("AppPage: Found app container via data-testid");
+            return true;
+          }
+
+          // Try fallback class
+          const containerFallback = await $(FallbackSelectors.appContainer);
+          if (await containerFallback.isExisting()) {
+            console.log("AppPage: Found app container via fallback");
+            return true;
+          }
+
+          // Try looking for any div with content
+          const hasContent = await browser.execute(() => {
+            const root = document.getElementById("root");
+            return root !== null && root.innerHTML.length > 100;
+          });
+          if (hasContent) {
+            console.log("AppPage: Root has content");
+            return true;
+          }
+
+          return false;
+        } catch (e) {
+          console.log("AppPage: Error checking container:", e);
+          return false;
+        }
       },
       {
         timeout: 30000,
+        interval: 1000,
         timeoutMsg: "App container did not appear within 30 seconds",
       }
     );
+
+    console.log("AppPage: App loaded successfully");
   }
 
   /**

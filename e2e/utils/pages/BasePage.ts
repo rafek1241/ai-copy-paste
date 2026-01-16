@@ -4,18 +4,55 @@
 export class BasePage {
   /**
    * Wait for the application to be ready
+   * Checks for the root React element instead of title (more reliable in CI)
    */
-  async waitForAppReady(): Promise<void> {
+  async waitForAppReady(timeout: number = 60000): Promise<void> {
+    console.log("Waiting for application to be ready...");
+
+    // First wait for any content to load
     await browser.waitUntil(
       async () => {
-        const title = await browser.getTitle();
-        return title.length > 0;
+        try {
+          // Check if the #root element exists and has children
+          const rootExists = await browser.execute(() => {
+            const root = document.getElementById("root");
+            return root !== null && root.children.length > 0;
+          });
+          if (rootExists) {
+            console.log("Root element found with content");
+            return true;
+          }
+
+          // Fallback: check for any app-related element
+          const appContainer = await $('[data-testid="app-container"]');
+          if (await appContainer.isExisting()) {
+            console.log("App container found");
+            return true;
+          }
+
+          // Another fallback: check for main element
+          const mainEl = await $("main");
+          if (await mainEl.isExisting()) {
+            console.log("Main element found");
+            return true;
+          }
+
+          return false;
+        } catch (e) {
+          console.log("Error checking app readiness:", e);
+          return false;
+        }
       },
       {
-        timeout: 30000,
-        timeoutMsg: "Application did not load within 30 seconds",
+        timeout,
+        interval: 1000,
+        timeoutMsg: `Application did not load within ${timeout / 1000} seconds`,
       }
     );
+
+    // Give React a moment to fully hydrate
+    await browser.pause(500);
+    console.log("Application is ready");
   }
 
   /**
