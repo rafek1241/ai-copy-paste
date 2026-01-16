@@ -1,6 +1,6 @@
-import { BasePage } from "./BasePage";
-import { Selectors, FallbackSelectors } from "../selectors";
-import * as path from "path";
+import { BasePage } from "./BasePage.js";
+import { Selectors, FallbackSelectors } from "../selectors.js";
+import path from "node:path";
 
 /**
  * Page Object for File Tree component

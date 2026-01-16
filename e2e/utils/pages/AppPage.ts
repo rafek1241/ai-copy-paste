@@ -1,5 +1,5 @@
-import { BasePage } from "./BasePage";
-import { Selectors, FallbackSelectors } from "../selectors";
+import { BasePage } from "./BasePage.js";
+import { Selectors, FallbackSelectors } from "../selectors.js";
 
 /**
  * Page Object for main application navigation and header

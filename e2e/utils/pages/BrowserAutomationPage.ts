@@ -1,5 +1,5 @@
-import { BasePage } from "./BasePage";
-import { Selectors } from "../selectors";
+import { BasePage } from "./BasePage.js";
+import { Selectors } from "../selectors.js";
 
 /**
  * Page Object for Browser Automation component

@@ -1,6 +1,6 @@
-import { AppPage, FileTreePage } from "../utils/pages";
-import * as path from "path";
-import * as fs from "fs";
+import { AppPage, FileTreePage } from "../utils/pages/index.js";
+import path from "node:path";
+import fs from "node:fs";
 
 describe("File Tree", () => {
   const appPage = new AppPage();

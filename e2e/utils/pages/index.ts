@@ -1,7 +1,7 @@
-export { BasePage } from "./BasePage";
-export { AppPage } from "./AppPage";
-export { FileTreePage } from "./FileTreePage";
-export { PromptBuilderPage } from "./PromptBuilderPage";
-export { SettingsPage } from "./SettingsPage";
-export { HistoryPage } from "./HistoryPage";
-export { BrowserAutomationPage } from "./BrowserAutomationPage";
+export { BasePage } from "./BasePage.js";
+export { AppPage } from "./AppPage.js";
+export { FileTreePage } from "./FileTreePage.js";
+export { PromptBuilderPage } from "./PromptBuilderPage.js";
+export { SettingsPage } from "./SettingsPage.js";
+export { HistoryPage } from "./HistoryPage.js";
+export { BrowserAutomationPage } from "./BrowserAutomationPage.js";

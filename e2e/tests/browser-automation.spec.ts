@@ -1,4 +1,4 @@
-import { AppPage, BrowserAutomationPage } from "../utils/pages";
+import { AppPage, BrowserAutomationPage } from "../utils/pages/index.js";
 
 describe("Browser Automation", () => {
   const appPage = new AppPage();

@@ -1,4 +1,4 @@
-import { AppPage, HistoryPage } from "../utils/pages";
+import { AppPage, HistoryPage } from "../utils/pages/index.js";
 
 describe("History Panel", () => {
   const appPage = new AppPage();

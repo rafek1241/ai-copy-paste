@@ -1,4 +1,4 @@
-import { AppPage, SettingsPage } from "../utils/pages";
+import { AppPage, SettingsPage } from "../utils/pages/index.js";
 
 describe("Settings", () => {
   const appPage = new AppPage();

@@ -1,4 +1,4 @@
-import { AppPage } from "../utils/pages";
+import { AppPage } from "../utils/pages/index.js";
 
 describe("Application Launch", () => {
   const appPage = new AppPage();

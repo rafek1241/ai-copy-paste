@@ -1,6 +1,6 @@
-import { AppPage, FileTreePage, PromptBuilderPage } from "../utils/pages";
-import * as path from "path";
-import * as fs from "fs";
+import { AppPage, FileTreePage, PromptBuilderPage } from "../utils/pages/index.js";
+import path from "node:path";
+import fs from "node:fs";
 
 describe("Prompt Builder", () => {
   const appPage = new AppPage();

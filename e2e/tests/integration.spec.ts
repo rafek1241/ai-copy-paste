@@ -4,9 +4,9 @@ import {
   PromptBuilderPage,
   SettingsPage,
   HistoryPage,
-} from "../utils/pages";
-import * as path from "path";
-import * as fs from "fs";
+} from "../utils/pages/index.js";
+import path from "node:path";
+import fs from "node:fs";
 
 describe("End-to-End Integration Tests", () => {
   const appPage = new AppPage();
