@@ -1,7 +1,11 @@
 import type { Options } from "@wdio/types";
-import * as path from "path";
-import * as os from "os";
-import * as fs from "fs";
+import path from "node:path";
+import os from "node:os";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Determine the path to the Tauri application binary
 function getTauriAppPath(): string {
@@ -64,6 +68,7 @@ export const config: Options.Testrunner = {
     autoCompile: true,
     tsNodeOpts: {
       transpileOnly: true,
+      esm: true,
       project: path.join(__dirname, "tsconfig.json"),
     },
   },
