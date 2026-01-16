@@ -101,6 +101,16 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - name: Verify frontend build
+        run: |
+          echo "=== Checking frontend dist ==="
+          ls -la dist/ || echo "dist folder not found!"
+          if [ ! -f "dist/index.html" ]; then
+            echo "ERROR: dist/index.html not found"
+            exit 1
+          fi
+          echo "Frontend build verified"
+
       - name: Build Tauri app (Debug)
         run: |
           cd src-tauri
@@ -108,6 +118,22 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Verify Tauri build
+        run: |
+          echo "=== Checking Tauri build output ==="
+          ls -la src-tauri/target/debug/ | head -30
+          echo ""
+          echo "=== Looking for binaries ==="
+          find src-tauri/target/debug -maxdepth 1 -type f -executable 2>/dev/null | head -10
+          echo ""
+          # Check both possible binary names
+          for name in "ai-context-collector" "ai-copy-paste-temp"; do
+            if [ -f "src-tauri/target/debug/$name" ]; then
+              echo "Found binary: $name"
+              file "src-tauri/target/debug/$name"
+            fi
+          done
 
       - name: Create E2E test directories
         run: |
@@ -143,16 +169,24 @@ jobs:
       - name: Run E2E tests (Linux)
         if: runner.os == 'Linux'
         run: |
-          # Debug: Check binary exists
+          # Debug: Check binary exists (check both possible names)
           echo "=== Checking Tauri binary ==="
           ls -la src-tauri/target/debug/ | head -20 || echo "Debug dir not found"
-          BINARY_PATH="src-tauri/target/debug/ai-context-collector"
-          if [ -f "$BINARY_PATH" ]; then
-            echo "Binary found: $BINARY_PATH"
-            file "$BINARY_PATH"
-          else
-            echo "ERROR: Binary not found at $BINARY_PATH"
-            find src-tauri/target -name "ai-context-collector*" -type f 2>/dev/null || echo "No binary found"
+
+          BINARY_PATH=""
+          for name in "ai-context-collector" "ai-copy-paste-temp"; do
+            if [ -f "src-tauri/target/debug/$name" ]; then
+              BINARY_PATH="src-tauri/target/debug/$name"
+              echo "Binary found: $BINARY_PATH"
+              file "$BINARY_PATH"
+              break
+            fi
+          done
+
+          if [ -z "$BINARY_PATH" ]; then
+            echo "ERROR: No Tauri binary found"
+            echo "Looking for any executable in debug dir:"
+            find src-tauri/target/debug -maxdepth 1 -type f -executable 2>/dev/null
             exit 1
           fi
 
@@ -168,6 +202,19 @@ jobs:
             exit 1
           fi
           echo "Xvfb started with PID $XVFB_PID"
+
+          # Quick test: Try to launch app directly to see if it starts
+          echo "=== Quick app startup test ==="
+          timeout 10 "$BINARY_PATH" &
+          APP_TEST_PID=$!
+          sleep 5
+          if ps -p $APP_TEST_PID > /dev/null 2>&1; then
+            echo "App started successfully (PID: $APP_TEST_PID)"
+            kill $APP_TEST_PID 2>/dev/null || true
+          else
+            echo "WARNING: App may have crashed or exited quickly"
+          fi
+          sleep 1
 
           # Start tauri-driver with verbose logging
           echo "=== Starting tauri-driver ==="

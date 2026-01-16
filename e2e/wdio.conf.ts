@@ -7,42 +7,50 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Possible binary names (Cargo.toml name vs tauri.conf.json productName)
+const BINARY_NAMES = ["ai-context-collector", "ai-copy-paste-temp"];
+
 // Determine the path to the Tauri application binary
 function getTauriAppPath(): string {
   const platform = os.platform();
   const ext = platform === "win32" ? ".exe" : "";
+  const baseDir = path.join(__dirname, "..", "src-tauri", "target");
 
-  // Check for debug build first (faster for testing)
-  const debugPath = path.join(
-    __dirname,
-    "..",
-    "src-tauri",
-    "target",
-    "debug",
-    `ai-context-collector${ext}`
-  );
+  console.log("=== Searching for Tauri binary ===");
+  console.log(`Base directory: ${baseDir}`);
+  console.log(`Platform: ${platform}, Extension: ${ext || "(none)"}`);
 
-  // Check for release build
-  const releasePath = path.join(
-    __dirname,
-    "..",
-    "src-tauri",
-    "target",
-    "release",
-    `ai-context-collector${ext}`
-  );
+  // Check all combinations of binary names and build types
+  const buildTypes = ["debug", "release"];
 
-  // Return first existing path
-  for (const p of [debugPath, releasePath]) {
-    if (fs.existsSync(p)) {
-      console.log(`Found Tauri app at: ${p}`);
-      return p;
+  for (const buildType of buildTypes) {
+    for (const binaryName of BINARY_NAMES) {
+      const binaryPath = path.join(baseDir, buildType, `${binaryName}${ext}`);
+      console.log(`Checking: ${binaryPath}`);
+
+      if (fs.existsSync(binaryPath)) {
+        console.log(`Found Tauri app at: ${binaryPath}`);
+        return binaryPath;
+      }
     }
   }
 
-  // Default to debug path (will be built before tests)
-  console.log(`Tauri app not found, using default path: ${debugPath}`);
-  return debugPath;
+  // List what's actually in the debug directory for debugging
+  const debugDir = path.join(baseDir, "debug");
+  if (fs.existsSync(debugDir)) {
+    console.log(`Contents of ${debugDir}:`);
+    try {
+      const files = fs.readdirSync(debugDir).filter((f) => !f.startsWith("."));
+      console.log(files.slice(0, 20).join(", "));
+    } catch (e) {
+      console.log(`Error listing directory: ${e}`);
+    }
+  }
+
+  // Default to first binary name in debug (will be built before tests)
+  const defaultPath = path.join(baseDir, "debug", `${BINARY_NAMES[0]}${ext}`);
+  console.log(`Binary not found, using default path: ${defaultPath}`);
+  return defaultPath;
 }
 
 export const config: Options.Testrunner = {
