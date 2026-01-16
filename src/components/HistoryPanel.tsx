@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { ScrollArea } from './ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 interface HistoryEntry {
   id: number;
@@ -133,98 +137,109 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
   };
 
   if (loading && history.length === 0) {
-    return <div className="history-panel loading">Loading history...</div>;
+    return <div className="p-5 h-full">Loading history...</div>;
   }
 
   return (
-    <div className="history-panel">
-      <div className="history-header">
-        <h3>Session History</h3>
-        {history.length > 0 && (
-          <button onClick={handleClearAll} className="btn-clear-all">
-            Clear All
-          </button>
+    <ScrollArea className="h-full">
+      <div className="p-5 space-y-5">
+        <div className="flex justify-between items-center">
+          <h3 className="text-base font-semibold text-foreground">Session History</h3>
+          {history.length > 0 && (
+            <Button onClick={handleClearAll} variant="destructive" size="sm">
+              Clear All
+            </Button>
+          )}
+        </div>
+
+        {history.length === 0 ? (
+          <div className="text-center py-10 px-5 text-muted-foreground">
+            <p>No history entries yet</p>
+            <p className="text-[13px] mt-2">Your recent sessions will appear here</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {history.map((entry) => (
+              <Card key={entry.id}>
+                <div
+                  className="flex justify-between items-center p-3 cursor-pointer transition-colors hover:bg-accent"
+                  onClick={() => toggleExpanded(entry.id!)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg" title={getStatusText(entry.id!)}>
+                      {getStatusIcon(entry.id!)}
+                    </span>
+                    <div className="flex flex-col gap-1">
+                      <div className="text-[13px] text-foreground font-medium">{formatDate(entry.created_at)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {entry.selected_paths.length} file(s) • {entry.root_paths.length} root(s)
+                        {entry.template_id && ` • Template: ${entry.template_id}`}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-muted-foreground text-xs">{expandedEntries.has(entry.id!) ? '▼' : '▶'}</span>
+                </div>
+
+                {expandedEntries.has(entry.id!) && (
+                  <CardContent className="pt-0 pb-4 px-4 border-t border-border">
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <strong className="block mb-1.5 text-[13px] text-foreground">Root Paths:</strong>
+                        <ul className="list-none text-xs text-muted-foreground max-h-[200px] overflow-y-auto">
+                          {entry.root_paths.map((path, idx) => (
+                            <li key={idx} className="py-1 break-all">{path}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <strong className="block mb-1.5 text-[13px] text-foreground">
+                          Selected Files ({entry.selected_paths.length}):
+                        </strong>
+                        <ul className="list-none text-xs text-muted-foreground max-h-[200px] overflow-y-auto">
+                          {entry.selected_paths.slice(0, 10).map((path, idx) => {
+                            const isMissing = validationResults.get(entry.id!)?.missing_paths.includes(path);
+                            return (
+                              <li key={idx} className={cn("py-1 break-all", isMissing && "text-destructive")}>
+                                {path}
+                                {isMissing && <span className="italic"> (missing)</span>}
+                              </li>
+                            );
+                          })}
+                          {entry.selected_paths.length > 10 && (
+                            <li className="text-primary italic">
+                              ... and {entry.selected_paths.length - 10} more
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+
+                      {entry.custom_prompt && (
+                        <div>
+                          <strong className="block mb-1.5 text-[13px] text-foreground">Custom Prompt:</strong>
+                          <div className="text-[13px] text-muted-foreground p-2 bg-background rounded whitespace-pre-wrap break-words">
+                            {entry.custom_prompt}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 mt-3">
+                        <Button onClick={() => handleRestore(entry)} variant="default" size="sm">
+                          Restore Session
+                        </Button>
+                        <Button onClick={() => handleDelete(entry.id!)} variant="secondary" size="sm">
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
         )}
       </div>
-
-      {history.length === 0 ? (
-        <div className="history-empty">
-          <p>No history entries yet</p>
-          <p className="history-hint">Your recent sessions will appear here</p>
-        </div>
-      ) : (
-        <div className="history-list">
-          {history.map((entry) => (
-            <div key={entry.id} className="history-entry">
-              <div className="history-entry-header" onClick={() => toggleExpanded(entry.id!)}>
-                <div className="history-entry-info">
-                  <span className="history-status" title={getStatusText(entry.id!)}>
-                    {getStatusIcon(entry.id!)}
-                  </span>
-                  <div className="history-entry-details">
-                    <div className="history-entry-date">{formatDate(entry.created_at)}</div>
-                    <div className="history-entry-summary">
-                      {entry.selected_paths.length} file(s) • {entry.root_paths.length} root(s)
-                      {entry.template_id && ` • Template: ${entry.template_id}`}
-                    </div>
-                  </div>
-                </div>
-                <span className="expand-icon">{expandedEntries.has(entry.id!) ? '▼' : '▶'}</span>
-              </div>
-
-              {expandedEntries.has(entry.id!) && (
-                <div className="history-entry-content">
-                  <div className="history-section">
-                    <strong>Root Paths:</strong>
-                    <ul className="path-list">
-                      {entry.root_paths.map((path, idx) => (
-                        <li key={idx}>{path}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="history-section">
-                    <strong>Selected Files ({entry.selected_paths.length}):</strong>
-                    <ul className="path-list">
-                      {entry.selected_paths.slice(0, 10).map((path, idx) => {
-                        const isMissing = validationResults.get(entry.id!)?.missing_paths.includes(path);
-                        return (
-                          <li key={idx} className={isMissing ? 'missing-path' : ''}>
-                            {path}
-                            {isMissing && <span className="missing-indicator"> (missing)</span>}
-                          </li>
-                        );
-                      })}
-                      {entry.selected_paths.length > 10 && (
-                        <li className="more-items">
-                          ... and {entry.selected_paths.length - 10} more
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-
-                  {entry.custom_prompt && (
-                    <div className="history-section">
-                      <strong>Custom Prompt:</strong>
-                      <div className="custom-prompt">{entry.custom_prompt}</div>
-                    </div>
-                  )}
-
-                  <div className="history-actions">
-                    <button onClick={() => handleRestore(entry)} className="btn-restore">
-                      Restore Session
-                    </button>
-                    <button onClick={() => handleDelete(entry.id!)} className="btn-delete">
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    </ScrollArea>
   );
 };
 

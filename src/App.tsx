@@ -4,6 +4,8 @@ import { PromptBuilder } from "./components/PromptBuilder";
 import BrowserAutomation from "./BrowserAutomation";
 import HistoryPanel from "./components/HistoryPanel";
 import Settings from "./components/Settings";
+import { Button } from "./components/ui/button";
+import { ScrollArea } from "./components/ui/scroll-area";
 import "./App.css";
 
 type View = "main" | "browser" | "history" | "settings";
@@ -28,40 +30,51 @@ function App() {
     setCurrentView("main");
   };
 
-  const renderNavButton = (view: View, label: string) => (
-    <button
-      data-testid={`nav-${view}`}
-      onClick={() => setCurrentView(view)}
-      style={{
-        padding: "8px 16px",
-        fontSize: "14px",
-        backgroundColor: currentView === view ? "#0e639c" : "#3e3e42",
-        color: "white",
-        border: "none",
-        borderRadius: "4px",
-        cursor: "pointer",
-        marginRight: "8px",
-      }}
-    >
-      {label}
-    </button>
-  );
-
   return (
-    <div className="app-container" data-testid="app-container">
-      <header className="app-header" data-testid="app-header">
-        <h1 data-testid="app-title">AI Context Collector</h1>
-        <div className="selection-info" data-testid="selection-info">
-          {renderNavButton("main", "Main")}
-          {renderNavButton("browser", "Browser")}
-          {renderNavButton("history", "History")}
-          {renderNavButton("settings", "Settings")}
+    <div className="flex flex-col h-screen w-screen bg-background text-foreground overflow-hidden" data-testid="app-container">
+      <header className="sticky top-0 z-50 flex items-center justify-between px-5 py-3 bg-secondary border-b border-border" data-testid="app-header">
+        <h1 className="text-lg font-semibold text-foreground" data-testid="app-title">AI Context Collector</h1>
+        <div className="flex items-center gap-2" data-testid="selection-info">
+          <Button
+            variant={currentView === "main" ? "default" : "secondary"}
+            size="sm"
+            onClick={() => setCurrentView("main")}
+            data-testid="nav-main"
+          >
+            Main
+          </Button>
+          <Button
+            variant={currentView === "browser" ? "default" : "secondary"}
+            size="sm"
+            onClick={() => setCurrentView("browser")}
+            data-testid="nav-browser"
+          >
+            Browser
+          </Button>
+          <Button
+            variant={currentView === "history" ? "default" : "secondary"}
+            size="sm"
+            onClick={() => setCurrentView("history")}
+            data-testid="nav-history"
+          >
+            History
+          </Button>
+          <Button
+            variant={currentView === "settings" ? "default" : "secondary"}
+            size="sm"
+            onClick={() => setCurrentView("settings")}
+            data-testid="nav-settings"
+          >
+            Settings
+          </Button>
           {selectedPaths.length > 0 && currentView === "main" && (
-            <span data-testid="selected-files-count" style={{ marginLeft: "16px" }}>{selectedPaths.length} file(s) selected</span>
+            <span className="ml-4 text-sm text-muted-foreground" data-testid="selected-files-count">
+              {selectedPaths.length} file(s) selected
+            </span>
           )}
         </div>
       </header>
-      <main className="app-main">
+      <main className="flex-1 overflow-hidden">
         {currentView === "browser" ? (
           <BrowserAutomation />
         ) : currentView === "history" ? (
@@ -69,18 +82,18 @@ function App() {
         ) : currentView === "settings" ? (
           <Settings />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", height: "100%", overflow: "hidden" }}>
-            <div style={{ height: "100%", overflowY: "auto" }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 h-full overflow-hidden p-5">
+            <ScrollArea className="h-full">
               <FileTree onSelectionChange={handleSelectionChange} />
-            </div>
-            <div style={{ height: "100%", overflowY: "auto" }}>
+            </ScrollArea>
+            <ScrollArea className="h-full">
               <PromptBuilder
                 selectedFileIds={selectedFileIds}
                 onPromptBuilt={(prompt) => {
                   console.log("Built prompt:", prompt);
                 }}
               />
-            </div>
+            </ScrollArea>
           </div>
         )}
       </main>
