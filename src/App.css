@@ -1,17 +1,44 @@
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color: #f6f6f6;
-  background-color: #1e1e1e;
+@layer base {
+  :root {
+    --background: 220 13% 13%;
+    --foreground: 0 0% 83%;
+    --card: 220 13% 15%;
+    --card-foreground: 0 0% 83%;
+    --popover: 220 13% 15%;
+    --popover-foreground: 0 0% 83%;
+    --primary: 207 77% 33%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 13% 15%;
+    --secondary-foreground: 0 0% 83%;
+    --muted: 220 13% 24%;
+    --muted-foreground: 0 0% 52%;
+    --accent: 220 13% 24%;
+    --accent-foreground: 0 0% 83%;
+    --destructive: 0 68% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 25%;
+    --input: 240 6% 25%;
+    --ring: 207 77% 33%;
+    --radius: 0.5rem;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+    font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+
+    color: #f6f6f6;
+    background-color: #1e1e1e;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+  }
 }
 
 * {

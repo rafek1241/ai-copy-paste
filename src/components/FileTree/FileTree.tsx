@@ -3,7 +3,9 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TreeNode, FileEntry } from '../../types';
-import './FileTree.css';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { cn } from '@/lib/utils';
 
 interface DragDropPayload {
   paths: string[];
@@ -306,27 +308,27 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
   }, [loadRootEntries]);
 
   return (
-    <div className="file-tree-container">
-      <div className="file-tree-controls">
-        <input
+    <div className="flex flex-col h-full w-full bg-background text-foreground">
+      <div className="flex gap-2.5 p-2.5 bg-secondary border-b border-border">
+        <Input
           type="text"
           placeholder="Search files and folders..."
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
-          className="search-input"
+          className="flex-1"
         />
-        <button onClick={handleSelectFolder} className="add-folder-btn">
+        <Button onClick={handleSelectFolder}>
           Add Folder
-        </button>
+        </Button>
       </div>
 
       <div
         ref={parentRef}
-        className="file-tree-scroll"
+        className="flex-1 overflow-auto relative"
         onDragOver={handleDragOver}
       >
         {flatTree.length === 0 ? (
-          <div className="empty-state">
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-5 text-center">
             {isSearching ? 'Searching...' : 'No files indexed. Click "Add Folder" or drag and drop a folder to start.'}
           </div>
         ) : (
@@ -353,19 +355,22 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
                   }}
                 >
                   <div
-                    className="tree-node"
-                    style={{ paddingLeft: `${node.level * 20}px` }}
+                    className="flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none h-7 transition-colors hover:bg-accent"
+                    style={{ paddingLeft: `${node.level * 20 + 8}px` }}
                   >
                     {node.is_dir && (
                       <span
-                        className={`expand-icon ${node.expanded ? 'expanded' : ''}`}
+                        className={cn(
+                          "inline-block w-4 h-4 text-center cursor-pointer text-[10px] transition-transform text-foreground/75",
+                          node.expanded && "rotate-90"
+                        )}
                         onClick={() => toggleExpand(node.path)}
                       >
                         ▶
                       </span>
                     )}
-                    {!node.is_dir && <span className="expand-icon-placeholder" />}
-                    
+                    {!node.is_dir && <span className="inline-block w-4" />}
+
                     <input
                       type="checkbox"
                       checked={node.checked}
@@ -373,16 +378,16 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
                         if (el) el.indeterminate = node.indeterminate;
                       }}
                       onChange={(e) => toggleCheck(node.path, e.target.checked)}
-                      className="tree-checkbox"
+                      className="cursor-pointer w-4 h-4 m-0"
                     />
-                    
-                    <span className="tree-icon">{node.is_dir ? '📁' : '📄'}</span>
-                    <span className="tree-label" title={node.path}>
+
+                    <span className="text-base leading-4">{node.is_dir ? '📁' : '📄'}</span>
+                    <span className="flex-1 text-[13px] overflow-hidden text-ellipsis whitespace-nowrap" title={node.path}>
                       {node.name}
                     </span>
-                    
+
                     {!node.is_dir && node.size !== null && (
-                      <span className="tree-size">
+                      <span className="text-[11px] text-muted-foreground ml-auto pr-2">
                         {formatFileSize(node.size)}
                       </span>
                     )}
