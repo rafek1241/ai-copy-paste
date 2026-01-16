@@ -7,6 +7,9 @@ import {
 } from "../services/prompts";
 import { TokenCounter } from "./TokenCounter";
 import { ModelName } from "../services/tokenizer";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { ScrollArea } from "./ui/scroll-area";
 
 interface PromptBuilderProps {
   selectedFileIds: number[];
@@ -83,24 +86,18 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const selectedTemplateObj = templates.find((t) => t.id === selectedTemplate);
 
   return (
-    <div style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
-      <h2 style={{ marginBottom: "20px" }}>Prompt Builder</h2>
+    <div className="p-5 max-w-7xl mx-auto space-y-5">
+      <h2 className="text-xl font-semibold mb-5">Prompt Builder</h2>
 
       {/* Template Selection */}
-      <div style={{ marginBottom: "20px" }}>
-        <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+      <div className="space-y-2">
+        <label className="block font-semibold text-sm">
           Select Template:
         </label>
         <select
           value={selectedTemplate}
           onChange={(e) => setSelectedTemplate(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px",
-            fontSize: "14px",
-            borderRadius: "4px",
-            border: "1px solid #ddd",
-          }}
+          className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
         >
           {templates.map((template) => (
             <option key={template.id} value={template.id}>
@@ -109,32 +106,21 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           ))}
         </select>
         {selectedTemplateObj && (
-          <div style={{ 
-            marginTop: "8px", 
-            fontSize: "12px", 
-            color: "#666",
-            fontStyle: "italic"
-          }}>
+          <div className="mt-2 text-xs text-muted-foreground italic">
             {selectedTemplateObj.description}
           </div>
         )}
       </div>
 
       {/* Model Selection */}
-      <div style={{ marginBottom: "20px" }}>
-        <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+      <div className="space-y-2">
+        <label className="block font-semibold text-sm">
           Target AI Model:
         </label>
         <select
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value as ModelName)}
-          style={{
-            width: "100%",
-            padding: "10px",
-            fontSize: "14px",
-            borderRadius: "4px",
-            border: "1px solid #ddd",
-          }}
+          className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <option value="gpt-4o">GPT-4o (128K tokens)</option>
           <option value="gpt-4o-mini">GPT-4o Mini (128K tokens)</option>
@@ -149,122 +135,77 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       </div>
 
       {/* Custom Instructions */}
-      <div style={{ marginBottom: "20px" }}>
-        <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+      <div className="space-y-2">
+        <label className="block font-semibold text-sm">
           Custom Instructions (optional):
         </label>
         <textarea
           value={customInstructions}
           onChange={(e) => setCustomInstructions(e.target.value)}
           placeholder="Add any specific instructions or context..."
-          style={{
-            width: "100%",
-            minHeight: "100px",
-            padding: "10px",
-            fontSize: "14px",
-            borderRadius: "4px",
-            border: "1px solid #ddd",
-            fontFamily: "monospace",
-            resize: "vertical",
-          }}
+          className="w-full min-h-[100px] px-3 py-2 text-sm rounded-md border border-input bg-background font-mono resize-y focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
 
       {/* File Selection Info */}
-      <div style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f0f0f0", borderRadius: "4px" }}>
-        <strong>Selected Files:</strong> {selectedFileIds.length}
-        {buildResponse && (
-          <span style={{ marginLeft: "20px", color: "#666" }}>
-            ({buildResponse.file_count} files, {buildResponse.total_chars.toLocaleString()} characters)
-          </span>
-        )}
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <span className="font-semibold">Selected Files:</span> {selectedFileIds.length}
+          {buildResponse && (
+            <span className="ml-5 text-muted-foreground">
+              ({buildResponse.file_count} files, {buildResponse.total_chars.toLocaleString()} characters)
+            </span>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Build Button */}
-      <button
+      <Button
         onClick={handleBuildPrompt}
         disabled={isBuilding || selectedFileIds.length === 0}
-        style={{
-          padding: "12px 24px",
-          fontSize: "16px",
-          fontWeight: "bold",
-          backgroundColor: isBuilding ? "#ccc" : "#28a745",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: isBuilding ? "not-allowed" : "pointer",
-          width: "100%",
-          marginBottom: "20px",
-        }}
+        className="w-full"
+        size="lg"
       >
         {isBuilding ? "Building..." : "Build & Copy to Clipboard"}
-      </button>
+      </Button>
 
       {/* Error Display */}
       {error && (
-        <div
-          style={{
-            padding: "12px",
-            backgroundColor: "#ffebee",
-            color: "#c62828",
-            borderRadius: "4px",
-            marginBottom: "20px",
-          }}
-        >
+        <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm">
           {error}
         </div>
       )}
 
       {/* Token Counter */}
       {builtPrompt && (
-        <div style={{ marginBottom: "20px" }}>
+        <div>
           <TokenCounter text={builtPrompt} modelName={selectedModel} />
         </div>
       )}
 
       {/* Prompt Preview */}
       {builtPrompt && (
-        <div style={{ marginBottom: "20px" }}>
-          <div style={{ 
-            display: "flex", 
-            justifyContent: "space-between", 
-            alignItems: "center",
-            marginBottom: "10px"
-          }}>
-            <h3 style={{ margin: 0 }}>Prompt Preview:</h3>
-            <button
-              onClick={handleCopyToClipboard}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#28a745",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: "bold",
-              }}
-            >
-              📋 Copy to Clipboard
-            </button>
-          </div>
-          <div
-            style={{
-              padding: "16px",
-              backgroundColor: "#f8f9fa",
-              border: "1px solid #ddd",
-              borderRadius: "4px",
-              maxHeight: "500px",
-              overflowY: "auto",
-              fontFamily: "monospace",
-              fontSize: "13px",
-              whiteSpace: "pre-wrap",
-              lineHeight: "1.5",
-            }}
-          >
-            {builtPrompt}
-          </div>
-        </div>
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle>Prompt Preview</CardTitle>
+              <Button
+                onClick={handleCopyToClipboard}
+                variant="default"
+                size="sm"
+              >
+                📋 Copy to Clipboard
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[500px] w-full rounded-md border p-4">
+              <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                {builtPrompt}
+              </pre>
+            </ScrollArea>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
