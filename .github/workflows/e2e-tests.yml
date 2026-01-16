@@ -91,23 +91,11 @@ jobs:
           echo "Windows ready"
 
       - name: Install npm dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
-      - name: Install E2E test dependencies
+      - name: Install tauri-driver (cargo)
         run: |
-          npm install --save-dev \
-            @wdio/cli@^8 \
-            @wdio/local-runner@^8 \
-            @wdio/mocha-framework@^8 \
-            @wdio/spec-reporter@^8 \
-            @wdio/junit-reporter@^8 \
-            tauri-driver@^2 \
-            ts-node@^10 \
-            typescript@^5
-
-      - name: Install tauri-driver
-        run: |
-          cargo install tauri-driver || true
+          cargo install tauri-driver || echo "tauri-driver may already be installed"
 
       - name: Build TypeScript
         run: npm run build

@@ -6,8 +6,6 @@ import * as fs from "fs";
 // Determine the path to the Tauri application binary
 function getTauriAppPath(): string {
   const platform = os.platform();
-  const arch = os.arch();
-  const targetTriple = getTargetTriple(platform, arch);
   const ext = platform === "win32" ? ".exe" : "";
 
   // Check for debug build first (faster for testing)
@@ -17,7 +15,7 @@ function getTauriAppPath(): string {
     "src-tauri",
     "target",
     "debug",
-    `ai-copy-paste-temp${ext}`
+    `ai-context-collector${ext}`
   );
 
   // Check for release build
@@ -27,32 +25,11 @@ function getTauriAppPath(): string {
     "src-tauri",
     "target",
     "release",
-    `ai-copy-paste-temp${ext}`
-  );
-
-  // Check cross-compiled paths
-  const debugTriplePath = path.join(
-    __dirname,
-    "..",
-    "src-tauri",
-    "target",
-    targetTriple,
-    "debug",
-    `ai-copy-paste-temp${ext}`
-  );
-
-  const releaseTriplePath = path.join(
-    __dirname,
-    "..",
-    "src-tauri",
-    "target",
-    targetTriple,
-    "release",
-    `ai-copy-paste-temp${ext}`
+    `ai-context-collector${ext}`
   );
 
   // Return first existing path
-  for (const p of [debugPath, releasePath, debugTriplePath, releaseTriplePath]) {
+  for (const p of [debugPath, releasePath]) {
     if (fs.existsSync(p)) {
       console.log(`Found Tauri app at: ${p}`);
       return p;
@@ -64,30 +41,17 @@ function getTauriAppPath(): string {
   return debugPath;
 }
 
-function getTargetTriple(platform: string, arch: string): string {
-  const archMap: Record<string, string> = {
-    x64: "x86_64",
-    arm64: "aarch64",
-  };
-  const osMap: Record<string, string> = {
-    darwin: "apple-darwin",
-    linux: "unknown-linux-gnu",
-    win32: "pc-windows-msvc",
-  };
-
-  return `${archMap[arch] || arch}-${osMap[platform] || platform}`;
-}
-
 export const config: Options.Testrunner = {
   // Specify test files
   specs: ["./tests/**/*.spec.ts"],
   exclude: [],
 
-  // Capabilities
+  // Capabilities - connect to tauri-driver running on port 4444
   maxInstances: 1,
   capabilities: [
     {
       maxInstances: 1,
+      browserName: "wry",
       "tauri:options": {
         application: getTauriAppPath(),
       },
@@ -103,6 +67,11 @@ export const config: Options.Testrunner = {
       project: path.join(__dirname, "tsconfig.json"),
     },
   },
+
+  // Connect to tauri-driver (WebDriver server on port 4444)
+  hostname: "localhost",
+  port: 4444,
+  path: "/",
 
   // Framework
   framework: "mocha",
@@ -135,8 +104,8 @@ export const config: Options.Testrunner = {
   connectionRetryTimeout: 120000,
   connectionRetryCount: 3,
 
-  // Services - use tauri-driver
-  services: ["tauri"],
+  // No services needed - tauri-driver is started externally
+  services: [],
 
   // Hooks
   beforeSession: async function () {
