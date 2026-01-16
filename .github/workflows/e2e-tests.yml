@@ -1,0 +1,279 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [master, main]
+    types: [opened, synchronize, ready_for_review]
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      skip_build_cache:
+        description: 'Skip build cache'
+        required: false
+        default: 'false'
+        type: boolean
+
+# Cancel in-progress runs for same PR
+concurrency:
+  group: e2e-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  e2e-tests:
+    name: E2E Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    # Only run on non-draft PRs or on pushes
+    if: github.event.pull_request.draft == false || github.event_name != 'pull_request'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04]
+        # For cross-platform E2E tests, uncomment the following:
+        # os: [ubuntu-22.04, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: e2e-${{ matrix.os }}
+
+      # Linux dependencies
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            javascriptcoregtk-4.1 \
+            xvfb \
+            x11-utils \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev
+
+      # macOS dependencies (if needed)
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          # Most dependencies come with Xcode
+          echo "macOS ready"
+
+      # Windows dependencies (if needed)
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        run: |
+          # Most dependencies come with Visual Studio Build Tools
+          echo "Windows ready"
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install E2E test dependencies
+        run: |
+          npm install --save-dev \
+            @wdio/cli@^8 \
+            @wdio/local-runner@^8 \
+            @wdio/mocha-framework@^8 \
+            @wdio/spec-reporter@^8 \
+            @wdio/junit-reporter@^8 \
+            tauri-driver@^2 \
+            ts-node@^10 \
+            typescript@^5
+
+      - name: Install tauri-driver
+        run: |
+          cargo install tauri-driver || true
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Build Tauri app (Debug)
+        run: |
+          cd src-tauri
+          cargo build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Create E2E test directories
+        run: |
+          mkdir -p e2e/reports
+          mkdir -p e2e/logs
+          mkdir -p e2e/screenshots
+          mkdir -p e2e/fixtures/test-data
+
+      - name: Create test fixtures
+        run: |
+          cat > e2e/fixtures/test-data/sample.ts << 'EOF'
+          export const hello = "world";
+          export const add = (a: number, b: number) => a + b;
+          EOF
+
+          cat > e2e/fixtures/test-data/sample.js << 'EOF'
+          const x = 42;
+          console.log(x);
+          module.exports = { x };
+          EOF
+
+          cat > e2e/fixtures/test-data/sample.md << 'EOF'
+          # Hello
+
+          This is a test file for E2E testing.
+          EOF
+
+          cat > e2e/fixtures/test-data/sample.json << 'EOF'
+          {"key": "value", "number": 123}
+          EOF
+
+      # Run E2E tests with Xvfb on Linux
+      - name: Run E2E tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # Start Xvfb
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 3
+
+          # Start tauri-driver in background
+          tauri-driver &
+          TAURI_DRIVER_PID=$!
+          sleep 2
+
+          # Run tests
+          npx wdio run e2e/wdio.conf.ts || E2E_EXIT_CODE=$?
+
+          # Cleanup
+          kill $TAURI_DRIVER_PID 2>/dev/null || true
+
+          exit ${E2E_EXIT_CODE:-0}
+        env:
+          CI: true
+          WEBKIT_DISABLE_COMPOSITING_MODE: 1
+
+      # Run E2E tests on Windows
+      - name: Run E2E tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Start tauri-driver in background
+          Start-Process -NoNewWindow tauri-driver
+          Start-Sleep -Seconds 2
+
+          # Run tests
+          npx wdio run e2e/wdio.conf.ts
+        env:
+          CI: true
+
+      # Run E2E tests on macOS
+      - name: Run E2E tests (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # Start tauri-driver in background
+          tauri-driver &
+          TAURI_DRIVER_PID=$!
+          sleep 2
+
+          # Run tests
+          npx wdio run e2e/wdio.conf.ts || E2E_EXIT_CODE=$?
+
+          # Cleanup
+          kill $TAURI_DRIVER_PID 2>/dev/null || true
+
+          exit ${E2E_EXIT_CODE:-0}
+        env:
+          CI: true
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results-${{ matrix.os }}
+          path: |
+            e2e/reports/
+            e2e/logs/
+            e2e/screenshots/
+          retention-days: 14
+
+      - name: Upload E2E screenshots on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-screenshots-${{ matrix.os }}
+          path: e2e/screenshots/
+          retention-days: 14
+
+  e2e-report:
+    name: E2E Test Report
+    needs: e2e-tests
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate summary
+        run: |
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check for test results
+          if [ -d "artifacts" ]; then
+            for dir in artifacts/e2e-results-*; do
+              if [ -d "$dir" ]; then
+                os=$(basename "$dir" | sed 's/e2e-results-//')
+                echo "### $os" >> $GITHUB_STEP_SUMMARY
+
+                # Check for JUnit results
+                if [ -f "$dir/reports/e2e-results-0.xml" ]; then
+                  # Extract test counts from JUnit XML
+                  tests=$(grep -oP 'tests="\K[0-9]+' "$dir/reports/e2e-results-0.xml" | head -1 || echo "0")
+                  failures=$(grep -oP 'failures="\K[0-9]+' "$dir/reports/e2e-results-0.xml" | head -1 || echo "0")
+                  echo "- Tests: $tests" >> $GITHUB_STEP_SUMMARY
+                  echo "- Failures: $failures" >> $GITHUB_STEP_SUMMARY
+                else
+                  echo "- Results file not found" >> $GITHUB_STEP_SUMMARY
+                fi
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+          else
+            echo "No artifacts found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for screenshots
+        run: |
+          if [ -d "artifacts" ]; then
+            screenshot_count=$(find artifacts -name "*.png" | wc -l)
+            if [ "$screenshot_count" -gt 0 ]; then
+              echo "### Screenshots" >> $GITHUB_STEP_SUMMARY
+              echo "Found $screenshot_count screenshot(s) from failed tests" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi

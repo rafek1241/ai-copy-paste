@@ -30,6 +30,7 @@ function App() {
 
   const renderNavButton = (view: View, label: string) => (
     <button
+      data-testid={`nav-${view}`}
       onClick={() => setCurrentView(view)}
       style={{
         padding: "8px 16px",
@@ -47,16 +48,16 @@ function App() {
   );
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>AI Context Collector</h1>
-        <div className="selection-info">
+    <div className="app-container" data-testid="app-container">
+      <header className="app-header" data-testid="app-header">
+        <h1 data-testid="app-title">AI Context Collector</h1>
+        <div className="selection-info" data-testid="selection-info">
           {renderNavButton("main", "Main")}
           {renderNavButton("browser", "Browser")}
           {renderNavButton("history", "History")}
           {renderNavButton("settings", "Settings")}
           {selectedPaths.length > 0 && currentView === "main" && (
-            <span style={{ marginLeft: "16px" }}>{selectedPaths.length} file(s) selected</span>
+            <span data-testid="selected-files-count" style={{ marginLeft: "16px" }}>{selectedPaths.length} file(s) selected</span>
           )}
         </div>
       </header>

@@ -83,8 +83,8 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const selectedTemplateObj = templates.find((t) => t.id === selectedTemplate);
 
   return (
-    <div style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
-      <h2 style={{ marginBottom: "20px" }}>Prompt Builder</h2>
+    <div style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }} data-testid="prompt-builder">
+      <h2 style={{ marginBottom: "20px" }} data-testid="prompt-builder-title">Prompt Builder</h2>
 
       {/* Template Selection */}
       <div style={{ marginBottom: "20px" }}>
@@ -94,6 +94,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
         <select
           value={selectedTemplate}
           onChange={(e) => setSelectedTemplate(e.target.value)}
+          data-testid="template-select"
           style={{
             width: "100%",
             padding: "10px",
@@ -109,12 +110,12 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           ))}
         </select>
         {selectedTemplateObj && (
-          <div style={{ 
-            marginTop: "8px", 
-            fontSize: "12px", 
+          <div style={{
+            marginTop: "8px",
+            fontSize: "12px",
             color: "#666",
             fontStyle: "italic"
-          }}>
+          }} data-testid="template-description">
             {selectedTemplateObj.description}
           </div>
         )}
@@ -128,6 +129,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
         <select
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value as ModelName)}
+          data-testid="model-select"
           style={{
             width: "100%",
             padding: "10px",
@@ -157,6 +159,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           value={customInstructions}
           onChange={(e) => setCustomInstructions(e.target.value)}
           placeholder="Add any specific instructions or context..."
+          data-testid="custom-instructions"
           style={{
             width: "100%",
             minHeight: "100px",
@@ -171,10 +174,10 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       </div>
 
       {/* File Selection Info */}
-      <div style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f0f0f0", borderRadius: "4px" }}>
+      <div style={{ marginBottom: "20px", padding: "12px", backgroundColor: "#f0f0f0", borderRadius: "4px" }} data-testid="selected-files-info">
         <strong>Selected Files:</strong> {selectedFileIds.length}
         {buildResponse && (
-          <span style={{ marginLeft: "20px", color: "#666" }}>
+          <span style={{ marginLeft: "20px", color: "#666" }} data-testid="build-response-info">
             ({buildResponse.file_count} files, {buildResponse.total_chars.toLocaleString()} characters)
           </span>
         )}
@@ -184,6 +187,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       <button
         onClick={handleBuildPrompt}
         disabled={isBuilding || selectedFileIds.length === 0}
+        data-testid="build-prompt-btn"
         style={{
           padding: "12px 24px",
           fontSize: "16px",
@@ -203,6 +207,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       {/* Error Display */}
       {error && (
         <div
+          data-testid="error-display"
           style={{
             padding: "12px",
             backgroundColor: "#ffebee",
@@ -217,23 +222,24 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
 
       {/* Token Counter */}
       {builtPrompt && (
-        <div style={{ marginBottom: "20px" }}>
+        <div style={{ marginBottom: "20px" }} data-testid="token-counter-wrapper">
           <TokenCounter text={builtPrompt} modelName={selectedModel} />
         </div>
       )}
 
       {/* Prompt Preview */}
       {builtPrompt && (
-        <div style={{ marginBottom: "20px" }}>
-          <div style={{ 
-            display: "flex", 
-            justifyContent: "space-between", 
+        <div style={{ marginBottom: "20px" }} data-testid="prompt-preview-section">
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
             marginBottom: "10px"
           }}>
             <h3 style={{ margin: 0 }}>Prompt Preview:</h3>
             <button
               onClick={handleCopyToClipboard}
+              data-testid="copy-clipboard-btn"
               style={{
                 padding: "8px 16px",
                 backgroundColor: "#28a745",
@@ -245,10 +251,11 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
                 fontWeight: "bold",
               }}
             >
-              📋 Copy to Clipboard
+              Copy to Clipboard
             </button>
           </div>
           <div
+            data-testid="prompt-preview"
             style={{
               padding: "16px",
               backgroundColor: "#f8f9fa",

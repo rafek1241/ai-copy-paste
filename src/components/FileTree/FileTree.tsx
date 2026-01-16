@@ -306,16 +306,17 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
   }, [loadRootEntries]);
 
   return (
-    <div className="file-tree-container">
-      <div className="file-tree-controls">
+    <div className="file-tree-container" data-testid="file-tree-container">
+      <div className="file-tree-controls" data-testid="file-tree-controls">
         <input
           type="text"
           placeholder="Search files and folders..."
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
           className="search-input"
+          data-testid="file-tree-search"
         />
-        <button onClick={handleSelectFolder} className="add-folder-btn">
+        <button onClick={handleSelectFolder} className="add-folder-btn" data-testid="add-folder-btn">
           Add Folder
         </button>
       </div>
@@ -323,10 +324,11 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
       <div
         ref={parentRef}
         className="file-tree-scroll"
+        data-testid="file-tree-scroll"
         onDragOver={handleDragOver}
       >
         {flatTree.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state" data-testid="empty-state">
             {isSearching ? 'Searching...' : 'No files indexed. Click "Add Folder" or drag and drop a folder to start.'}
           </div>
         ) : (
@@ -354,18 +356,21 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
                 >
                   <div
                     className="tree-node"
+                    data-testid="tree-node"
+                    data-path={node.path}
                     style={{ paddingLeft: `${node.level * 20}px` }}
                   >
                     {node.is_dir && (
                       <span
                         className={`expand-icon ${node.expanded ? 'expanded' : ''}`}
+                        data-testid="expand-icon"
                         onClick={() => toggleExpand(node.path)}
                       >
                         ▶
                       </span>
                     )}
                     {!node.is_dir && <span className="expand-icon-placeholder" />}
-                    
+
                     <input
                       type="checkbox"
                       checked={node.checked}
@@ -374,15 +379,16 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
                       }}
                       onChange={(e) => toggleCheck(node.path, e.target.checked)}
                       className="tree-checkbox"
+                      data-testid="tree-checkbox"
                     />
-                    
-                    <span className="tree-icon">{node.is_dir ? '📁' : '📄'}</span>
-                    <span className="tree-label" title={node.path}>
+
+                    <span className="tree-icon" data-testid="tree-icon">{node.is_dir ? '📁' : '📄'}</span>
+                    <span className="tree-label" data-testid="tree-label" title={node.path}>
                       {node.name}
                     </span>
-                    
+
                     {!node.is_dir && node.size !== null && (
-                      <span className="tree-size">
+                      <span className="tree-size" data-testid="tree-size">
                         {formatFileSize(node.size)}
                       </span>
                     )}
