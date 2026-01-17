@@ -21,7 +21,8 @@ function getTauriAppPath(): string {
   console.log(`Platform: ${platform}, Extension: ${ext || "(none)"}`);
 
   // Check all combinations of binary names and build types
-  const buildTypes = ["debug", "release"];
+  // Prioritize release (has embedded frontend) over debug (needs devUrl)
+  const buildTypes = ["release", "debug"];
 
   for (const buildType of buildTypes) {
     for (const binaryName of BINARY_NAMES) {
@@ -47,8 +48,8 @@ function getTauriAppPath(): string {
     }
   }
 
-  // Default to first binary name in debug (will be built before tests)
-  const defaultPath = path.join(baseDir, "debug", `${BINARY_NAMES[0]}${ext}`);
+  // Default to first binary name in release (will be built before tests)
+  const defaultPath = path.join(baseDir, "release", `${BINARY_NAMES[0]}${ext}`);
   console.log(`Binary not found, using default path: ${defaultPath}`);
   return defaultPath;
 }

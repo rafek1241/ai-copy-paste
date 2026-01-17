@@ -111,10 +111,12 @@ jobs:
           fi
           echo "Frontend build verified"
 
-      - name: Build Tauri app (Debug)
+      - name: Build Tauri app (Release)
         run: |
-          # Use Tauri CLI to properly embed frontend (not just cargo build)
-          npx tauri build --debug --no-bundle
+          # Use release build to properly embed frontend
+          # Debug builds connect to devUrl, release builds use frontendDist
+          cd src-tauri
+          cargo build --release
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
@@ -122,20 +124,20 @@ jobs:
       - name: Verify Tauri build
         run: |
           echo "=== Checking Tauri build output ==="
-          ls -la src-tauri/target/debug/ | head -30
+          ls -la src-tauri/target/release/ | head -30
           echo ""
           echo "=== Looking for binaries ==="
-          find src-tauri/target/debug -maxdepth 1 -type f -executable 2>/dev/null | head -10
+          find src-tauri/target/release -maxdepth 1 -type f -executable 2>/dev/null | head -10
           echo ""
           # Check both possible binary names
           for name in "ai-context-collector" "ai-copy-paste-temp"; do
-            if [ -f "src-tauri/target/debug/$name" ]; then
+            if [ -f "src-tauri/target/release/$name" ]; then
               echo "Found binary: $name"
-              file "src-tauri/target/debug/$name"
+              file "src-tauri/target/release/$name"
             fi
           done
           echo ""
-          # Verify the dist folder is in place (Tauri CLI should have run beforeBuildCommand)
+          # Verify the dist folder is in place
           echo "=== Verifying dist folder ==="
           ls -la dist/ | head -10
 
@@ -173,14 +175,14 @@ jobs:
       - name: Run E2E tests (Linux)
         if: runner.os == 'Linux'
         run: |
-          # Debug: Check binary exists (check both possible names)
+          # Check binary exists in release directory (check both possible names)
           echo "=== Checking Tauri binary ==="
-          ls -la src-tauri/target/debug/ | head -20 || echo "Debug dir not found"
+          ls -la src-tauri/target/release/ | head -20 || echo "Release dir not found"
 
           BINARY_PATH=""
           for name in "ai-context-collector" "ai-copy-paste-temp"; do
-            if [ -f "src-tauri/target/debug/$name" ]; then
-              BINARY_PATH="src-tauri/target/debug/$name"
+            if [ -f "src-tauri/target/release/$name" ]; then
+              BINARY_PATH="src-tauri/target/release/$name"
               echo "Binary found: $BINARY_PATH"
               file "$BINARY_PATH"
               break
@@ -189,8 +191,8 @@ jobs:
 
           if [ -z "$BINARY_PATH" ]; then
             echo "ERROR: No Tauri binary found"
-            echo "Looking for any executable in debug dir:"
-            find src-tauri/target/debug -maxdepth 1 -type f -executable 2>/dev/null
+            echo "Looking for any executable in release dir:"
+            find src-tauri/target/release -maxdepth 1 -type f -executable 2>/dev/null
             exit 1
           fi
 
