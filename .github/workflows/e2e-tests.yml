@@ -113,8 +113,8 @@ jobs:
 
       - name: Build Tauri app (Debug)
         run: |
-          cd src-tauri
-          cargo build
+          # Use Tauri CLI to properly embed frontend (not just cargo build)
+          npx tauri build --debug --no-bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
@@ -134,6 +134,10 @@ jobs:
               file "src-tauri/target/debug/$name"
             fi
           done
+          echo ""
+          # Verify the dist folder is in place (Tauri CLI should have run beforeBuildCommand)
+          echo "=== Verifying dist folder ==="
+          ls -la dist/ | head -10
 
       - name: Create E2E test directories
         run: |
