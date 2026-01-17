@@ -233,8 +233,12 @@ jobs:
           sleep 2
           curl -s http://localhost:4444/status || echo "tauri-driver status endpoint not responding (this may be normal)"
 
-          # Run tests with increased verbosity
-          echo "=== Running E2E tests ==="
+          # First run diagnostic test to understand app state
+          echo "=== Running DIAGNOSTIC test first ==="
+          npx wdio run e2e/wdio.conf.ts --spec e2e/tests/diagnostic.spec.ts --logLevel=info 2>&1 || echo "Diagnostic test completed (may have errors)"
+
+          # Now run all E2E tests
+          echo "=== Running ALL E2E tests ==="
           npx wdio run e2e/wdio.conf.ts --logLevel=info || E2E_EXIT_CODE=$?
 
           # Cleanup
