@@ -46,6 +46,7 @@ pub fn run() {
             commands::indexing::index_folder,
             commands::indexing::get_children,
             commands::indexing::search_path,
+            commands::indexing::clear_index,
             commands::browser::launch_browser,
             commands::browser::get_available_interfaces,
             commands::extraction::extract_text,

@@ -17,3 +17,10 @@ export interface TreeNode extends FileEntry {
   children?: TreeNode[];
   hasChildren?: boolean;
 }
+
+export interface IndexProgress {
+  processed: number;
+  total_estimate: number;
+  current_path: string;
+  errors: number;
+}

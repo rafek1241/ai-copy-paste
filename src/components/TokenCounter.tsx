@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   countTokens,
   formatTokenCount,
@@ -39,65 +40,44 @@ export const TokenCounter: React.FC<TokenCounterProps> = ({
   const color = getTokenLimitColor(percentage);
 
   return (
-    <div style={{ 
-      padding: "12px", 
-      border: "1px solid #ddd", 
-      borderRadius: "8px",
-      backgroundColor: "#f9f9f9"
-    }}>
-      <div style={{ 
-        display: "flex", 
-        justifyContent: "space-between", 
-        alignItems: "center",
-        marginBottom: "8px"
-      }}>
-        <span style={{ fontWeight: "bold", fontSize: "14px" }}>
+    <div className="p-3 border rounded-lg bg-card">
+      <div className="flex justify-between items-center mb-2">
+        <span className="font-bold text-sm">
           Token Count:
         </span>
-        <span style={{ 
-          fontSize: "20px", 
-          fontWeight: "bold",
-          color: showLimit ? color : "#333"
-        }}>
+        <span className={cn(
+          "text-xl font-bold",
+          !showLimit && "text-foreground",
+          showLimit && color === "#ef4444" && "text-red-500",
+          showLimit && color === "#eab308" && "text-yellow-500", 
+          showLimit && color === "#22c55e" && "text-green-500"
+        )}>
           {isCalculating ? "..." : formatTokenCount(tokenCount)}
         </span>
       </div>
 
       {showLimit && limit > 0 && (
         <>
-          <div style={{ fontSize: "12px", color: "#666", marginBottom: "4px" }}>
+          <div className="text-xs text-muted-foreground mb-1">
             Limit: {formatTokenCount(limit)} ({modelName})
           </div>
-          <div style={{ 
-            width: "100%", 
-            height: "8px", 
-            backgroundColor: "#e0e0e0",
-            borderRadius: "4px",
-            overflow: "hidden"
-          }}>
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
             <div
-              style={{
-                width: `${Math.min(percentage, 100)}%`,
-                height: "100%",
-                backgroundColor: color,
-                transition: "all 0.3s ease",
-              }}
+              className={cn(
+                "h-full transition-all duration-300 ease-in-out",
+                percentage >= 90 ? "bg-red-500" :
+                percentage >= 70 ? "bg-yellow-500" : 
+                "bg-green-500"
+              )}
+              style={{ width: `${Math.min(percentage, 100)}%` }}
             />
           </div>
-          <div style={{ fontSize: "11px", color: "#888", marginTop: "4px", textAlign: "right" }}>
+          <div className="text-xs text-muted-foreground mt-1 text-right">
             {percentage.toFixed(1)}% used
           </div>
           
           {percentage >= 90 && (
-            <div style={{ 
-              marginTop: "8px",
-              padding: "6px",
-              backgroundColor: "#ffebee",
-              color: "#c62828",
-              borderRadius: "4px",
-              fontSize: "12px",
-              fontWeight: "500"
-            }}>
+            <div className="mt-2 p-1.5 bg-destructive/10 text-destructive rounded text-xs font-medium">
               ⚠️ Warning: Approaching token limit
             </div>
           )}
