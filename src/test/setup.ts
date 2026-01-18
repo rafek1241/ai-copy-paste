@@ -34,6 +34,10 @@ beforeEach(() => {
   mockInvoke.mockClear();
   mockListen.mockClear();
   mockEmit.mockClear();
+  
+  // Mock window methods that are not in jsdom
+  window.alert = vi.fn();
+  window.confirm = vi.fn().mockReturnValue(true);
 });
 
 export { mockInvoke, mockListen, mockEmit };

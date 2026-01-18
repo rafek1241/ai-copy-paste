@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mockInvoke } from '../test/setup';
 import {
   getTemplates,
   buildPromptFromFiles,
@@ -9,12 +10,6 @@ import {
   type BuildPromptResponse,
   type FileContent,
 } from './prompts';
-
-// Mock Tauri invoke
-const mockInvoke = vi.fn();
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: mockInvoke,
-}));
 
 describe('prompts service', () => {
   beforeEach(() => {

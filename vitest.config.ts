@@ -19,10 +19,12 @@ export default defineConfig({
       exclude: [
         'node_modules/',
         'src/test/',
+        'e2e/',
         '**/*.d.ts',
         '**/*.config.*',
         '**/mockData.ts',
       ],
     },
+    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'e2e'],
   },
 });
