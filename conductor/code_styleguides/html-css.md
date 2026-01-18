@@ -1,49 +1,46 @@
-# Google HTML/CSS Style Guide Summary
+# HTML/Tailwind CSS Style Guide
 
-This document summarizes key rules and best practices from the Google HTML/CSS Style Guide.
+This document defines the coding standards for HTML and CSS within this project, with a strict focus on **Tailwind CSS v4**.
 
 ## 1. General Rules
 - **Protocol:** Use HTTPS for all embedded resources.
 - **Indentation:** Indent by 2 spaces. Do not use tabs.
-- **Capitalization:** Use only lowercase for all code (element names, attributes, selectors, properties).
-- **Trailing Whitespace:** Remove all trailing whitespace.
-- **Encoding:** Use UTF-8 (without a BOM). Specify `<meta charset="utf-8">` in HTML.
+- **Capitalization:** Use only lowercase for all element names and attributes.
+- **Encoding:** Use UTF-8 (without a BOM).
 
 ## 2. HTML Style Rules
-- **Document Type:** Use `<!doctype html>`.
-- **HTML Validity:** Use valid HTML.
-- **Semantics:** Use HTML elements according to their intended purpose (e.g., use `<p>` for paragraphs, not for spacing).
-- **Multimedia Fallback:** Provide `alt` text for images and transcripts/captions for audio/video.
-- **Separation of Concerns:** Strictly separate structure (HTML), presentation (CSS), and behavior (JavaScript). Link to CSS and JS from external files.
-- **`type` Attributes:** Omit `type` attributes for stylesheets (`<link>`) and scripts (`<script>`).
+- **Semantics:** Use HTML elements according to their intended purpose (e.g., `<button>` for actions, `<a>` for links).
+- **Accessibility:** 
+  - Provide `alt` text for images.
+  - Use `aria-*` attributes only when semantic HTML is insufficient.
+  - Ensure interactive elements are keyboard accessible.
+- **Separation of Concerns:** Avoid inline `style="..."` attributes. Use Tailwind utility classes.
 
-## 3. HTML Formatting Rules
-- **General:** Use a new line for every block, list, or table element, and indent its children.
-- **Quotation Marks:** Use double quotation marks (`""`) for attribute values.
+## 3. Tailwind CSS (v4) Rules
 
-## 4. CSS Style Rules
-- **CSS Validity:** Use valid CSS.
-- **Class Naming:** Use meaningful, generic names. Separate words with a hyphen (`-`).
-  - **Good:** `.video-player`, `.site-navigation`
-  - **Bad:** `.vid`, `.red-text`
-- **ID Selectors:** Avoid using ID selectors for styling. Prefer class selectors.
-- **Shorthand Properties:** Use shorthand properties where possible (e.g., `padding`, `font`).
-- **`0` and Units:** Omit units for `0` values (e.g., `margin: 0;`).
-- **Leading `0`s:** Always include leading `0`s for decimal values (e.g., `font-size: 0.8em;`).
-- **Hexadecimal Notation:** Use 3-character hex notation where possible (e.g., `#fff`).
-- **`!important`:** Avoid using `!important`.
+### Core Principles
+- **Utility-First:** Use utility classes directly in HTML. Avoid creating custom CSS classes unless absolutely necessary for complex animations or reusable components that cannot be handled by React/Component logic.
+- **Mobile-First:** Style for mobile screens first, then use `sm:`, `md:`, `lg:`, `xl:` prefixes for larger screens.
+  - **Bad:** `<div class="w-1/2 sm:w-full">` (Desktop first mental model)
+  - **Good:** `<div class="w-full sm:w-1/2">` (Mobile first)
 
-## 5. CSS Formatting Rules
-- **Declaration Order:** Alphabetize declarations within a rule.
-- **Indentation:** Indent all block content.
-- **Semicolons:** Use a semicolon after every declaration.
-- **Spacing:**
-  - Use a space after a property name's colon (`font-weight: bold;`).
-  - Use a space between the last selector and the opening brace (`.foo {`).
-  - Start a new line for each selector and declaration.
-- **Rule Separation:** Separate rules with a new line.
-- **Quotation Marks:** Use single quotes (`''`) for attribute selectors and property values (e.g., `[type='text']`).
+### Configuration (v4)
+- **CSS-First Configuration:** Use the CSS file for theme configuration using the `@theme` directive, rather than a JS config file.
+- **Imports:** Use the new import syntax: `@import "tailwindcss";`
 
-**BE CONSISTENT.** When editing code, match the existing style.
+### Class Ordering & Formatting
+- **Ordering:** Follow the recommended logical order (Layout -> Box Model -> Typography -> Visuals -> Misc).
+  - *Recommendation:* Use `prettier-plugin-tailwindcss` to enforce this automatically.
+- **Arbitrary Values:** Use arbitrary values `[...]` sparingly. If a value is used more than twice, define it as a CSS variable or theme extension.
 
-*Source: [Google HTML/CSS Style Guide](https://google.github.io/styleguide/htmlcssguide.html)*
+### Best Practices
+- **No `@apply`:** Avoid using `@apply` in CSS files. It breaks the utility-first workflow and increases bundle size.
+- **Spacing:** Use standard Tailwind spacing scale (`p-4`, `m-2`) instead of hardcoded pixels (`p-[16px]`).
+- **Colors:** Use semantic color names from the palette (e.g., `text-primary`, `bg-destructive`) rather than raw hex values if defined, or standard Tailwind colors (`text-red-500`) if not.
+- **Variables:** Leverage CSS variables for dynamic values, compatible with Tailwind v4's native variable support.
+
+## 4. CSS Files
+- **Structure:** Keep custom CSS to a minimum.
+- **Directives:** Use standard CSS syntax. Tailwind v4 parses standard CSS.
+
+**BE CONSISTENT.** Match the existing style and prefer standard utilities over custom CSS.
