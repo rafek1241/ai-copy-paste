@@ -40,7 +40,13 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
     setLoading(true);
     try {
       const loaded = await invoke<AppSettings>('load_settings');
-      setSettings(loaded);
+      if (loaded && typeof loaded === 'object') {
+        setSettings({
+          ...settings,
+          ...loaded,
+          excluded_extensions: loaded.excluded_extensions || [],
+        });
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {

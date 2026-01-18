@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Finalize Core UI and Context Gathering Flow**
+- [~] **Track: Finalize Core UI and Context Gathering Flow**
   *Link: [./tracks/core_ui_flow_20260118/](./tracks/core_ui_flow_20260118/)*

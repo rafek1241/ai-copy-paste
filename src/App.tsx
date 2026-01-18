@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileTree } from "./components/FileTree";
 import { PromptBuilder } from "./components/PromptBuilder";
 import BrowserAutomation from "./BrowserAutomation";
@@ -6,14 +6,51 @@ import HistoryPanel from "./components/HistoryPanel";
 import Settings from "./components/Settings";
 import { Button } from "./components/ui/button";
 import { ScrollArea } from "./components/ui/scroll-area";
+import { listen, emit } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 type View = "main" | "browser" | "history" | "settings";
+
+interface DragDropPayload {
+  paths: string[];
+  position: { x: number; y: number };
+}
 
 function App() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    let unlisten: any;
+
+    const setupDragDrop = async () => {
+      const unlistenFn = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
+        const paths = event.payload.paths;
+        if (paths && paths.length > 0) {
+          for (const path of paths) {
+            try {
+              await invoke("index_folder", { path });
+            } catch (error) {
+              console.error(`Failed to index dropped path ${path}:`, error);
+            }
+          }
+          // Notify any listening components to refresh
+          await emit("refresh-file-tree");
+        }
+      });
+      unlisten = unlistenFn;
+    };
+
+    setupDragDrop();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   const handleSelectionChange = (paths: string[], ids: number[]) => {
     setSelectedPaths(paths);

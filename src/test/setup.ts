@@ -1,14 +1,30 @@
 import '@testing-library/jest-dom';
+import { vi } from 'vitest';
 
 // Mock Tauri API for tests
-global.window = Object.create(window);
 const mockInvoke = vi.fn();
+const mockListen = vi.fn().mockResolvedValue(() => {});
+const mockEmit = vi.fn().mockResolvedValue(undefined);
 
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: mockInvoke,
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: mockListen,
+  emit: mockEmit,
+}));
+
+// Fallback for window.__TAURI__ for components using it directly
 Object.defineProperty(window, '__TAURI__', {
   value: {
     core: {
       invoke: mockInvoke,
     },
+    event: {
+      listen: mockListen,
+      emit: mockEmit,
+    }
   },
   writable: true,
 });
@@ -16,6 +32,8 @@ Object.defineProperty(window, '__TAURI__', {
 // Reset mocks before each test
 beforeEach(() => {
   mockInvoke.mockClear();
+  mockListen.mockClear();
+  mockEmit.mockClear();
 });
 
-export { mockInvoke };
+export { mockInvoke, mockListen, mockEmit };

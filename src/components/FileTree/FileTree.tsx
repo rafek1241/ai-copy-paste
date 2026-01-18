@@ -222,34 +222,46 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange }) => {
     e.stopPropagation();
   };
 
-  // Listen to Tauri's native drag-drop events
+  // Listen to refresh events (from global drag-drop or other sources)
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
 
-    const setupDragDrop = async () => {
-      unlisten = await listen<DragDropPayload>('tauri://drag-drop', async (event) => {
-        const paths = event.payload.paths;
-        if (paths && paths.length > 0) {
-          // Index all dropped paths (folders will be indexed, files will show the parent folder)
-          for (const path of paths) {
-            try {
-              await handleIndexFolder(path);
-            } catch (error) {
-              console.error(`Failed to index dropped path ${path}:`, error);
-            }
-          }
-        }
+    const setupRefreshListener = async () => {
+      unlisten = await listen('refresh-file-tree', () => {
+        console.log('Refreshing file tree...');
+        loadRootEntries();
       });
     };
 
-    setupDragDrop();
+    setupRefreshListener();
 
     return () => {
       if (unlisten) {
         unlisten();
       }
     };
-  }, [handleIndexFolder]);
+  }, [loadRootEntries]);
+
+  // Handle indexing-progress to refresh when complete
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    const setupProgressListener = async () => {
+      unlisten = await listen('indexing-progress', (event: any) => {
+        if (event.payload.current_path === 'Complete') {
+          loadRootEntries();
+        }
+      });
+    };
+
+    setupProgressListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [loadRootEntries]);
 
   // Handle search with debouncing
   const handleSearch = useCallback((query: string) => {

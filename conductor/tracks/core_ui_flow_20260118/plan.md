@@ -5,7 +5,7 @@ This plan follows the TDD and verification protocols defined in `conductor/workf
 ## Phase 1: Enhanced File Tree & Drag-and-Drop
 Goal: Finalize the selection logic and enable adding files from any location.
 
-- [ ] Task: Implement Drag-and-Drop Handler
+- [~] Task: Implement Drag-and-Drop Handler
     - [ ] Write Tests: Verify that dropped file/folder paths are correctly received and passed to the indexing service.
     - [ ] Implement Feature: Create a global drop zone that triggers the `index_folder` command for directories or adds individual files.
 - [ ] Task: Refine Selection Propagation Logic
