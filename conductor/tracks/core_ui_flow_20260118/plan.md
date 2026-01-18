@@ -8,9 +8,9 @@ Goal: Finalize the selection logic and enable adding files from any location.
 - [x] Task: Implement Drag-and-Drop Handler [113ad33]
     - [x] Write Tests: Verify that dropped file/folder paths are correctly received and passed to the indexing service.
     - [x] Implement Feature: Create a global drop zone that triggers the `index_folder` command for directories or adds individual files.
-- [~] Task: Refine Selection Propagation Logic
-    - [ ] Write Tests: Ensure parent-child checkbox state propagation works for deep nesting and partial selections (indeterminate state).
-    - [ ] Implement Feature: Optimize the tree state management to handle updates efficiently without full re-renders.
+- [x] Task: Refine Selection Propagation Logic [0afd107]
+    - [x] Write Tests: Ensure parent-child checkbox state propagation works for deep nesting and partial selections (indeterminate state).
+    - [x] Implement Feature: Optimize the tree state management to handle updates efficiently without full re-renders.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Enhanced File Tree & Drag-and-Drop' (Protocol in workflow.md)
 
 ## Phase 2: Real-time Token Counting
