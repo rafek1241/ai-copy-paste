@@ -2,7 +2,7 @@
 
 This plan follows the TDD and verification protocols defined in `conductor/workflow.md`.
 
-## Phase 1: Enhanced File Tree & Drag-and-Drop
+## Phase 1: Enhanced File Tree & Drag-and-Drop [checkpoint: 63e0a18]
 Goal: Finalize the selection logic and enable adding files from any location.
 
 - [x] Task: Implement Drag-and-Drop Handler [113ad33]
@@ -11,7 +11,7 @@ Goal: Finalize the selection logic and enable adding files from any location.
 - [x] Task: Refine Selection Propagation Logic [0afd107]
     - [x] Write Tests: Ensure parent-child checkbox state propagation works for deep nesting and partial selections (indeterminate state).
     - [x] Implement Feature: Optimize the tree state management to handle updates efficiently without full re-renders.
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Enhanced File Tree & Drag-and-Drop' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Enhanced File Tree & Drag-and-Drop' (Protocol in workflow.md) [63e0a18]
 
 ## Phase 2: Real-time Token Counting
 Goal: Provide immediate feedback on context size.
