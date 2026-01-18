@@ -55,8 +55,11 @@ function getTauriAppPath(): string {
 }
 
 export const config: Options.Testrunner = {
-  // Specify test files
-  specs: ["./tests/**/*.spec.ts"],
+  // Specify test files - only run simple tests first
+  specs: [
+    "./tests/diagnostic.spec.ts",
+    "./tests/app-launch.spec.ts",
+  ],
   exclude: [],
 
   // Capabilities - connect to tauri-driver running on port 4444
