@@ -223,6 +223,21 @@ pub async fn search_path(
     Ok(entries)
 }
 
+/// Clear the file index
+#[tauri::command]
+pub async fn clear_index(
+    db: tauri::State<'_, DbConnection>,
+) -> Result<(), String> {
+    log::info!("Clearing file index");
+
+    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+
+    conn.execute("DELETE FROM files", [])
+        .map_err(|e| format!("Failed to clear index: {}", e))?;
+
+    Ok(())
+}
+
 /// Internal function to recursively traverse and insert files
 fn traverse_and_insert(
     conn: &rusqlite::Connection,

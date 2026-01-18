@@ -15,5 +15,13 @@ export interface TreeNode extends FileEntry {
   checked: boolean;
   indeterminate: boolean;
   children?: TreeNode[];
+  childIds?: number[];
   hasChildren?: boolean;
+}
+
+export interface IndexProgress {
+  processed: number;
+  total_estimate: number;
+  current_path: string;
+  errors: number;
 }

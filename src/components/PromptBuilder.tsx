@@ -86,8 +86,8 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const selectedTemplateObj = templates.find((t) => t.id === selectedTemplate);
 
   return (
-    <div className="p-5 max-w-7xl mx-auto space-y-5">
-      <h2 className="text-xl font-semibold mb-5">Prompt Builder</h2>
+    <div className="p-5 max-w-7xl mx-auto space-y-5" data-testid="prompt-builder">
+      <h2 className="text-xl font-semibold mb-5" data-testid="prompt-builder-title">Prompt Builder</h2>
 
       {/* Template Selection */}
       <div className="space-y-2">
@@ -98,6 +98,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           value={selectedTemplate}
           onChange={(e) => setSelectedTemplate(e.target.value)}
           className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          data-testid="template-select"
         >
           {templates.map((template) => (
             <option key={template.id} value={template.id}>
@@ -106,7 +107,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           ))}
         </select>
         {selectedTemplateObj && (
-          <div className="mt-2 text-xs text-muted-foreground italic">
+          <div className="mt-2 text-xs text-muted-foreground italic" data-testid="template-description">
             {selectedTemplateObj.description}
           </div>
         )}
@@ -121,6 +122,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value as ModelName)}
           className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          data-testid="model-select"
         >
           <option value="gpt-4o">GPT-4o (128K tokens)</option>
           <option value="gpt-4o-mini">GPT-4o Mini (128K tokens)</option>
@@ -144,15 +146,16 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           onChange={(e) => setCustomInstructions(e.target.value)}
           placeholder="Add any specific instructions or context..."
           className="w-full min-h-[100px] px-3 py-2 text-sm rounded-md border border-input bg-background font-mono resize-y focus:outline-none focus:ring-1 focus:ring-ring"
+          data-testid="custom-instructions"
         />
       </div>
 
       {/* File Selection Info */}
-      <Card>
+      <Card data-testid="selected-files-info">
         <CardContent className="pt-6">
           <span className="font-semibold">Selected Files:</span> {selectedFileIds.length}
           {buildResponse && (
-            <span className="ml-5 text-muted-foreground">
+            <span className="ml-5 text-muted-foreground" data-testid="build-response-info">
               ({buildResponse.file_count} files, {buildResponse.total_chars.toLocaleString()} characters)
             </span>
           )}
@@ -165,27 +168,28 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
         disabled={isBuilding || selectedFileIds.length === 0}
         className="w-full"
         size="lg"
+        data-testid="build-prompt-btn"
       >
         {isBuilding ? "Building..." : "Build & Copy to Clipboard"}
       </Button>
 
       {/* Error Display */}
       {error && (
-        <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm">
+        <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm" data-testid="error-display">
           {error}
         </div>
       )}
 
       {/* Token Counter */}
       {builtPrompt && (
-        <div>
+        <div data-testid="token-counter-wrapper">
           <TokenCounter text={builtPrompt} modelName={selectedModel} />
         </div>
       )}
 
       {/* Prompt Preview */}
       {builtPrompt && (
-        <Card>
+        <Card data-testid="prompt-preview-section">
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Prompt Preview</CardTitle>
@@ -193,14 +197,15 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
                 onClick={handleCopyToClipboard}
                 variant="default"
                 size="sm"
+                data-testid="copy-clipboard-btn"
               >
-                📋 Copy to Clipboard
+                Copy to Clipboard
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[500px] w-full rounded-md border p-4">
-              <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
+              <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed" data-testid="prompt-preview">
                 {builtPrompt}
               </pre>
             </ScrollArea>

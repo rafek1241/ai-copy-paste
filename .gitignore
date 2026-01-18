@@ -35,3 +35,13 @@ __pycache__
 *.pyc
 *.pyo
 *.pyd
+
+# E2E Tests
+e2e/reports/
+e2e/logs/
+e2e/screenshots/
+e2e/dist/
+e2e/fixtures/test-data/
+
+# Browser data
+.browser-data/

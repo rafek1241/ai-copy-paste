@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileTree } from "./components/FileTree";
 import { PromptBuilder } from "./components/PromptBuilder";
 import BrowserAutomation from "./BrowserAutomation";
@@ -6,14 +6,51 @@ import HistoryPanel from "./components/HistoryPanel";
 import Settings from "./components/Settings";
 import { Button } from "./components/ui/button";
 import { ScrollArea } from "./components/ui/scroll-area";
+import { listen, emit } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 type View = "main" | "browser" | "history" | "settings";
+
+interface DragDropPayload {
+  paths: string[];
+  position: { x: number; y: number };
+}
 
 function App() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    let unlisten: any;
+
+    const setupDragDrop = async () => {
+      const unlistenFn = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
+        const paths = event.payload.paths;
+        if (paths && paths.length > 0) {
+          for (const path of paths) {
+            try {
+              await invoke("index_folder", { path });
+            } catch (error) {
+              console.error(`Failed to index dropped path ${path}:`, error);
+            }
+          }
+          // Notify any listening components to refresh
+          await emit("refresh-file-tree");
+        }
+      });
+      unlisten = unlistenFn;
+    };
+
+    setupDragDrop();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   const handleSelectionChange = (paths: string[], ids: number[]) => {
     setSelectedPaths(paths);
@@ -31,14 +68,15 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background text-foreground overflow-hidden">
-      <header className="sticky top-0 z-50 flex items-center justify-between px-5 py-3 bg-secondary border-b border-border">
-        <h1 className="text-lg font-semibold text-foreground">AI Context Collector</h1>
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col h-screen w-screen bg-background text-foreground overflow-hidden" data-testid="app-container">
+      <header className="sticky top-0 z-50 flex items-center justify-between px-5 py-3 bg-secondary border-b border-border" data-testid="app-header">
+        <h1 className="text-lg font-semibold text-foreground" data-testid="app-title">AI Context Collector</h1>
+        <div className="flex items-center gap-2" data-testid="selection-info">
           <Button
             variant={currentView === "main" ? "default" : "secondary"}
             size="sm"
             onClick={() => setCurrentView("main")}
+            data-testid="nav-main"
           >
             Main
           </Button>
@@ -46,6 +84,7 @@ function App() {
             variant={currentView === "browser" ? "default" : "secondary"}
             size="sm"
             onClick={() => setCurrentView("browser")}
+            data-testid="nav-browser"
           >
             Browser
           </Button>
@@ -53,6 +92,7 @@ function App() {
             variant={currentView === "history" ? "default" : "secondary"}
             size="sm"
             onClick={() => setCurrentView("history")}
+            data-testid="nav-history"
           >
             History
           </Button>
@@ -60,11 +100,12 @@ function App() {
             variant={currentView === "settings" ? "default" : "secondary"}
             size="sm"
             onClick={() => setCurrentView("settings")}
+            data-testid="nav-settings"
           >
             Settings
           </Button>
           {selectedPaths.length > 0 && currentView === "main" && (
-            <span className="ml-4 text-sm text-muted-foreground">
+            <span className="ml-4 text-sm text-muted-foreground" data-testid="selected-files-count">
               {selectedPaths.length} file(s) selected
             </span>
           )}
