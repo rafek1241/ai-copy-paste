@@ -1,0 +1,42 @@
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { FileTree } from "./FileTree";
+
+// Mock Tauri APIs
+vi.mock("@tauri-apps/api/core", () => ({
+    invoke: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+    listen: vi.fn(() => Promise.resolve(() => { })),
+    emit: vi.fn(),
+}));
+
+describe("FileTree Filters", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it("renders ALL, SRC, DOCS filter buttons", () => {
+        render(<FileTree />);
+
+        expect(screen.getByText("ALL")).toBeInTheDocument();
+        expect(screen.getByText("SRC")).toBeInTheDocument();
+        expect(screen.getByText("DOCS")).toBeInTheDocument();
+    });
+
+    it("toggles filter buttons when clicked", () => {
+        render(<FileTree />);
+
+        const srcButton = screen.getByText("SRC");
+        const allButton = screen.getByText("ALL");
+
+        // Initially ALL should be active (assuming default)
+        // We'll check for a specific class or data attribute
+        expect(allButton).toHaveClass("bg-primary");
+
+        fireEvent.click(srcButton);
+        expect(srcButton).toHaveClass("bg-primary");
+        expect(allButton).not.toHaveClass("bg-primary");
+    });
+});

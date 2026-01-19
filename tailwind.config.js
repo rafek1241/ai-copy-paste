@@ -3,7 +3,7 @@ export default {
   darkMode: ["class"],
   content: [
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./src/**/*.{js,ts,jsx,tsx,css}",
   ],
   theme: {
     extend: {
@@ -15,9 +15,9 @@ export default {
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
-        'background-dark': '#0d1117',
-        'card-dark': '#161b22',
-        'border-dark': '#30363d',
+        "background-dark": "#0d1117",
+        "card-dark": "#161b22",
+        "border-dark": "#30363d",
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))'
@@ -58,7 +58,7 @@ export default {
         }
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        "sans": ["Inter", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)"],
       },
       keyframes: {

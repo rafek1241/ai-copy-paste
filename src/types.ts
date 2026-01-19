@@ -8,6 +8,7 @@ export interface FileEntry {
   is_dir: boolean;
   token_count: number | null;
   fingerprint: string | null;
+  child_count: number | null;
 }
 
 export interface TreeNode extends FileEntry {

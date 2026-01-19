@@ -23,8 +23,8 @@ describe('Settings Component', () => {
 
   it('should render and load settings', async () => {
     render(<Settings />);
-    
-    expect(screen.getByText('Loading settings...')).toBeInTheDocument();
+
+    expect(screen.getByText(/loading settings/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText('.exe')).toBeInTheDocument();
@@ -39,8 +39,8 @@ describe('Settings Component', () => {
     render(<Settings />);
     await screen.findByText('.exe');
 
-    const input = screen.getByPlaceholderText('e.g., .exe or exe');
-    const addButton = screen.getByText('Add');
+    const input = screen.getByPlaceholderText('e.g. .exe');
+    const addButton = screen.getByText('ADD');
 
     fireEvent.change(input, { target: { value: 'zip' } });
     fireEvent.click(addButton);
@@ -54,7 +54,7 @@ describe('Settings Component', () => {
     render(<Settings />);
     await screen.findByText('.exe');
 
-    const saveButton = screen.getByText('Save Settings');
+    const saveButton = screen.getByText('SAVE CONFIGURATION');
     fireEvent.click(saveButton);
 
     await waitFor(() => {

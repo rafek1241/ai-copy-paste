@@ -32,6 +32,7 @@ pub struct FileEntry {
     pub is_dir: bool,
     pub token_count: Option<i64>,
     pub fingerprint: Option<String>,
+    pub child_count: Option<i64>,
 }
 
 impl FileEntry {
@@ -72,6 +73,7 @@ impl FileEntry {
             is_dir: metadata.is_dir(),
             token_count: None,
             fingerprint,
+            child_count: None,
         })
     }
 
@@ -115,6 +117,7 @@ impl FileEntry {
             is_dir: metadata.is_dir(),
             token_count: None,
             fingerprint,
+            child_count: None,
         })
     }
 }
@@ -153,7 +156,8 @@ pub async fn get_children(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, parent_id, name, path, size, mtime, is_dir, token_count, fingerprint 
+            "SELECT id, parent_id, name, path, size, mtime, is_dir, token_count, fingerprint,
+             (SELECT COUNT(*) FROM files f2 WHERE f2.parent_id = files.id) as child_count
              FROM files 
              WHERE parent_id IS ? OR (parent_id IS NULL AND ? IS NULL)
              ORDER BY is_dir DESC, name ASC",
@@ -172,6 +176,7 @@ pub async fn get_children(
                 is_dir: row.get::<_, i32>(6)? != 0,
                 token_count: row.get(7)?,
                 fingerprint: row.get(8)?,
+                child_count: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -194,7 +199,8 @@ pub async fn search_path(
     let search_pattern = format!("%{}%", pattern);
     let mut stmt = conn
         .prepare(
-            "SELECT id, parent_id, name, path, size, mtime, is_dir, token_count, fingerprint 
+            "SELECT id, parent_id, name, path, size, mtime, is_dir, token_count, fingerprint,
+             (SELECT COUNT(*) FROM files f2 WHERE f2.parent_id = files.id) as child_count
              FROM files 
              WHERE path LIKE ? OR name LIKE ?
              ORDER BY is_dir DESC, name ASC
@@ -214,6 +220,7 @@ pub async fn search_path(
                 is_dir: row.get::<_, i32>(6)? != 0,
                 token_count: row.get(7)?,
                 fingerprint: row.get(8)?,
+                child_count: row.get(9)?,
             })
         })
         .map_err(|e| e.to_string())?

@@ -1,43 +1,36 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import {
   getTemplates,
   PromptTemplate,
-  BuildPromptResponse,
 } from "../services/prompts";
 import { assemblePrompt } from "../services/assembly";
-import { TokenCounter } from "./TokenCounter";
-import { ModelName } from "../services/tokenizer";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ScrollArea } from "./ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 interface PromptBuilderProps {
   selectedFileIds: number[];
   onPromptBuilt?: (prompt: string) => void;
 }
 
-export const PromptBuilder: React.FC<PromptBuilderProps> = ({
+export interface PromptBuilderHandle {
+  buildAndCopy: () => Promise<void>;
+}
+
+export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>(({
   selectedFileIds,
   onPromptBuilt,
-}) => {
+}, ref) => {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("agent");
   const [customInstructions, setCustomInstructions] = useState<string>("");
-  const [builtPrompt, setBuiltPrompt] = useState<string>("");
-  const [isBuilding, setIsBuilding] = useState(false);
   const [error, setError] = useState<string>("");
-  const [buildResponse, setBuildResponse] = useState<BuildPromptResponse | null>(null);
-  const [selectedModel, setSelectedModel] = useState<ModelName>("gpt-4o");
-  const [showCopied, setShowCopied] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    buildAndCopy: handleBuildPrompt
+  }));
 
   useEffect(() => {
     loadTemplates();
   }, []);
-
-  const triggerCopyNotification = () => {
-    setShowCopied(true);
-    setTimeout(() => setShowCopied(false), 2000);
-  };
 
   const loadTemplates = async () => {
     try {
@@ -54,7 +47,6 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       return;
     }
 
-    setIsBuilding(true);
     setError("");
 
     try {
@@ -64,177 +56,103 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
         fileIds: selectedFileIds,
       });
 
-      setBuiltPrompt(response.prompt);
-      setBuildResponse(response);
-
       // Copy to clipboard automatically
       await navigator.clipboard.writeText(response.prompt);
-      triggerCopyNotification();
 
       if (onPromptBuilt) {
         onPromptBuilt(response.prompt);
       }
     } catch (err) {
       setError(`Failed to build prompt: ${err}`);
-    } finally {
-      setIsBuilding(false);
+      throw err;
     }
   };
-
-  const handleCopyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(builtPrompt);
-      triggerCopyNotification();
-    } catch (err) {
-      setError(`Failed to copy to clipboard: ${err}`);
-    }
-  };
-
-  const selectedTemplateObj = templates.find((t) => t.id === selectedTemplate);
 
   return (
-    <div className="p-5 max-w-7xl mx-auto space-y-5" data-testid="prompt-builder">
-      <h2 className="text-xl font-semibold mb-5" data-testid="prompt-builder-title">Prompt Builder</h2>
-
-      {/* Template Selection */}
-      <div className="space-y-2">
-        <label className="block font-semibold text-sm">
-          Select Template:
-        </label>
-        <select
-          value={selectedTemplate}
-          onChange={(e) => setSelectedTemplate(e.target.value)}
-          className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-          data-testid="template-select"
-        >
-          {templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
-        </select>
-        {selectedTemplateObj && (
-          <div className="mt-2 text-xs text-muted-foreground italic" data-testid="template-description">
-            {selectedTemplateObj.description}
-          </div>
-        )}
-      </div>
-
-      {/* Model Selection */}
-      <div className="space-y-2">
-        <label className="block font-semibold text-sm">
-          Target AI Model:
-        </label>
-        <select
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value as ModelName)}
-          className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-          data-testid="model-select"
-        >
-          <option value="gpt-4o">GPT-4o (128K tokens)</option>
-          <option value="gpt-4o-mini">GPT-4o Mini (128K tokens)</option>
-          <option value="gpt-4-turbo">GPT-4 Turbo (128K tokens)</option>
-          <option value="gpt-4">GPT-4 (8K tokens)</option>
-          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (16K tokens)</option>
-          <option value="claude-3-opus">Claude 3 Opus (200K tokens)</option>
-          <option value="claude-3-sonnet">Claude 3 Sonnet (200K tokens)</option>
-          <option value="claude-3-haiku">Claude 3 Haiku (200K tokens)</option>
-          <option value="gemini-pro">Gemini Pro (32K tokens)</option>
-        </select>
-      </div>
-
+    <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-[#0d1117] p-3 gap-4" data-testid="prompt-builder">
       {/* Custom Instructions */}
-      <div className="space-y-2">
-        <label className="block font-semibold text-sm">
-          Custom Instructions (optional):
-        </label>
-        <textarea
-          value={customInstructions}
-          onChange={(e) => setCustomInstructions(e.target.value)}
-          placeholder="Add any specific instructions or context..."
-          className="w-full min-h-[100px] px-3 py-2 text-sm rounded-md border border-input bg-background font-mono resize-y focus:outline-none focus:ring-1 focus:ring-ring"
-          data-testid="custom-instructions"
-        />
-      </div>
-
-      {/* Token Counter */}
-      <div data-testid="token-counter-wrapper">
-        <TokenCounter 
-          text={builtPrompt || customInstructions} 
-          selectedFileIds={builtPrompt ? [] : selectedFileIds} 
-          modelName={selectedModel} 
-        />
-      </div>
-
-      {/* File Selection Info */}
-      <Card data-testid="selected-files-info">
-        <CardContent className="pt-6">
-          <span className="font-semibold">Selected Files:</span> {selectedFileIds.length}
-          {buildResponse && (
-            <span className="ml-5 text-muted-foreground" data-testid="build-response-info">
-              ({buildResponse.file_count} files, {buildResponse.total_chars.toLocaleString()} characters)
-            </span>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Build Button */}
-      <div className="relative">
-        <Button
-          onClick={handleBuildPrompt}
-          disabled={isBuilding || selectedFileIds.length === 0}
-          className="w-full"
-          size="lg"
-          data-testid="build-prompt-btn"
-        >
-          {isBuilding ? "Building..." : "Build & Copy to Clipboard"}
-        </Button>
-        {showCopied && (
-          <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-300">
-            Copied to Clipboard!
+      <div className="flex flex-col gap-2">
+        <label className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Custom Instructions</label>
+        <div className="relative">
+          <textarea
+            className="w-full h-32 bg-[#161b22] border border-border-dark rounded-md p-3 text-white/90 placeholder-white/20 font-mono text-[11px] leading-relaxed resize-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+            placeholder="Describe how the context should be processed..."
+            value={customInstructions}
+            onChange={(e) => setCustomInstructions(e.target.value)}
+            data-testid="custom-instructions"
+          ></textarea>
+          <div className="absolute bottom-2 right-2 flex gap-1">
+            <button className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-white" title="Insert Variable">
+              <span className="material-symbols-outlined text-[14px]">data_object</span>
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Error Display */}
+      {/* Templates */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Templates</label>
+          <button className="text-[10px] text-primary hover:text-primary/80">Manage</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2" data-testid="templates-grid">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              onClick={() => setSelectedTemplate(template.id)}
+              className={cn(
+                "flex flex-col gap-1 p-2 rounded border transition-all text-left group",
+                selectedTemplate === template.id
+                  ? "bg-[#161b22] border-primary/50 ring-1 ring-primary/20"
+                  : "border-border-dark bg-[#161b22]/50 hover:bg-[#161b22] hover:border-white/20"
+              )}
+            >
+              <div className={cn(
+                "flex items-center gap-1.5 group-hover:text-blue-300",
+                getTemplateColor(template.id)
+              )}>
+                <span className="material-symbols-outlined text-[16px]">{getTemplateIcon(template.id)}</span>
+                <span className="text-[10px] font-semibold text-white/90">{template.name}</span>
+              </div>
+              <p className="text-[9px] text-white/40 line-clamp-2">{template.description}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-2 p-2 rounded border border-dashed border-border-dark flex items-center justify-center gap-2 text-white/30 hover:text-white/50 hover:border-white/20 cursor-pointer transition-colors">
+          <span className="material-symbols-outlined text-[14px]">add_circle</span>
+          <span className="text-[10px]">Create New Template</span>
+        </div>
+      </div>
+
       {error && (
-        <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm" data-testid="error-display">
+        <div className="p-2 bg-red-900/20 border border-red-900/50 text-red-200 rounded text-[10px]" data-testid="error-display">
           {error}
         </div>
       )}
-
-      {/* Prompt Preview */}
-      {builtPrompt && (
-        <Card data-testid="prompt-preview-section">
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Prompt Preview</CardTitle>
-              <div className="flex items-center gap-2">
-                {showCopied && (
-                  <span className="text-xs text-green-500 font-medium animate-in fade-in duration-300">
-                    Copied!
-                  </span>
-                )}
-                <Button
-                  onClick={handleCopyToClipboard}
-                  variant="default"
-                  size="sm"
-                  data-testid="copy-clipboard-btn"
-                >
-                  Copy to Clipboard
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[500px] w-full rounded-md border p-4">
-              <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed" data-testid="prompt-preview">
-                {builtPrompt}
-              </pre>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
-};
+});
+
+function getTemplateIcon(id: string): string {
+  switch (id) {
+    case 'agent': return 'smart_toy';
+    case 'refactor': return 'architecture';
+    case 'fix': return 'bug_report'; // Assuming 'Find Bugs' maps to 'fix'
+    case 'explain': return 'menu_book';
+    case 'audit': return 'security'; // Security audit
+    default: return 'description';
+  }
+}
+
+function getTemplateColor(id: string): string {
+  switch (id) {
+    case 'agent': return 'text-blue-400';
+    case 'refactor': return 'text-green-400';
+    case 'fix': return 'text-red-400';
+    case 'explain': return 'text-purple-400';
+    case 'audit': return 'text-yellow-400';
+    default: return 'text-blue-400';
+  }
+}

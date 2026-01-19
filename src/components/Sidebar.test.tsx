@@ -1,31 +1,38 @@
-import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
 import Sidebar from "./Sidebar";
 
 describe("Sidebar", () => {
-    it("renders correctly with specified icons and structure", () => {
-        const { container } = render(<Sidebar />);
+    it("renders core navigation icons", () => {
+        render(<Sidebar />);
 
-        // Check main container
-        const aside = container.querySelector("aside");
-        expect(aside).toBeInTheDocument();
-        expect(aside).toHaveClass("w-10");
-        expect(aside).toHaveClass("bg-[#010409]");
+        expect(screen.getByText("terminal")).toBeInTheDocument();
+        expect(screen.getByText("folder")).toBeInTheDocument();
+        expect(screen.getByText("auto_awesome")).toBeInTheDocument();
+        expect(screen.getByText("history")).toBeInTheDocument();
+        expect(screen.getByText("settings")).toBeInTheDocument();
+    });
 
-        // Check icons (Material Symbols)
-        const terminalIcon = screen.getByText("terminal");
-        const folderIcon = screen.getByText("folder");
-        const listIcon = screen.getByText("list_alt");
-        const historyIcon = screen.getByText("history");
-        const settingsIcon = screen.getByText("settings");
+    it("handles tab switching", () => {
+        const onTabChange = vi.fn();
+        render(<Sidebar onTabChange={onTabChange} activeTab="files" />);
 
-        expect(terminalIcon).toBeInTheDocument();
-        expect(folderIcon).toBeInTheDocument();
-        expect(listIcon).toBeInTheDocument();
-        expect(historyIcon).toBeInTheDocument();
-        expect(settingsIcon).toBeInTheDocument();
+        const promptBtn = screen.getByTestId("nav-prompt");
+        fireEvent.click(promptBtn);
 
-        // Check if terminal icon is in a primary colored div
-        expect(terminalIcon.closest("div")).toHaveClass("text-primary");
+        expect(onTabChange).toHaveBeenCalledWith("prompt");
+    });
+
+    it("expands on hover", () => {
+        render(<Sidebar />);
+        const sidebar = screen.getByTestId("sidebar");
+
+        expect(sidebar).toHaveClass("w-[42px]");
+
+        fireEvent.mouseEnter(sidebar);
+        expect(sidebar).toHaveClass("w-48");
+
+        fireEvent.mouseLeave(sidebar);
+        expect(sidebar).toHaveClass("w-[42px]");
     });
 });
