@@ -22,15 +22,15 @@ Goal: Provide immediate feedback on context size.
 - [x] Task: Build Token Counter UI Component [7a1ab74]
     - [x] Write Tests: Verify the component displays counts correctly and shows warnings when limits are exceeded.
     - [x] Implement Feature: Add a minimalist token display to the footer with a color-coded limit indicator.
-- [ ] Task: Conductor - User Manual Verification 'Phase 2: Real-time Token Counting' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Real-time Token Counting' (Protocol in workflow.md) [9170262]
 
 ## Phase 3: Prompt Assembly and Clipboard Integration
 Goal: The final output and copy-paste flow.
 
-- [ ] Task: Implement Prompt Assembly Service
-    - [ ] Write Tests: Verify the combined prompt string follows the specified format and includes all selected content.
-    - [ ] Implement Feature: Build a service that gathers content for all selected IDs and concatenates it with the user prompt.
-- [ ] Task: Add "Copy Context" Button and Notification
-    - [ ] Write Tests: Verify that the assembled string is correctly placed in the system clipboard.
-    - [ ] Implement Feature: Add a prominent "Copy Context" button with a success toast/indicator.
+- [x] Task: Implement Prompt Assembly Service [e57be37]
+    - [x] Write Tests: Verify the combined prompt string follows the specified format and includes all selected content.
+    - [x] Implement Feature: Build a service that gathers content for all selected IDs and concatenates it with the user prompt.
+- [x] Task: Add "Copy Context" Button and Notification [e57be37]
+    - [x] Write Tests: Verify that the assembled string is correctly placed in the system clipboard.
+    - [x] Implement Feature: Add a prominent "Copy Context" button with a success toast/indicator.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Prompt Assembly and Clipboard Integration' (Protocol in workflow.md)
