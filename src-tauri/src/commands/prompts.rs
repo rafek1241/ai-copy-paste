@@ -7,6 +7,7 @@ use std::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileContent {
+    pub id: i64,
     pub path: String,
     pub content: String,
 }
@@ -113,7 +114,11 @@ pub async fn get_file_content(
     let content = read_file_content(&path)
         .map_err(|e| format!("Failed to read file content: {}", e))?;
 
-    Ok(FileContent { path, content })
+    Ok(FileContent {
+        id: file_id,
+        path,
+        content,
+    })
 }
 
 /// Get multiple file contents by IDs
@@ -139,7 +144,11 @@ pub async fn get_file_contents(
 
         match read_file_content(&path) {
             Ok(content) => {
-                contents.push(FileContent { path, content });
+                contents.push(FileContent {
+                    id: file_id,
+                    path,
+                    content,
+                });
             }
             Err(e) => {
                 log::warn!("Failed to read file {}: {}", path, e);
