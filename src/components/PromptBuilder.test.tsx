@@ -26,7 +26,7 @@ describe('PromptBuilder', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(promptsService.getTemplates).mockResolvedValue(mockTemplates);
-    
+
     // Mock navigator.clipboard
     Object.assign(navigator, {
       clipboard: {
@@ -43,7 +43,7 @@ describe('PromptBuilder', () => {
     });
   });
 
-  it('should build and copy prompt when button clicked', async () => {
+  it('should build and copy prompt when called via ref', async () => {
     const mockResponse = {
       prompt: 'Built prompt',
       file_count: 1,
@@ -51,38 +51,63 @@ describe('PromptBuilder', () => {
     };
     vi.mocked(assemblyService.assemblePrompt).mockResolvedValue(mockResponse);
 
-    render(<PromptBuilder selectedFileIds={[1]} />);
-    
-    await waitFor(() => screen.getByTestId('build-prompt-btn'));
-    
-    fireEvent.click(screen.getByTestId('build-prompt-btn'));
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFileIds={[1]}
+        ref={(ref) => { builderRef = ref; }}
+      />
+    );
 
-    await waitFor(() => {
-      expect(assemblyService.assemblePrompt).toHaveBeenCalledWith({
-        templateId: 'agent',
-        fileIds: [1],
-        customInstructions: undefined,
-      });
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Built prompt');
-      expect(screen.getByText(/Copied to Clipboard!/i)).toBeDefined();
+    // Wait for templates to load
+    await waitFor(() => expect(promptsService.getTemplates).toHaveBeenCalled());
+
+    // Trigger build
+    await builderRef?.buildAndCopy();
+
+    expect(assemblyService.assemblePrompt).toHaveBeenCalledWith({
+      templateId: 'custom',
+      fileIds: [1],
+      customInstructions: "\n\n---CONTEXT:\n\n{{files}}",
     });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Built prompt');
   });
 
-  it('should disable build button when no files selected', async () => {
-    render(<PromptBuilder selectedFileIds={[]} />);
+  it('should show error when no files selected', async () => {
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFileIds={[]}
+        ref={(ref) => { builderRef = ref; }}
+      />
+    );
+
+    await builderRef?.buildAndCopy();
+
     await waitFor(() => {
-      const btn = screen.getByTestId('build-prompt-btn');
-      expect(btn.hasAttribute('disabled')).toBe(true);
+      expect(screen.getByText(/Please select at least one file/i)).toBeDefined();
     });
   });
 
   it('should show error if building fails', async () => {
     vi.mocked(assemblyService.assemblePrompt).mockRejectedValue(new Error('Build failed'));
 
-    render(<PromptBuilder selectedFileIds={[1]} />);
-    
-    await waitFor(() => screen.getByTestId('build-prompt-btn'));
-    fireEvent.click(screen.getByTestId('build-prompt-btn'));
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFileIds={[1]}
+        ref={(ref) => { builderRef = ref; }}
+      />
+    );
+
+    // Wait for templates to load
+    await waitFor(() => expect(promptsService.getTemplates).toHaveBeenCalled());
+
+    try {
+      await builderRef?.buildAndCopy();
+    } catch (e) {
+      // Expected
+    }
 
     await waitFor(() => {
       expect(screen.getByText(/Failed to build prompt: Error: Build failed/i)).toBeDefined();

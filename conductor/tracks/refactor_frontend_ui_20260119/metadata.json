@@ -1,8 +1,0 @@
-{
-    "track_id": "refactor_frontend_ui_20260119",
-    "type": "refactor",
-    "status": "new",
-    "created_at": "2026-01-19T19:16:10+01:00",
-    "updated_at": "2026-01-19T19:16:10+01:00",
-    "description": "Refactor the frontend application to match the provided HTML design, implementing a dark theme with grouped context dashboard aesthetics."
-}

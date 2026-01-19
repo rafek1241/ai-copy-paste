@@ -20,7 +20,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
   onPromptBuilt,
 }, ref) => {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("agent");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [customInstructions, setCustomInstructions] = useState<string>("");
   const [error, setError] = useState<string>("");
 
@@ -35,7 +35,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
   const loadTemplates = async () => {
     try {
       const templateList = await getTemplates();
-      setTemplates(templateList);
+      setTemplates(templateList.filter(t => t.id !== 'custom'));
     } catch (err) {
       setError(`Failed to load templates: ${err}`);
     }
@@ -50,9 +50,16 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
     setError("");
 
     try {
+      // Use the "custom" template which is just a pass-through
+      // If the user's instructions don't include the files placeholder, append it
+      let finalInstructions = customInstructions || "";
+      if (!finalInstructions.includes("{{files}}")) {
+        finalInstructions += "\n\n---CONTEXT:\n\n{{files}}";
+      }
+
       const response = await assemblePrompt({
-        templateId: selectedTemplate,
-        customInstructions: customInstructions || undefined,
+        templateId: "custom",
+        customInstructions: finalInstructions,
         fileIds: selectedFileIds,
       });
 
@@ -81,26 +88,23 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
             onChange={(e) => setCustomInstructions(e.target.value)}
             data-testid="custom-instructions"
           ></textarea>
-          <div className="absolute bottom-2 right-2 flex gap-1">
-            <button className="p-1 hover:bg-white/10 rounded text-white/40 hover:text-white" title="Insert Variable">
-              <span className="material-symbols-outlined text-[14px]">data_object</span>
-            </button>
-          </div>
+
         </div>
       </div>
 
       {/* Templates */}
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <label className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Templates</label>
-          <button className="text-[10px] text-primary hover:text-primary/80">Manage</button>
-        </div>
+        <label className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Templates</label>
+
 
         <div className="grid grid-cols-2 gap-2" data-testid="templates-grid">
           {templates.map((template) => (
             <button
               key={template.id}
-              onClick={() => setSelectedTemplate(template.id)}
+              onClick={() => {
+                setSelectedTemplate(template.id);
+                setCustomInstructions(template.template);
+              }}
               className={cn(
                 "flex flex-col gap-1 p-2 rounded border transition-all text-left group",
                 selectedTemplate === template.id
@@ -126,12 +130,14 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
         </div>
       </div>
 
-      {error && (
-        <div className="p-2 bg-red-900/20 border border-red-900/50 text-red-200 rounded text-[10px]" data-testid="error-display">
-          {error}
-        </div>
-      )}
-    </div>
+      {
+        error && (
+          <div className="p-2 bg-red-900/20 border border-red-900/50 text-red-200 rounded text-[10px]" data-testid="error-display">
+            {error}
+          </div>
+        )
+      }
+    </div >
   );
 });
 

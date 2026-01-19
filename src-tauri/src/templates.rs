@@ -12,6 +12,12 @@ pub struct PromptTemplate {
 pub fn get_builtin_templates() -> Vec<PromptTemplate> {
     vec![
         PromptTemplate {
+            id: "custom".to_string(),
+            name: "Custom".to_string(),
+            description: "Directly control the prompt structure".to_string(),
+            template: r#"{{custom_instructions}}"#.to_string(),
+        },
+        PromptTemplate {
             id: "agent".to_string(),
             name: "AI Agent".to_string(),
             description: "General purpose AI agent task template".to_string(),
@@ -175,6 +181,7 @@ mod tests {
         assert!(templates.iter().any(|t| t.id == "planning"));
         assert!(templates.iter().any(|t| t.id == "debugging"));
         assert!(templates.iter().any(|t| t.id == "review"));
+        assert!(templates.iter().any(|t| t.id == "custom"));
     }
 
     #[test]
