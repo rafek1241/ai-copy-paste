@@ -1,6 +1,6 @@
 # Implementation Plan - UI Test Fixes and Prompt Builder Refinement
 
-## Phase 1: Prompt Builder Logic & UI Cleanup
+## Phase 1: Prompt Builder Logic & UI Cleanup [checkpoint: 2b37fcd]
 Focuses on the requested application changes to the Prompt Builder.
 
 - [x] Task: Remove variable insertion and manage links 9303011
