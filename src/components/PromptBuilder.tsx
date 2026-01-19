@@ -150,6 +150,15 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
         />
       </div>
 
+      {/* Token Counter */}
+      <div data-testid="token-counter-wrapper">
+        <TokenCounter 
+          text={builtPrompt || customInstructions} 
+          selectedFileIds={builtPrompt ? [] : selectedFileIds} 
+          modelName={selectedModel} 
+        />
+      </div>
+
       {/* File Selection Info */}
       <Card data-testid="selected-files-info">
         <CardContent className="pt-6">
@@ -177,13 +186,6 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       {error && (
         <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm" data-testid="error-display">
           {error}
-        </div>
-      )}
-
-      {/* Token Counter */}
-      {builtPrompt && (
-        <div data-testid="token-counter-wrapper">
-          <TokenCounter text={builtPrompt} modelName={selectedModel} />
         </div>
       )}
 

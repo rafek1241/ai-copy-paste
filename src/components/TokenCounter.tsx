@@ -8,39 +8,73 @@ import {
   TOKEN_LIMITS,
   ModelName,
 } from "../services/tokenizer";
+import { useTokenCount } from "../hooks/useTokenCount";
 
 interface TokenCounterProps {
-  text: string;
+  text?: string;
+  selectedFileIds?: number[];
   modelName?: ModelName;
   showLimit?: boolean;
+  variant?: "default" | "compact";
 }
 
 export const TokenCounter: React.FC<TokenCounterProps> = ({
-  text,
+  text = "",
+  selectedFileIds = [],
   modelName = "gpt-4o",
   showLimit = true,
+  variant = "default",
 }) => {
-  const [tokenCount, setTokenCount] = useState(0);
-  const [isCalculating, setIsCalculating] = useState(false);
+  const [textTokenCount, setTextTokenCount] = useState(0);
+  const [isTextCalculating, setIsTextCalculating] = useState(false);
+  const { totalTokens: filesTokenCount, isCalculating: isFilesCalculating, error } = useTokenCount(selectedFileIds);
 
   useEffect(() => {
-    setIsCalculating(true);
+    if (!text) {
+      setTextTokenCount(0);
+      return;
+    }
+
+    setIsTextCalculating(true);
     // Debounce token counting for performance
     const timer = setTimeout(() => {
       const count = countTokens(text);
-      setTokenCount(count);
-      setIsCalculating(false);
+      setTextTokenCount(count);
+      setIsTextCalculating(false);
     }, 300);
 
     return () => clearTimeout(timer);
   }, [text]);
 
+  const tokenCount = textTokenCount + filesTokenCount;
+  const isCalculating = isTextCalculating || isFilesCalculating;
+
   const limit = TOKEN_LIMITS[modelName];
   const percentage = calculateTokenPercentage(tokenCount, limit);
   const color = getTokenLimitColor(percentage);
 
+  if (variant === "compact") {
+    return (
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <span className="text-muted-foreground">Tokens:</span>
+        <span className={cn(
+          percentage >= 90 ? "text-red-500" :
+          percentage >= 70 ? "text-yellow-500" : 
+          "text-green-500"
+        )}>
+          {isCalculating ? "..." : formatTokenCount(tokenCount)}
+        </span>
+        {limit > 0 && (
+          <span className="text-xs text-muted-foreground">
+            / {formatTokenCount(limit)}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="p-3 border rounded-lg bg-card">
+    <div className="p-3 border rounded-lg bg-card" data-testid="token-counter">
       <div className="flex justify-between items-center mb-2">
         <span className="font-bold text-sm">
           Token Count:

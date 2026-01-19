@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { FileTree } from "./components/FileTree";
 import { PromptBuilder } from "./components/PromptBuilder";
+import { TokenCounter } from "./components/TokenCounter";
 import BrowserAutomation from "./BrowserAutomation";
 import HistoryPanel from "./components/HistoryPanel";
 import Settings from "./components/Settings";
@@ -105,9 +106,16 @@ function App() {
             Settings
           </Button>
           {selectedPaths.length > 0 && currentView === "main" && (
-            <span className="ml-4 text-sm text-muted-foreground" data-testid="selected-files-count">
-              {selectedPaths.length} file(s) selected
-            </span>
+            <div className="ml-4 flex items-center gap-4" data-testid="selection-summary">
+              <span className="text-sm text-muted-foreground" data-testid="selected-files-count">
+                {selectedPaths.length} file(s) selected
+              </span>
+              <TokenCounter 
+                selectedFileIds={selectedFileIds} 
+                variant="compact" 
+                data-testid="header-token-counter"
+              />
+            </div>
           )}
         </div>
       </header>
