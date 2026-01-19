@@ -13,7 +13,7 @@ Goal: Finalize the selection logic and enable adding files from any location.
     - [x] Implement Feature: Optimize the tree state management to handle updates efficiently without full re-renders.
 - [x] Task: Conductor - User Manual Verification 'Phase 1: Enhanced File Tree & Drag-and-Drop' (Protocol in workflow.md) [63e0a18]
 
-## Phase 2: Real-time Token Counting
+## Phase 2: Real-time Token Counting [checkpoint: 9170262]
 Goal: Provide immediate feedback on context size.
 
 - [x] Task: Integrate `gpt-tokenizer` with Selection State [027beed]
