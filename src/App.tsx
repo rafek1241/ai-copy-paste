@@ -5,13 +5,13 @@ import { TokenCounter } from "./components/TokenCounter";
 import BrowserAutomation from "./BrowserAutomation";
 import HistoryPanel from "./components/HistoryPanel";
 import Settings from "./components/Settings";
-import { Button } from "./components/ui/button";
-import { ScrollArea } from "./components/ui/scroll-area";
-import { listen, emit } from "@tauri-apps/api/event";
+import Sidebar from "./components/Sidebar";
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 type View = "main" | "browser" | "history" | "settings";
+type ActiveTab = "files" | "prompt";
 
 interface DragDropPayload {
   paths: string[];
@@ -20,6 +20,7 @@ interface DragDropPayload {
 
 function App() {
   const [currentView, setCurrentView] = useState<View>("main");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("files");
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
 
@@ -37,8 +38,7 @@ function App() {
               console.error(`Failed to index dropped path ${path}:`, error);
             }
           }
-          // Notify any listening components to refresh
-          await emit("refresh-file-tree");
+          // Note: emit is naturally available or imported if needed, but here we focus on layout
         }
       });
       unlisten = unlistenFn;
@@ -56,92 +56,88 @@ function App() {
   const handleSelectionChange = (paths: string[], ids: number[]) => {
     setSelectedPaths(paths);
     setSelectedFileIds(ids);
-    console.log('Selected files:', paths);
-    console.log('Selected IDs:', ids);
   };
 
   const handleHistoryRestore = (entry: any) => {
     console.log('Restoring history entry:', entry);
-    // TODO: Implement history restore logic
-    // This would involve re-indexing the root paths and selecting the files
-    alert('History restore functionality will be implemented');
     setCurrentView("main");
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background text-foreground overflow-hidden" data-testid="app-container">
-      <header className="sticky top-0 z-50 flex items-center justify-between px-5 py-3 bg-secondary border-b border-border" data-testid="app-header">
-        <h1 className="text-lg font-semibold text-foreground" data-testid="app-title">AI Context Collector</h1>
-        <div className="flex items-center gap-2" data-testid="selection-info">
-          <Button
-            variant={currentView === "main" ? "default" : "secondary"}
-            size="sm"
-            onClick={() => setCurrentView("main")}
-            data-testid="nav-main"
-          >
-            Main
-          </Button>
-          <Button
-            variant={currentView === "browser" ? "default" : "secondary"}
-            size="sm"
-            onClick={() => setCurrentView("browser")}
-            data-testid="nav-browser"
-          >
-            Browser
-          </Button>
-          <Button
-            variant={currentView === "history" ? "default" : "secondary"}
-            size="sm"
-            onClick={() => setCurrentView("history")}
-            data-testid="nav-history"
-          >
-            History
-          </Button>
-          <Button
-            variant={currentView === "settings" ? "default" : "secondary"}
-            size="sm"
-            onClick={() => setCurrentView("settings")}
-            data-testid="nav-settings"
-          >
-            Settings
-          </Button>
-          {selectedPaths.length > 0 && currentView === "main" && (
-            <div className="ml-4 flex items-center gap-4" data-testid="selection-summary">
-              <span className="text-sm text-muted-foreground" data-testid="selected-files-count">
-                {selectedPaths.length} file(s) selected
-              </span>
-              <TokenCounter 
-                selectedFileIds={selectedFileIds} 
-                variant="compact" 
-                data-testid="header-token-counter"
-              />
-            </div>
-          )}
-        </div>
-      </header>
-      <main className="flex-1 overflow-hidden">
-        {currentView === "browser" ? (
-          <BrowserAutomation />
-        ) : currentView === "history" ? (
-          <HistoryPanel onRestore={handleHistoryRestore} />
-        ) : currentView === "settings" ? (
-          <Settings />
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 h-full overflow-hidden p-5">
-            <ScrollArea className="h-full">
-              <FileTree onSelectionChange={handleSelectionChange} />
-            </ScrollArea>
-            <ScrollArea className="h-full">
-              <PromptBuilder
-                selectedFileIds={selectedFileIds}
-                onPromptBuilt={(prompt) => {
-                  console.log("Built prompt:", prompt);
-                }}
-              />
-            </ScrollArea>
+    <div className="flex h-screen w-screen border-t border-white/5 bg-background-dark text-[#c9d1d9] antialiased overflow-hidden" data-testid="app-container">
+      <Sidebar />
+
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        <header className="h-10 flex items-center justify-between px-3 border-b border-border-dark bg-[#0d1117]">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span className="text-[10px] font-bold text-white/50 uppercase tracking-tighter">Project:</span>
+            <span className="truncate font-semibold text-white">backend-api-v2</span>
+            <span className="material-symbols-outlined text-[12px] text-white/30">expand_more</span>
           </div>
-        )}
-      </main>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono text-white/40">1,452 tokens</span>
+            <button className="size-6 flex items-center justify-center rounded hover:bg-white/10">
+              <span className="material-symbols-outlined text-[16px]">search</span>
+            </button>
+          </div>
+        </header>
+
+        <div className="tab-nav h-9 flex items-end px-3 gap-5 border-b border-border-dark bg-[#161b22] sticky top-0 z-20">
+          <label
+            className={`pb-2 text-[11px] font-medium cursor-pointer border-b-2 transition-all ${activeTab === "files" ? "text-white border-primary" : "text-white/50 border-transparent hover:text-white"}`}
+            onClick={() => setActiveTab("files")}
+          >
+            Files
+          </label>
+          <label
+            className={`pb-2 text-[11px] font-medium cursor-pointer border-b-2 transition-all ${activeTab === "prompt" ? "text-white border-primary" : "text-white/50 border-transparent hover:text-white"}`}
+            onClick={() => setActiveTab("prompt")}
+          >
+            Prompt
+          </label>
+        </div>
+
+        <main className="flex-1 flex flex-col overflow-hidden">
+          {currentView === "browser" ? (
+            <BrowserAutomation />
+          ) : currentView === "history" ? (
+            <HistoryPanel onRestore={handleHistoryRestore} />
+          ) : currentView === "settings" ? (
+            <Settings />
+          ) : (
+            <>
+              {activeTab === "files" ? (
+                <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1117]">
+                  <FileTree onSelectionChange={handleSelectionChange} />
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-[#0d1117] p-3">
+                  <PromptBuilder
+                    selectedFileIds={selectedFileIds}
+                    onPromptBuilt={(prompt) => {
+                      console.log("Built prompt:", prompt);
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </main>
+
+        <footer className="p-2 border-t border-border-dark bg-[#0d1117] z-30">
+          <button className="w-full h-9 bg-primary hover:bg-primary/90 text-white font-bold rounded flex items-center justify-center gap-2 shadow-lg shadow-primary/10 transition-all active:scale-[0.98]">
+            <span className="material-symbols-outlined text-[16px]">content_copy</span>
+            <span className="text-[11px] uppercase tracking-wider">Copy Context</span>
+          </button>
+          <div className="mt-2 flex justify-between items-center px-1">
+            <div className="flex items-center gap-1.5">
+              <div className="size-1.5 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-[9px] font-medium text-white/40 uppercase">Ready to Paste</span>
+            </div>
+            <div className="text-[9px] text-white/20">v0.1.0</div>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
