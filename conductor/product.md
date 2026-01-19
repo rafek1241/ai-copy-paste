@@ -16,11 +16,11 @@ To provide a cross-platform desktop application that simplifies the process of g
 - Provide a responsive and efficient user experience, even with large projects.
 
 ## Key Features
-- **File selection and indexing**: Support for ignoring files (e.g., .gitignore) to focus on relevant code.
-- **Live token counting**: Immediate feedback on the prompt size to ensure it fits within AI model limits.
-- **Prompt assembly**: Combining file contents and user instructions into a single, well-formatted string.
+- **Fast File Indexing**: Quick traversal of large directories using SQLite with support for Drag & Drop additions and `.gitignore` rules.
+- **Virtual Tree UI**: Responsive selection with parent-child state propagation and smooth scrolling for large file lists.
+- **Real-time Token Counting**: Instant token calculation using `gpt-tokenizer` for both file content and custom instructions.
+- **Professional Prompt Assembly**: One-click assembly and clipboard copy with live feedback and success notifications.
 - **Universal File Access**: Works from any location with any files, not limited to a specific codebase.
-- **Drag & Drop**: Support for dragging and dropping extra files or directories into the file tree for immediate access and selection.
 
 ## Constraints & Requirements
 - **Cross-platform**: Support for Windows, macOS, and Linux.
