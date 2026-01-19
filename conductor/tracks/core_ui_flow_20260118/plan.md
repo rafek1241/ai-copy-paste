@@ -24,7 +24,7 @@ Goal: Provide immediate feedback on context size.
     - [x] Implement Feature: Add a minimalist token display to the footer with a color-coded limit indicator.
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Real-time Token Counting' (Protocol in workflow.md) [9170262]
 
-## Phase 3: Prompt Assembly and Clipboard Integration
+## Phase 3: Prompt Assembly and Clipboard Integration [checkpoint: f51027d]
 Goal: The final output and copy-paste flow.
 
 - [x] Task: Implement Prompt Assembly Service [e57be37]
@@ -33,4 +33,4 @@ Goal: The final output and copy-paste flow.
 - [x] Task: Add "Copy Context" Button and Notification [e57be37]
     - [x] Write Tests: Verify that the assembled string is correctly placed in the system clipboard.
     - [x] Implement Feature: Add a prominent "Copy Context" button with a success toast/indicator.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Prompt Assembly and Clipboard Integration' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Prompt Assembly and Clipboard Integration' (Protocol in workflow.md) [f51027d]
