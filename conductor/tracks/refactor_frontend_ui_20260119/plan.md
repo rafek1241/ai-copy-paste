@@ -7,7 +7,7 @@ Completely overhaul the frontend UI to match the new "Grouped Context Dashboard"
 
 - [ ] **Setup & Configuration**
     - [x] Update `tailwind.config.js` with new color palette and font family. c5e8427
-    - [ ] Update `index.html` (or `App.tsx` global config) to load "Inter" font and "Material Symbols Outlined".
+    - [x] Update `index.html` (or `App.tsx` global config) to load "Inter" font and "Material Symbols Outlined". afc9665
     - [ ] Update `index.css` with base styles (`@layer base`, scrollbar styling).
 
 - [ ] **Sidebar Refactor (TDD)**
