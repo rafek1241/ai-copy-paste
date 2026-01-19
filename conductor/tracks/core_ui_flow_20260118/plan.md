@@ -16,9 +16,9 @@ Goal: Finalize the selection logic and enable adding files from any location.
 ## Phase 2: Real-time Token Counting
 Goal: Provide immediate feedback on context size.
 
-- [~] Task: Integrate `gpt-tokenizer` with Selection State
-    - [ ] Write Tests: Verify token counts for various file types and combined selections match expected outputs.
-    - [ ] Implement Feature: Create a debounced token counter that re-calculates the total count of selected files.
+- [x] Task: Integrate `gpt-tokenizer` with Selection State [027beed]
+    - [x] Write Tests: Verify token counts for various file types and combined selections match expected outputs.
+    - [x] Implement Feature: Create a debounced token counter that re-calculates the total count of selected files.
 - [ ] Task: Build Token Counter UI Component
     - [ ] Write Tests: Verify the component displays counts correctly and shows warnings when limits are exceeded.
     - [ ] Implement Feature: Add a minimalist token display to the footer with a color-coded limit indicator.
