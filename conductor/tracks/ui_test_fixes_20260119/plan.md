@@ -10,7 +10,7 @@ Focuses on the requested application changes to the Prompt Builder.
 - [x] Task: Refine Template Selection logic 9303011
     - [ ] Update state to ensure no template is selected by default
     - [ ] Implement/Fix handler so selecting a template populates the "Custom Instructions" field
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Prompt Builder Logic & UI Cleanup' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Prompt Builder Logic & UI Cleanup' (Protocol in workflow.md)
 
 ## Phase 2: E2E Test Suite Alignment
 Updating the existing WebdriverIO tests to match the new UI structure and logic.
