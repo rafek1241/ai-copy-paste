@@ -15,6 +15,9 @@ export default {
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        'background-dark': '#0d1117',
+        'card-dark': '#161b22',
+        'border-dark': '#30363d',
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))'
@@ -24,7 +27,7 @@ export default {
           foreground: 'hsl(var(--popover-foreground))'
         },
         primary: {
-          DEFAULT: 'hsl(var(--primary))',
+          DEFAULT: '#3b82f6',
           foreground: 'hsl(var(--primary-foreground))'
         },
         secondary: {
@@ -55,7 +58,7 @@ export default {
         }
       },
       fontFamily: {
-        sans: ["var(--font-sans)"],
+        sans: ["Inter", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)"],
       },
       keyframes: {
