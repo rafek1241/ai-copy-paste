@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import {
   getTemplates,
-  buildPromptFromFiles,
   PromptTemplate,
   BuildPromptResponse,
 } from "../services/prompts";
+import { assemblePrompt } from "../services/assembly";
 import { TokenCounter } from "./TokenCounter";
 import { ModelName } from "../services/tokenizer";
 import { Button } from "./ui/button";
@@ -28,10 +28,16 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const [error, setError] = useState<string>("");
   const [buildResponse, setBuildResponse] = useState<BuildPromptResponse | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelName>("gpt-4o");
+  const [showCopied, setShowCopied] = useState(false);
 
   useEffect(() => {
     loadTemplates();
   }, []);
+
+  const triggerCopyNotification = () => {
+    setShowCopied(true);
+    setTimeout(() => setShowCopied(false), 2000);
+  };
 
   const loadTemplates = async () => {
     try {
@@ -52,10 +58,10 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
     setError("");
 
     try {
-      const response = await buildPromptFromFiles({
-        template_id: selectedTemplate,
-        custom_instructions: customInstructions || undefined,
-        file_ids: selectedFileIds,
+      const response = await assemblePrompt({
+        templateId: selectedTemplate,
+        customInstructions: customInstructions || undefined,
+        fileIds: selectedFileIds,
       });
 
       setBuiltPrompt(response.prompt);
@@ -63,6 +69,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
 
       // Copy to clipboard automatically
       await navigator.clipboard.writeText(response.prompt);
+      triggerCopyNotification();
 
       if (onPromptBuilt) {
         onPromptBuilt(response.prompt);
@@ -77,7 +84,7 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const handleCopyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(builtPrompt);
-      alert("Prompt copied to clipboard!");
+      triggerCopyNotification();
     } catch (err) {
       setError(`Failed to copy to clipboard: ${err}`);
     }
@@ -172,15 +179,22 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       </Card>
 
       {/* Build Button */}
-      <Button
-        onClick={handleBuildPrompt}
-        disabled={isBuilding || selectedFileIds.length === 0}
-        className="w-full"
-        size="lg"
-        data-testid="build-prompt-btn"
-      >
-        {isBuilding ? "Building..." : "Build & Copy to Clipboard"}
-      </Button>
+      <div className="relative">
+        <Button
+          onClick={handleBuildPrompt}
+          disabled={isBuilding || selectedFileIds.length === 0}
+          className="w-full"
+          size="lg"
+          data-testid="build-prompt-btn"
+        >
+          {isBuilding ? "Building..." : "Build & Copy to Clipboard"}
+        </Button>
+        {showCopied && (
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-300">
+            Copied to Clipboard!
+          </div>
+        )}
+      </div>
 
       {/* Error Display */}
       {error && (
@@ -195,14 +209,21 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle>Prompt Preview</CardTitle>
-              <Button
-                onClick={handleCopyToClipboard}
-                variant="default"
-                size="sm"
-                data-testid="copy-clipboard-btn"
-              >
-                Copy to Clipboard
-              </Button>
+              <div className="flex items-center gap-2">
+                {showCopied && (
+                  <span className="text-xs text-green-500 font-medium animate-in fade-in duration-300">
+                    Copied!
+                  </span>
+                )}
+                <Button
+                  onClick={handleCopyToClipboard}
+                  variant="default"
+                  size="sm"
+                  data-testid="copy-clipboard-btn"
+                >
+                  Copy to Clipboard
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
