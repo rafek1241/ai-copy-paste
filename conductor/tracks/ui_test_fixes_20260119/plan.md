@@ -3,11 +3,11 @@
 ## Phase 1: Prompt Builder Logic & UI Cleanup
 Focuses on the requested application changes to the Prompt Builder.
 
-- [ ] Task: Remove variable insertion and manage links
+- [x] Task: Remove variable insertion and manage links 9303011
     - [ ] Locate the Prompt Builder component(s)
     - [ ] Remove the custom variables icon/button
     - [ ] Remove the "manage" link for templates/variables
-- [ ] Task: Refine Template Selection logic
+- [x] Task: Refine Template Selection logic 9303011
     - [ ] Update state to ensure no template is selected by default
     - [ ] Implement/Fix handler so selecting a template populates the "Custom Instructions" field
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Prompt Builder Logic & UI Cleanup' (Protocol in workflow.md)
