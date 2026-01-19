@@ -422,6 +422,34 @@
   }
 }
 
+@layer base {
+  body {
+    @apply bg-background-dark text-[#c9d1d9] antialiased overflow-hidden;
+    font-size: 11px;
+    min-height: max(600px, 100dvh);
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #30363d;
+}
+
+.compact-table-row {
+  @apply border-b border-border-dark/30 hover:bg-white/[0.02] transition-colors flex items-center px-2 py-0.5 min-h-[22px];
+}
+
+.directory-header {
+  @apply bg-[#161b22]/90 backdrop-blur-sm border-b border-border-dark flex items-center px-2 py-1 sticky top-0 z-10;
+}
+
+.custom-checkbox {
+  @apply rounded-sm size-2.5 bg-transparent border-border-dark text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer;
+}
+
 /* Base styles */
 * {
   margin: 0;
@@ -432,18 +460,17 @@
 body,
 html,
 #root {
-  @apply w-full h-full overflow-auto;
+  @apply w-full h-full overflow-hidden;
 }
 
 body {
-  @apply bg-background text-foreground;
   font-feature-settings: "rlig" 1, "calt" 1;
   font-family: var(--font-sans);
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  @apply w-2;
+  @apply w-1.5;
 }
 
 ::-webkit-scrollbar-track {
@@ -451,11 +478,11 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-600 rounded-full;
+  @apply bg-border-dark rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-500;
+  @apply bg-gray-600;
 }
 
 /* VS Code color scheme fallbacks */
