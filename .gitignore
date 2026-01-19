@@ -45,3 +45,6 @@ e2e/fixtures/test-data/
 
 # Browser data
 .browser-data/
+
+# coverage
+coverage/

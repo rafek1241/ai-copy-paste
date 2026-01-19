@@ -88,6 +88,7 @@ describe('prompts service', () => {
   describe('getFileContent', () => {
     it('should fetch single file content', async () => {
       const mockContent: FileContent = {
+        id: 1,
         path: '/test/file.txt',
         content: 'File content here',
       };
@@ -106,8 +107,8 @@ describe('prompts service', () => {
   describe('getFileContents', () => {
     it('should fetch multiple file contents', async () => {
       const mockContents: FileContent[] = [
-        { path: '/test/file1.txt', content: 'Content 1' },
-        { path: '/test/file2.txt', content: 'Content 2' },
+        { id: 1, path: '/test/file1.txt', content: 'Content 1' },
+        { id: 2, path: '/test/file2.txt', content: 'Content 2' },
       ];
 
       mockInvoke.mockResolvedValue(mockContents);
