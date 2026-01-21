@@ -27,7 +27,7 @@ export const TokenCounter: React.FC<TokenCounterProps> = ({
 }) => {
   const [textTokenCount, setTextTokenCount] = useState(0);
   const [isTextCalculating, setIsTextCalculating] = useState(false);
-  const { totalTokens: filesTokenCount, isCalculating: isFilesCalculating, error } = useTokenCount(selectedFileIds);
+  const { totalTokens: filesTokenCount, isCalculating: isFilesCalculating, error: _error } = useTokenCount(selectedFileIds);
 
   useEffect(() => {
     if (!text) {

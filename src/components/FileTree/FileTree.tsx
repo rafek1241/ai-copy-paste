@@ -15,6 +15,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
   const [rootIds, setRootIds] = useState<number[]>([]);
   const [flatTree, setFlatTree] = useState<TreeNode[]>([]);
   const [filterType, setFilterType] = useState<'ALL' | 'SRC' | 'DOCS'>('ALL');
+  const [toast, setToast] = useState<string | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Virtual scrolling setup
@@ -60,31 +61,15 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
 
       const isMatch = matchesFilter(node);
 
-      // If searching, we might blindly show matching nodes, or maintain structure.
-      // Maintaining structure is harder without recursing up. 
-      // For now, filtering hides non-matching items. 
-      // Ideally, if a child matches, parents should be shown. This simple approach hides non-matching parents unless they are expanded.
-      // But if we are searching, we likely want to flatten or expand all? 
-      // The requirement was "filter the selected file tree by the filename/filepath".
-      if (searchQuery && !isMatch && !node.is_dir) continue;
-      // If it's a folder, we check if it has matching children or if it matches itself.
-      // For simplicity in this non-recursive filter check:
-      if (!isMatch && !node.is_dir) continue;
+      // Skip non-matching files (but always process directories to maintain tree structure)
+      if (!node.is_dir && !isMatch) continue;
 
-      // Note: This logic depends on opened state. Search usually expands everything or filters a flat list.
-      // Given the virtual tree structure, search usually implies filtering visible nodes.
-      // If strict hierarchy is needed, search logic needs to be robust (filtering parents that contain matches).
-      // Here we trust standard expansion for traversing.
+      // Always add directories to maintain tree hierarchy
+      // Add files only if they match the filter
+      const nodeWithLevel = { ...node, level } as any;
+      result.push(nodeWithLevel);
 
-      if (isMatch || node.is_dir) { // Always show dirs to traverse, or check match
-        if (isMatch) {
-          const nodeWithLevel = { ...node, level } as any;
-          result.push(nodeWithLevel);
-        }
-      } else {
-        continue;
-      }
-
+      // If expanded and has children, recursively add them
       if (node.expanded && node.childIds) {
         result.push(...buildFlatTree(node.childIds, map, level + 1));
       }
@@ -301,6 +286,14 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     return { paths, ids: selectedIds };
   };
 
+  // Handle path copy to clipboard
+  const copyPathToClipboard = (path: string) => {
+    navigator.clipboard.writeText(path).then(() => {
+      setToast('Path copied!');
+      setTimeout(() => setToast(null), 2000);
+    });
+  };
+
   // Handle drag and drop (React events - just for visual feedback)
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -355,6 +348,13 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
 
   return (
     <div className="flex flex-col h-full w-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden" data-testid="file-tree-container">
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 bg-green-600/90 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg z-50 animate-in fade-in">
+          {toast}
+        </div>
+      )}
+
       {/* Filter Bar */}
       <div className="h-8 flex items-center px-2 justify-between border-b border-border-dark bg-[#0d1117]">
         <div className="flex items-center gap-1">
@@ -392,7 +392,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
         onDragOver={handleDragOver}
       >
         {flatTree.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-5 text-center" data-testid="empty-state">
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-5 text-center select-none" data-testid="empty-state">
             {searchQuery ? 'No matching files found.' : 'No files indexed. Drag and drop a folder to start.'}
           </div>
         ) : (
@@ -423,28 +423,32 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                       transform: `translateY(${virtualRow.start}px)`,
                       paddingLeft: `${node.level * 12 + 8}px`
                     }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleExpand(node.id);
-                    }}
+                    onClick={() => toggleCheck(node.id, !node.checked)}
                     data-testid="tree-node"
                     data-node-type="folder"
                   >
                     <span
                       className={cn(
-                        "material-symbols-outlined text-[14px] text-white/40 mr-1 cursor-pointer transition-transform",
+                        "material-symbols-outlined text-[14px] text-white/40 mr-1 cursor-pointer transition-transform select-none",
                         node.expanded && "rotate-90"
                       )}
                       data-testid="expand-icon"
                       data-expanded={node.expanded}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpand(node.id);
+                      }}
                     >
-                      expand_more
+                      chevron_right
                     </span>
 
                     <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
                       <div
-                        className="size-2.5 rounded-sm border border-border-dark flex items-center justify-center cursor-pointer"
-                        onClick={() => toggleCheck(node.id, !node.checked)}
+                        className="size-2.5 rounded-sm border border-border-dark flex items-center justify-center cursor-pointer select-none"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCheck(node.id, !node.checked);
+                        }}
                         data-testid="tree-checkbox"
                         data-checked={node.checked}
                       >
@@ -452,13 +456,20 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                       </div>
                     </div>
 
-                    <span className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2" data-testid="tree-icon">folder</span>
-                    <span className="text-[10px] font-medium text-white/70 truncate" data-testid="tree-label">{node.name}</span>
-                    <span className="text-[9px] text-white/30 ml-2 whitespace-nowrap">
+                    <span className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2 select-none" data-testid="tree-icon">folder</span>
+                    <span className="text-[10px] font-medium text-white/70 flex-shrink-0" data-testid="tree-label">{node.name}</span>
+                    <span className="text-[9px] text-white/30 ml-2 flex-1 whitespace-nowrap">
                       ({node.child_count ?? (node.childIds?.length || 0)} items)
                     </span>
-                    <span className="truncate text-white/20 text-[9px] flex-1 text-right pr-2 ml-2">
-                      {node.path}
+                    <span
+                      className="text-white/20 text-[9px] pr-2 ml-2 cursor-pointer hover:text-white/40 transition-colors select-none  min-w-0 truncate"
+                      style={{ direction: 'rtl', textAlign: 'left' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyPathToClipboard(node.path);
+                      }}
+                    >
+                      {node.path.substring(0, node.path.lastIndexOf('\\') !== -1 ? node.path.lastIndexOf('\\') : node.path.lastIndexOf('/'))}
                     </span>
                   </div>
                 );
@@ -483,10 +494,15 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                   data-testid="tree-node"
                   data-node-type="file"
                 >
+                  {/* Invisible spacer to align with folders that have expand arrow */}
+                  <span className="material-symbols-outlined text-[14px] mr-1 invisible select-none">
+                    chevron_right
+                  </span>
+
                   <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-2.5 rounded-sm bg-transparent text-primary focus:ring-0 focus:ring-offset-0"
+                      className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-2.5 rounded-sm bg-transparent text-primary focus:ring-0 focus:ring-offset-0 select-none"
                       checked={node.checked}
                       onChange={() => toggleCheck(node.id, !node.checked)}
                       ref={(el) => { if (el) el.indeterminate = node.indeterminate; }}
@@ -497,21 +513,28 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                   <div className="flex-1 min-w-0 flex items-center gap-2">
                     <span
                       className={cn(
-                        "material-symbols-outlined text-[13px]",
+                        "material-symbols-outlined text-[13px] select-none flex-shrink-0",
                         getFileIconColor(node.name)
                       )}
                       data-testid="tree-icon"
                     >
                       {getFileIconName(node.path)}
                     </span>
-                    <span className="truncate text-white text-[11px]" data-testid="tree-label">{node.name}</span>
-                    {/* Full path display in gray */}
-                    <span className="truncate text-white/20 text-[9px] flex-1 text-right pr-2">
-                      {node.path}
+                    <span className="text-white text-[11px] flex-1 shrink-0" data-testid="tree-label">{node.name}</span>
+                    {/* Parent path display in gray - truncates from left showing end of path */}
+                    <span
+                      className="text-white/20 text-[9px] pr-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
+                      style={{ direction: 'rtl', textAlign: 'left' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyPathToClipboard(node.path);
+                      }}
+                    >
+                      {node.path.substring(0, node.path.lastIndexOf('\\') !== -1 ? node.path.lastIndexOf('\\') : node.path.lastIndexOf('/'))}
                     </span>
                   </div>
 
-                  <div className="px-2">
+                  <div className="px-2 select-none">
                     <span className="text-[9px] font-mono text-white/30">
                       {formatFileSize(node.size || 0)}
                     </span>
