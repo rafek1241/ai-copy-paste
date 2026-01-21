@@ -24,19 +24,31 @@ function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("files");
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [dragActive, setDragActive] = useState(false);
   const promptBuilderRef = useRef<PromptBuilderHandle>(null);
 
   // TODO: Add real token counting logic. For now, using a placeholder or calculating based on file size approximation if possible, 
   // or simple mock to satisfy the UI requirement until backend integration.
   // Assuming a rough estimate or 0 for now until calculated by PromptBuilder or backend.
-  const [tokenCount, setTokenCount] = useState<number>(0);
+  const [tokenCount] = useState<number>(0);
   const tokenLimit = 120000; // Example limit, should probably come from implementation
 
   useEffect(() => {
-    let unlisten: any;
+    let unlistenDragDrop: any;
+    let unlistenDragEnter: any;
+    let unlistenDragLeave: any;
 
     const setupDragDrop = async () => {
-      const unlistenFn = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
+      unlistenDragEnter = await listen("tauri://drag-enter", () => {
+        setDragActive(true);
+      });
+
+      unlistenDragLeave = await listen("tauri://drag-leave", () => {
+        setDragActive(false);
+      });
+
+      unlistenDragDrop = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
+        setDragActive(false);
         const paths = event.payload.paths;
         if (paths && paths.length > 0) {
           for (const path of paths) {
@@ -48,15 +60,14 @@ function App() {
           }
         }
       });
-      unlisten = unlistenFn;
     };
 
     setupDragDrop();
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      if (unlistenDragEnter) unlistenDragEnter();
+      if (unlistenDragLeave) unlistenDragLeave();
+      if (unlistenDragDrop) unlistenDragDrop();
     };
   }, []);
 
@@ -119,7 +130,7 @@ function App() {
         onTabChange={handleSidebarChange}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 relative bg-[#0d1117]">
+      <div className="flex-1 flex flex-col min-w-0 relative bg-background-dark">
         <Header
           onAddFolder={handleAddFolder}
           onSearch={setSearchQuery}
@@ -164,6 +175,14 @@ function App() {
           />
         )}
       </div>
+
+      {dragActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#010409]/50 backdrop-blur-sm">
+          <div className="border-2 border-dashed border-[#c9d1d9] w-96 h-96 flex items-center justify-center rounded-lg">
+            <span className="text-[#c9d1d9] text-2xl font-medium">Drop here</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
