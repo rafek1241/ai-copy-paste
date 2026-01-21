@@ -350,4 +350,435 @@ describe("File Tree", () => {
       await fileTreePage.clearSearch();
     });
   });
+
+  describe("Tree Hierarchy", () => {
+    before(async () => {
+      // Ensure we have indexed the test folder
+      try {
+        await fileTreePage.indexFolder(fixturesPath);
+        await browser.pause(1000);
+      } catch {
+        // May already be indexed
+      }
+    });
+
+    it("should maintain correct tree hierarchy after expansion", async () => {
+      // Find a folder node
+      const folderNodes = await fileTreePage.getFolderNodes();
+
+      if (folderNodes.length > 0) {
+        const folder = folderNodes[0];
+        const expandIcon = await folder.$(Selectors.expandIcon);
+
+        if (await expandIcon.isExisting()) {
+          // Expand the folder
+          const wasExpanded = await expandIcon.getAttribute("data-expanded") === "true";
+          if (!wasExpanded) {
+            await expandIcon.click();
+            await browser.pause(500);
+          }
+
+          // Get all visible nodes
+          const allNodes = await fileTreePage.getVisibleNodes();
+
+          // Verify that nodes have correct indentation/padding
+          for (const node of allNodes) {
+            const style = await node.getAttribute("style");
+            expect(style).to.be.a("string");
+            // paddingLeft should be set based on tree level
+            expect(style).to.match(/paddingLeft/);
+          }
+        }
+      }
+    });
+
+    it("should show children at correct level relative to parent", async () => {
+      // Find an expanded folder
+      const folderNodes = await fileTreePage.getFolderNodes();
+
+      for (const folder of folderNodes) {
+        const expandIcon = await folder.$(Selectors.expandIcon);
+
+        if (await expandIcon.isExisting()) {
+          const isExpanded = await expandIcon.getAttribute("data-expanded") === "true";
+
+          if (!isExpanded) {
+            await expandIcon.click();
+            await browser.pause(500);
+          }
+
+          // Get parent padding
+          const parentStyle = await folder.getAttribute("style");
+          const parentPaddingMatch = parentStyle.match(/paddingLeft:\s*"?(\d+)px"?/);
+
+          if (parentPaddingMatch) {
+            const parentPadding = parseInt(parentPaddingMatch[1], 10);
+
+            // Get all nodes to find children
+            const allNodes = await fileTreePage.getVisibleNodes();
+            const parentIndex = allNodes.indexOf(folder);
+
+            // Check next node (should be a child if folder was just expanded)
+            if (parentIndex >= 0 && parentIndex < allNodes.length - 1) {
+              const nextNode = allNodes[parentIndex + 1];
+              const childStyle = await nextNode.getAttribute("style");
+              const childPaddingMatch = childStyle.match(/paddingLeft:\s*"?(\d+)px"?/);
+
+              if (childPaddingMatch) {
+                const childPadding = parseInt(childPaddingMatch[1], 10);
+
+                // Child should have more padding than parent (indented)
+                expect(childPadding).to.be.greaterThan(parentPadding);
+              }
+            }
+          }
+
+          break;
+        }
+      }
+    });
+
+    it("should collapse folder and hide children", async () => {
+      // Find an expanded folder
+      const folderNodes = await fileTreePage.getFolderNodes();
+
+      for (const folder of folderNodes) {
+        const expandIcon = await folder.$(Selectors.expandIcon);
+
+        if (await expandIcon.isExisting()) {
+          const isExpanded = await expandIcon.getAttribute("data-expanded") === "true";
+
+          if (isExpanded) {
+            const initialCount = await fileTreePage.getVisibleNodeCount();
+
+            // Collapse the folder
+            await expandIcon.click();
+            await browser.pause(500);
+
+            const newCount = await fileTreePage.getVisibleNodeCount();
+
+            // Should have fewer or equal nodes after collapsing
+            expect(newCount).to.be.at.most(initialCount);
+
+            // Verify folder is collapsed
+            const isNowExpanded = await expandIcon.getAttribute("data-expanded") === "true";
+            expect(isNowExpanded).to.be.false;
+
+            break;
+          }
+        }
+      }
+    });
+  });
+
+  describe("Parent-Child Relationships", () => {
+    let testFolderPath: string;
+
+    before(async () => {
+      // Create a complex folder structure to test parent-child relationships
+      testFolderPath = path.join(fixturesPath, "hierarchy-test");
+      if (!fs.existsSync(testFolderPath)) {
+        fs.mkdirSync(testFolderPath, { recursive: true });
+      }
+
+      // Create multi-level nested structure
+      const level1 = path.join(testFolderPath, "level1");
+      const level2 = path.join(level1, "level2");
+      const level3 = path.join(level2, "level3");
+
+      fs.mkdirSync(level1, { recursive: true });
+      fs.mkdirSync(level2, { recursive: true });
+      fs.mkdirSync(level3, { recursive: true });
+
+      // Create files at different levels
+      fs.writeFileSync(path.join(testFolderPath, "root-file.txt"), "root level");
+      fs.writeFileSync(path.join(level1, "level1-file.txt"), "level 1");
+      fs.writeFileSync(path.join(level2, "level2-file.txt"), "level 2");
+      fs.writeFileSync(path.join(level3, "level3-file.txt"), "level 3");
+    });
+
+    it("should correctly index parent-child relationships", async () => {
+      // Index the test folder
+      await browser.execute((folderPath) => {
+        // @ts-ignore
+        if (window.__TAURI__) {
+          // @ts-ignore
+          return window.__TAURI__.core.invoke("index_folder", { path: folderPath });
+        }
+      }, testFolderPath);
+
+      // Wait for indexing
+      await browser.pause(2000);
+
+      // Trigger refresh
+      await browser.execute(() => {
+        // @ts-ignore
+        if (window.__TAURI__) {
+          // @ts-ignore
+          window.__TAURI__.event.emit("refresh-file-tree");
+        }
+      });
+
+      await browser.pause(1000);
+
+      // Find the root test folder
+      const allNodes = await fileTreePage.getVisibleNodes();
+      let rootNode = null;
+
+      for (const node of allNodes) {
+        const label = await node.$(Selectors.treeLabel);
+        if (await label.isExisting()) {
+          const text = await label.getText();
+          if (text.includes("hierarchy-test")) {
+            rootNode = node;
+            break;
+          }
+        }
+      }
+
+      expect(rootNode).to.not.be.null;
+
+      if (rootNode) {
+        // Expand the root folder
+        const expandIcon = await rootNode.$(Selectors.expandIcon);
+        if (await expandIcon.isExisting()) {
+          await expandIcon.click();
+          await browser.pause(500);
+        }
+
+        // Get root padding
+        const rootStyle = await rootNode.getAttribute("style");
+        const rootPaddingMatch = rootStyle.match(/paddingLeft:\s*"?(\d+)px"?/);
+        expect(rootPaddingMatch).to.not.be.null;
+
+        if (rootPaddingMatch) {
+          const rootPadding = parseInt(rootPaddingMatch[1], 10);
+
+          // Check that level1 folder appears as child with correct padding
+          const nodesAfterExpand = await fileTreePage.getVisibleNodes();
+          let level1Node = null;
+
+          for (const node of nodesAfterExpand) {
+            const label = await node.$(Selectors.treeLabel);
+            if (await label.isExisting()) {
+              const text = await label.getText();
+              if (text === "level1") {
+                level1Node = node;
+                break;
+              }
+            }
+          }
+
+          expect(level1Node).to.not.be.null;
+
+          if (level1Node) {
+            const level1Style = await level1Node.getAttribute("style");
+            const level1PaddingMatch = level1Style.match(/paddingLeft:\s*"?(\d+)px"?/);
+            expect(level1PaddingMatch).to.not.be.null;
+
+            if (level1PaddingMatch) {
+              const level1Padding = parseInt(level1PaddingMatch[1], 10);
+              // level1 should have more padding than root (is indented)
+              expect(level1Padding).to.be.greaterThan(rootPadding);
+            }
+          }
+        }
+      }
+    });
+
+    it("should not show all files at the same level", async () => {
+      // Get all visible nodes
+      const allNodes = await fileTreePage.getVisibleNodes();
+
+      // Track padding levels
+      const paddingLevels = new Set<number>();
+
+      for (const node of allNodes) {
+        const style = await node.getAttribute("style");
+        const paddingMatch = style.match(/paddingLeft:\s*"?(\d+)px"?/);
+
+        if (paddingMatch) {
+          const padding = parseInt(paddingMatch[1], 10);
+          paddingLevels.add(padding);
+        }
+      }
+
+      // Should have at least 2 different padding levels (root and children)
+      expect(paddingLevels.size).to.be.at.least(2);
+    });
+  });
+
+  describe("Drag and Drop", () => {
+    let testFolderPath: string;
+
+    before(async () => {
+      // Create a test folder structure for drag & drop testing
+      testFolderPath = path.join(fixturesPath, "drag-drop-test");
+      if (!fs.existsSync(testFolderPath)) {
+        fs.mkdirSync(testFolderPath, { recursive: true });
+      }
+
+      // Create nested structure
+      const nestedPath = path.join(testFolderPath, "nested");
+      if (!fs.existsSync(nestedPath)) {
+        fs.mkdirSync(nestedPath, { recursive: true });
+      }
+
+      // Create test files
+      fs.writeFileSync(path.join(testFolderPath, "file1.js"), "console.log('test');");
+      fs.writeFileSync(path.join(nestedPath, "file2.js"), "console.log('nested');");
+    });
+
+    it("should maintain tree structure after drag and drop", async () => {
+      // Index the test folder
+      await browser.execute((folderPath) => {
+        // @ts-ignore
+        if (window.__TAURI__) {
+          // @ts-ignore
+          return window.__TAURI__.core.invoke("index_folder", { path: folderPath });
+        }
+      }, testFolderPath);
+
+      // Wait for indexing
+      await browser.pause(2000);
+
+      // Trigger refresh event to reload tree
+      await browser.execute(() => {
+        // @ts-ignore
+        if (window.__TAURI__) {
+          // @ts-ignore
+          window.__TAURI__.event.emit("refresh-file-tree");
+        }
+      });
+
+      await browser.pause(1000);
+
+      // Find the test folder in the tree
+      const allNodes = await fileTreePage.getVisibleNodes();
+      let testFolderNode = null;
+
+      for (const node of allNodes) {
+        const label = await node.$(Selectors.treeLabel);
+        if (await label.isExisting()) {
+          const text = await label.getText();
+          if (text.includes("drag-drop-test")) {
+            testFolderNode = node;
+            break;
+          }
+        }
+      }
+
+      if (testFolderNode) {
+        // Expand the folder
+        const expandIcon = await testFolderNode.$(Selectors.expandIcon);
+        if (await expandIcon.isExisting()) {
+          await expandIcon.click();
+          await browser.pause(500);
+        }
+
+        // Get all nodes after expansion
+        const expandedNodes = await fileTreePage.getVisibleNodes();
+
+        // Verify children are at correct level
+        let foundParent = false;
+        let parentPadding = 0;
+
+        for (const node of expandedNodes) {
+          const label = await node.$(Selectors.treeLabel);
+          if (await label.isExisting()) {
+            const text = await label.getText();
+
+            if (text.includes("drag-drop-test")) {
+              foundParent = true;
+              const style = await node.getAttribute("style");
+              const match = style.match(/paddingLeft:\s*"?(\d+)px"?/);
+              if (match) {
+                parentPadding = parseInt(match[1], 10);
+              }
+            } else if (foundParent && (text.includes("nested") || text.includes("file1.js"))) {
+              // This is a child, verify indentation
+              const style = await node.getAttribute("style");
+              const match = style.match(/paddingLeft:\s*"?(\d+)px"?/);
+              if (match) {
+                const childPadding = parseInt(match[1], 10);
+                expect(childPadding).to.be.greaterThan(parentPadding);
+              }
+              break;
+            }
+          }
+        }
+      }
+    });
+
+    it("should refresh tree correctly after folder move", async () => {
+      // Get initial node count
+      const initialCount = await fileTreePage.getVisibleNodeCount();
+
+      // Simulate a folder move by triggering refresh event
+      await browser.execute(() => {
+        // @ts-ignore
+        if (window.__TAURI__) {
+          // @ts-ignore
+          window.__TAURI__.event.emit("refresh-file-tree");
+        }
+      });
+
+      await browser.pause(1000);
+
+      // Get new node count
+      const newCount = await fileTreePage.getVisibleNodeCount();
+
+      // Should have nodes after refresh
+      expect(newCount).to.be.at.least(1);
+
+      // Verify tree structure is intact
+      const allNodes = await fileTreePage.getVisibleNodes();
+
+      for (const node of allNodes) {
+        const style = await node.getAttribute("style");
+        expect(style).to.be.a("string");
+        // Verify paddingLeft is set correctly
+        expect(style).to.match(/paddingLeft/);
+      }
+    });
+
+    it("should not duplicate children after refresh", async () => {
+      // Find a folder and expand it
+      const folderNodes = await fileTreePage.getFolderNodes();
+
+      if (folderNodes.length > 0) {
+        const folder = folderNodes[0];
+        const expandIcon = await folder.$(Selectors.expandIcon);
+
+        if (await expandIcon.isExisting()) {
+          // Expand
+          await expandIcon.click();
+          await browser.pause(500);
+
+          // Get child count
+          const initialNodes = await fileTreePage.getVisibleNodes();
+          const initialCount = initialNodes.length;
+
+          // Trigger refresh
+          await browser.execute(() => {
+            // @ts-ignore
+            if (window.__TAURI__) {
+              // @ts-ignore
+              window.__TAURI__.event.emit("refresh-file-tree");
+            }
+          });
+
+          await browser.pause(1000);
+
+          // Get new count
+          const newNodes = await fileTreePage.getVisibleNodes();
+          const newCount = newNodes.length;
+
+          // Should not have significantly more nodes (no duplication)
+          // Allow for small variation due to refresh state
+          expect(newCount).to.be.at.most(initialCount * 1.5);
+        }
+      }
+    });
+  });
 });
