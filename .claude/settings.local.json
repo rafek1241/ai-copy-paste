@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(cargo test:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(cat:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm ls)",
+      "Bash(npm run test:e2e:*)",
+      "Bash(npm run build:*)",
+      "Bash(cargo build:*)"
     ]
   }
 }
