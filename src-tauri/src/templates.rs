@@ -23,11 +23,7 @@ pub fn get_builtin_templates() -> Vec<PromptTemplate> {
             description: "General purpose AI agent task template".to_string(),
             template: r#"You are an expert software engineer tasked with analyzing and working with the following codebase.
 
-{{custom_instructions}}
-
----CONTEXT:
-
-{{files}}"#.to_string(),
+{{custom_instructions}}"#.to_string(),
         },
         PromptTemplate {
             id: "planning".to_string(),
@@ -41,11 +37,7 @@ Please review these files and provide:
 1. Architecture overview
 2. Key components and their relationships
 3. Potential improvements or concerns
-4. Implementation recommendations
-
----CONTEXT:
-
-{{files}}"#.to_string(),
+4. Implementation recommendations"#.to_string(),
         },
         PromptTemplate {
             id: "debugging".to_string(),
@@ -59,11 +51,7 @@ Please review the code and:
 1. Identify potential bugs or issues
 2. Suggest fixes and improvements
 3. Explain root causes
-4. Recommend best practices
-
----CONTEXT:
-
-{{files}}"#.to_string(),
+4. Recommend best practices"#.to_string(),
         },
         PromptTemplate {
             id: "review".to_string(),
@@ -78,11 +66,7 @@ Please provide:
 2. Potential issues or improvements
 3. Security concerns
 4. Performance considerations
-5. Maintainability suggestions
-
----CONTEXT:
-
-{{files}}"#.to_string(),
+5. Maintainability suggestions"#.to_string(),
         },
         PromptTemplate {
             id: "documentation".to_string(),
@@ -96,11 +80,7 @@ Please generate comprehensive documentation including:
 1. Overview and purpose
 2. Key functions and classes
 3. Usage examples
-4. API documentation
-
----CONTEXT:
-
-{{files}}"#.to_string(),
+4. API documentation"#.to_string(),
         },
         PromptTemplate {
             id: "testing".to_string(),
@@ -114,11 +94,7 @@ Please generate:
 1. Unit test cases
 2. Edge cases to consider
 3. Integration test scenarios
-4. Test data examples
-
----CONTEXT:
-
-{{files}}"#.to_string(),
+4. Test data examples"#.to_string(),
         },
     ]
 }
@@ -140,6 +116,11 @@ pub fn build_prompt(
     // Replace custom instructions
     let instructions = custom_instructions.unwrap_or("No additional instructions provided.");
     prompt = prompt.replace("{{custom_instructions}}", instructions);
+
+    // Ensure {{files}} placeholder exists for templates that don't include it
+    if !prompt.contains("{{files}}") {
+        prompt.push_str("\n\n{{files}}");
+    }
 
     // Build files section with markdown code blocks
     let files_section = if file_contents.is_empty() {
@@ -199,7 +180,7 @@ mod tests {
         assert!(prompt.contains("fn main()"));
         assert!(prompt.contains("<lib.rs>"));
         assert!(prompt.contains("pub fn foo()"));
-        assert!(prompt.contains("---CONTEXT:"));
+        assert!(!prompt.contains("{{files}}"));
     }
 
     #[test]
