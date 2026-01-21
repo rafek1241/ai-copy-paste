@@ -71,40 +71,33 @@ export class AppPage extends BasePage {
   }
 
   /**
-   * Navigate to Main view
+   * Navigate to Files view (main file tree view)
    */
-  async navigateToMain(): Promise<void> {
+  async navigateToFiles(): Promise<void> {
     try {
-      await this.safeClick(Selectors.navMain);
+      await this.safeClick(Selectors.navFiles);
     } catch {
-      // Fallback to finding button by text
-      const buttons = await $$("button");
-      for (const button of buttons) {
-        const text = await button.getText();
-        if (text === "Main") {
-          await button.click();
-          return;
-        }
-      }
+      // Fallback to finding button by title
+      await this.safeClick(FallbackSelectors.navFiles);
     }
     await browser.pause(300); // Wait for navigation
   }
 
   /**
-   * Navigate to Browser Automation view
+   * Navigate to Main view (alias for Files for backward compatibility)
    */
-  async navigateToBrowser(): Promise<void> {
+  async navigateToMain(): Promise<void> {
+    await this.navigateToFiles();
+  }
+
+  /**
+   * Navigate to Prompt view
+   */
+  async navigateToPrompt(): Promise<void> {
     try {
-      await this.safeClick(Selectors.navBrowser);
+      await this.safeClick(Selectors.navPrompt);
     } catch {
-      const buttons = await $$("button");
-      for (const button of buttons) {
-        const text = await button.getText();
-        if (text === "Browser") {
-          await button.click();
-          return;
-        }
-      }
+      await this.safeClick(FallbackSelectors.navPrompt);
     }
     await browser.pause(300);
   }
@@ -116,14 +109,7 @@ export class AppPage extends BasePage {
     try {
       await this.safeClick(Selectors.navHistory);
     } catch {
-      const buttons = await $$("button");
-      for (const button of buttons) {
-        const text = await button.getText();
-        if (text === "History") {
-          await button.click();
-          return;
-        }
-      }
+      await this.safeClick(FallbackSelectors.navHistory);
     }
     await browser.pause(300);
   }
@@ -135,34 +121,35 @@ export class AppPage extends BasePage {
     try {
       await this.safeClick(Selectors.navSettings);
     } catch {
-      const buttons = await $$("button");
-      for (const button of buttons) {
-        const text = await button.getText();
-        if (text === "Settings") {
-          await button.click();
-          return;
-        }
-      }
+      await this.safeClick(FallbackSelectors.navSettings);
     }
     await browser.pause(300);
   }
 
   /**
-   * Get current view by checking which button is active
+   * Get current view by checking which nav button is active
    */
   async getCurrentView(): Promise<string> {
-    const buttons = await $$("button");
+    // Check sidebar buttons for active state (white text = active)
+    const navButtons = [
+      { selector: Selectors.navFiles, name: "files" },
+      { selector: Selectors.navPrompt, name: "prompt" },
+      { selector: Selectors.navHistory, name: "history" },
+      { selector: Selectors.navSettings, name: "settings" },
+    ];
 
-    for (const button of buttons) {
-      const text = await button.getText();
-      const style = await button.getAttribute("style");
-
-      // Active button has different background color
-      if (
-        (text === "Main" || text === "Browser" || text === "History" || text === "Settings") &&
-        style?.includes("#0e639c")
-      ) {
-        return text.toLowerCase();
+    for (const nav of navButtons) {
+      try {
+        const button = await $(nav.selector);
+        if (await button.isExisting()) {
+          const className = await button.getAttribute("class");
+          // Active buttons have "text-white" without opacity modifier
+          if (className?.includes("text-white") && !className?.includes("text-white/")) {
+            return nav.name;
+          }
+        }
+      } catch {
+        // Continue checking other buttons
       }
     }
 
@@ -193,20 +180,60 @@ export class AppPage extends BasePage {
   }
 
   /**
-   * Check if the application is in main view
+   * Check if the application is in files view
    */
-  async isInMainView(): Promise<boolean> {
-    return (await this.getCurrentView()) === "main";
+  async isInFilesView(): Promise<boolean> {
+    return (await this.getCurrentView()) === "files";
   }
 
   /**
-   * Check if file tree is displayed (indicates main view)
+   * Check if the application is in main view (alias for files)
+   */
+  async isInMainView(): Promise<boolean> {
+    return await this.isInFilesView();
+  }
+
+  /**
+   * Check if file tree is displayed (indicates files view)
    */
   async isFileTreeDisplayed(): Promise<boolean> {
     try {
       return await this.isDisplayed(Selectors.fileTreeContainer);
     } catch {
       return await this.isDisplayed(FallbackSelectors.fileTreeContainer);
+    }
+  }
+
+  /**
+   * Check if prompt builder is displayed
+   */
+  async isPromptBuilderDisplayed(): Promise<boolean> {
+    try {
+      return await this.isDisplayed(Selectors.promptBuilder);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if history panel is displayed
+   */
+  async isHistoryDisplayed(): Promise<boolean> {
+    try {
+      return await this.isDisplayed(Selectors.historyContainer);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if settings panel is displayed
+   */
+  async isSettingsDisplayed(): Promise<boolean> {
+    try {
+      return await this.isDisplayed(Selectors.settingsContainer);
+    } catch {
+      return false;
     }
   }
 }

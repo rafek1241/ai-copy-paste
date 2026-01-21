@@ -55,10 +55,11 @@ function getTauriAppPath(): string {
 }
 
 export const config: Options.Testrunner = {
-  // Specify test files - only run simple tests first
+  // Specify test files
   specs: [
     "./tests/diagnostic.spec.ts",
     "./tests/app-launch.spec.ts",
+    "./tests/file-tree.spec.ts",
   ],
   exclude: [],
 

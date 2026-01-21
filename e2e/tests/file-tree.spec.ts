@@ -1,4 +1,5 @@
 import { AppPage, FileTreePage } from "../utils/pages/index.js";
+import { Selectors } from "../utils/selectors.js";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -15,32 +16,32 @@ describe("File Tree", () => {
 
   describe("Initial State", () => {
     it("should display the file tree container", async () => {
-      const container = await $(".file-tree-container");
+      const container = await $(Selectors.fileTreeContainer);
       expect(await container.isDisplayed()).to.be.true;
     });
 
-    it("should display the search input", async () => {
-      const searchInput = await $(".search-input");
-      expect(await searchInput.isDisplayed()).to.be.true;
+    it("should display the Add Folder button", async () => {
+      const addFolderBtn = await $(Selectors.addFolderBtn);
+      expect(await addFolderBtn.isDisplayed()).to.be.true;
     });
 
-    it("should display the Add Folder button", async () => {
-      const addFolderBtn = await $(".add-folder-btn");
-      expect(await addFolderBtn.isDisplayed()).to.be.true;
+    it("should display the search toggle button", async () => {
+      const searchToggleBtn = await $(Selectors.searchToggleBtn);
+      expect(await searchToggleBtn.isDisplayed()).to.be.true;
     });
 
     it("should show empty state when no folders are indexed", async () => {
       // This test assumes fresh state - may need to clear database first
       const emptyStateOrTree = await Promise.race([
         (async () => {
-          const emptyState = await $(".empty-state");
+          const emptyState = await $(Selectors.emptyState);
           if (await emptyState.isExisting()) {
             return "empty";
           }
           return null;
         })(),
         (async () => {
-          const nodes = await $$(".tree-node");
+          const nodes = await $$(Selectors.treeNode);
           if (nodes.length > 0) {
             return "has-nodes";
           }
@@ -107,13 +108,14 @@ describe("File Tree", () => {
       const nodes = await fileTreePage.getVisibleNodes();
       expect(nodes.length).to.be.at.least(1);
 
-      // Check that nodes have icons
+      // Check that nodes have tree-icon elements (Material Symbols)
       for (const node of nodes) {
-        const icon = await node.$(".tree-icon");
+        const icon = await node.$(Selectors.treeIcon);
         if (await icon.isExisting()) {
-          const text = await icon.getText();
-          // Should have folder or file emoji
-          expect(text).to.match(/📁|📄/);
+          // Material Symbols icons contain icon names like "folder", "terminal", etc.
+          const iconText = await icon.getText();
+          expect(iconText).to.be.a("string");
+          expect(iconText.length).to.be.at.least(1);
         }
       }
     });
@@ -132,31 +134,31 @@ describe("File Tree", () => {
 
     it("should expand a folder when clicking the expand icon", async () => {
       // Find a folder node
-      const nodes = await fileTreePage.getVisibleNodes();
+      const folderNodes = await fileTreePage.getFolderNodes();
 
-      for (const node of nodes) {
-        const expandIcon = await node.$(".expand-icon");
+      if (folderNodes.length > 0) {
+        const node = folderNodes[0];
+        const expandIcon = await node.$(Selectors.expandIcon);
+
         if (await expandIcon.isExisting()) {
-          // This is a folder
-          const wasExpanded = await expandIcon.getAttribute("class");
-          const hadExpanded = wasExpanded?.includes("expanded") || false;
+          // Get initial state
+          const wasExpanded = await expandIcon.getAttribute("data-expanded");
+          const initialExpanded = wasExpanded === "true";
 
           // Click to toggle
           await expandIcon.click();
           await browser.pause(500);
 
-          const newClass = await expandIcon.getAttribute("class");
-          const isNowExpanded = newClass?.includes("expanded") || false;
+          // Get new state
+          const isNowExpanded = (await expandIcon.getAttribute("data-expanded")) === "true";
 
           // State should have changed
-          expect(isNowExpanded).to.not.equal(hadExpanded);
+          expect(isNowExpanded).to.not.equal(initialExpanded);
 
           // Toggle back if needed
-          if (isNowExpanded !== hadExpanded) {
+          if (isNowExpanded !== initialExpanded) {
             await expandIcon.click();
           }
-
-          break; // Only test one folder
         }
       }
     });
@@ -164,21 +166,24 @@ describe("File Tree", () => {
     it("should show children when folder is expanded", async () => {
       const initialCount = await fileTreePage.getVisibleNodeCount();
 
-      // Find and expand a folder
-      const nodes = await fileTreePage.getVisibleNodes();
-      for (const node of nodes) {
-        const expandIcon = await node.$(".expand-icon:not(.expanded)");
+      // Find a collapsed folder and expand it
+      const folderNodes = await fileTreePage.getFolderNodes();
+      for (const node of folderNodes) {
+        const expandIcon = await node.$(Selectors.expandIcon);
         if (await expandIcon.isExisting()) {
-          await expandIcon.click();
-          await browser.pause(500);
+          const isExpanded = (await expandIcon.getAttribute("data-expanded")) === "true";
+          if (!isExpanded) {
+            await expandIcon.click();
+            await browser.pause(500);
 
-          const newCount = await fileTreePage.getVisibleNodeCount();
+            const newCount = await fileTreePage.getVisibleNodeCount();
 
-          // Should have more nodes after expanding (if folder has children)
-          // Or same if folder is empty
-          expect(newCount).to.be.at.least(initialCount);
+            // Should have more nodes after expanding (if folder has children)
+            // Or same if folder is empty
+            expect(newCount).to.be.at.least(initialCount);
 
-          break;
+            break;
+          }
         }
       }
     });
@@ -191,10 +196,12 @@ describe("File Tree", () => {
     });
 
     it("should select a file when clicking its checkbox", async () => {
-      const nodes = await fileTreePage.getVisibleNodes();
+      const fileNodes = await fileTreePage.getFileNodes();
 
-      for (const node of nodes) {
-        const checkbox = await node.$("input[type='checkbox']");
+      if (fileNodes.length > 0) {
+        const node = fileNodes[0];
+        const checkbox = await node.$(Selectors.treeCheckbox);
+
         if (await checkbox.isExisting()) {
           const wasSelected = await checkbox.isSelected();
 
@@ -207,7 +214,6 @@ describe("File Tree", () => {
 
           // Toggle back
           await checkbox.click();
-          break;
         }
       }
     });
@@ -217,50 +223,46 @@ describe("File Tree", () => {
       const initialCount = await appPage.getSelectedFilesCount();
 
       // Find and select a file
-      const nodes = await fileTreePage.getVisibleNodes();
-      for (const node of nodes) {
-        const icon = await node.$(".tree-icon");
-        const iconText = await icon.getText();
+      const fileNodes = await fileTreePage.getFileNodes();
+      if (fileNodes.length > 0) {
+        const node = fileNodes[0];
+        const checkbox = await node.$(Selectors.treeCheckbox);
 
-        // Only select files, not folders
-        if (iconText === "📄") {
-          const checkbox = await node.$("input[type='checkbox']");
-          if (await checkbox.isExisting()) {
-            await checkbox.click();
-            await browser.pause(300);
-            break;
-          }
+        if (await checkbox.isExisting()) {
+          await checkbox.click();
+          await browser.pause(300);
+
+          const newCount = await appPage.getSelectedFilesCount();
+          expect(newCount).to.be.at.least(initialCount);
+
+          // Deselect
+          await checkbox.click();
         }
       }
-
-      const newCount = await appPage.getSelectedFilesCount();
-      expect(newCount).to.be.at.least(initialCount);
     });
 
     it("should select all children when selecting a folder", async () => {
       // Find a folder and select it
-      const nodes = await fileTreePage.getVisibleNodes();
+      const folderNodes = await fileTreePage.getFolderNodes();
 
-      for (const node of nodes) {
-        const icon = await node.$(".tree-icon");
-        const iconText = await icon.getText();
+      if (folderNodes.length > 0) {
+        const node = folderNodes[0];
+        const checkbox = await node.$(Selectors.treeCheckbox);
 
-        if (iconText === "📁") {
-          const checkbox = await node.$("input[type='checkbox']");
-          if (await checkbox.isExisting()) {
-            const wasSelected = await checkbox.isSelected();
-            if (!wasSelected) {
-              await checkbox.click();
-              await browser.pause(500);
+        if (await checkbox.isExisting()) {
+          const dataChecked = await checkbox.getAttribute("data-checked");
+          const wasSelected = dataChecked === "true";
 
-              // Check that selection count increased
-              const count = await appPage.getSelectedFilesCount();
-              expect(count).to.be.at.least(0);
+          if (!wasSelected) {
+            await checkbox.click();
+            await browser.pause(500);
 
-              // Deselect
-              await checkbox.click();
-            }
-            break;
+            // Check that selection count increased
+            const count = await appPage.getSelectedFilesCount();
+            expect(count).to.be.at.least(0);
+
+            // Deselect
+            await checkbox.click();
           }
         }
       }
@@ -268,6 +270,18 @@ describe("File Tree", () => {
   });
 
   describe("Search Functionality", () => {
+    it("should expand search input when clicking search toggle", async () => {
+      // Click search toggle
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      await searchToggle.click();
+      await browser.pause(300);
+
+      // Search input should now be visible
+      const searchInput = await $(Selectors.fileTreeSearch);
+      const isDisplayed = await searchInput.isDisplayed();
+      expect(isDisplayed).to.be.true;
+    });
+
     it("should filter tree when searching", async () => {
       const initialCount = await fileTreePage.getVisibleNodeCount();
 
@@ -296,11 +310,13 @@ describe("File Tree", () => {
       if (nodes.length > 0) {
         let hasMatch = false;
         for (const node of nodes) {
-          const label = await node.$(".tree-label");
-          const text = await label.getText();
-          if (text.includes(".ts") || text.includes("ts")) {
-            hasMatch = true;
-            break;
+          const label = await node.$(Selectors.treeLabel);
+          if (await label.isExisting()) {
+            const text = await label.getText();
+            if (text.includes(".ts") || text.includes("ts")) {
+              hasMatch = true;
+              break;
+            }
           }
         }
         // Note: Search might return parent folders too
@@ -312,8 +328,11 @@ describe("File Tree", () => {
     });
 
     it("should debounce search input", async () => {
+      // Expand search first
+      await fileTreePage.expandSearch();
+
       // Type quickly
-      const searchInput = await $(".search-input");
+      const searchInput = await $(Selectors.fileTreeSearch);
       await searchInput.setValue("tes");
       await browser.pause(50);
       await searchInput.addValue("t");

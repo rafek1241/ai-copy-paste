@@ -427,11 +427,17 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                       e.stopPropagation();
                       toggleExpand(node.id);
                     }}
+                    data-testid="tree-node"
+                    data-node-type="folder"
                   >
-                    <span className={cn(
-                      "material-symbols-outlined text-[14px] text-white/40 mr-1 cursor-pointer transition-transform",
-                      node.expanded && "rotate-90"
-                    )}>
+                    <span
+                      className={cn(
+                        "material-symbols-outlined text-[14px] text-white/40 mr-1 cursor-pointer transition-transform",
+                        node.expanded && "rotate-90"
+                      )}
+                      data-testid="expand-icon"
+                      data-expanded={node.expanded}
+                    >
                       expand_more
                     </span>
 
@@ -439,13 +445,15 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                       <div
                         className="size-2.5 rounded-sm border border-border-dark flex items-center justify-center cursor-pointer"
                         onClick={() => toggleCheck(node.id, !node.checked)}
+                        data-testid="tree-checkbox"
+                        data-checked={node.checked}
                       >
                         {node.checked && <div className="size-1.5 bg-primary rounded-[1px]" />}
                       </div>
                     </div>
 
-                    <span className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2">folder</span>
-                    <span className="text-[10px] font-medium text-white/70 truncate">{node.name}</span>
+                    <span className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2" data-testid="tree-icon">folder</span>
+                    <span className="text-[10px] font-medium text-white/70 truncate" data-testid="tree-label">{node.name}</span>
                     <span className="text-[9px] text-white/30 ml-2 whitespace-nowrap">
                       ({node.child_count ?? (node.childIds?.length || 0)} items)
                     </span>
@@ -472,6 +480,8 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                     paddingLeft: `${node.level * 12 + 8}px`
                   }}
                   onClick={() => toggleCheck(node.id, !node.checked)}
+                  data-testid="tree-node"
+                  data-node-type="file"
                 >
                   <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
                     <input
@@ -480,17 +490,21 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                       checked={node.checked}
                       onChange={() => toggleCheck(node.id, !node.checked)}
                       ref={(el) => { if (el) el.indeterminate = node.indeterminate; }}
+                      data-testid="tree-checkbox"
                     />
                   </div>
 
                   <div className="flex-1 min-w-0 flex items-center gap-2">
-                    <span className={cn(
-                      "material-symbols-outlined text-[13px]",
-                      getFileIconColor(node.name)
-                    )}>
+                    <span
+                      className={cn(
+                        "material-symbols-outlined text-[13px]",
+                        getFileIconColor(node.name)
+                      )}
+                      data-testid="tree-icon"
+                    >
                       {getFileIconName(node.path)}
                     </span>
-                    <span className="truncate text-white text-[11px]">{node.name}</span>
+                    <span className="truncate text-white text-[11px]" data-testid="tree-label">{node.name}</span>
                     {/* Full path display in gray */}
                     <span className="truncate text-white/20 text-[9px] flex-1 text-right pr-2">
                       {node.path}

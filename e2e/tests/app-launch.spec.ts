@@ -40,29 +40,42 @@ describe("Application Launch", () => {
     expect(hasAppContainer).to.equal(true, "App container should exist");
   });
 
-  it("should display the app title", async () => {
-    const titleText = await browser.execute(() => {
-      const title = document.querySelector('[data-testid="app-title"]');
-      return title?.textContent || "";
+  it("should have the sidebar", async () => {
+    const hasSidebar = await browser.execute(() => {
+      return document.querySelector('[data-testid="sidebar"]') !== null;
     });
 
-    expect(titleText).to.include("AI Context Collector");
+    expect(hasSidebar).to.equal(true, "Sidebar should exist");
   });
 
   it("should have navigation buttons", async () => {
     const navButtons = await browser.execute(() => {
       return {
-        main: document.querySelector('[data-testid="nav-main"]') !== null,
-        browser: document.querySelector('[data-testid="nav-browser"]') !== null,
+        files: document.querySelector('[data-testid="nav-files"]') !== null,
+        prompt: document.querySelector('[data-testid="nav-prompt"]') !== null,
         history: document.querySelector('[data-testid="nav-history"]') !== null,
         settings: document.querySelector('[data-testid="nav-settings"]') !== null,
       };
     });
 
-    expect(navButtons.main).to.equal(true, "Main nav button should exist");
-    expect(navButtons.browser).to.equal(true, "Browser nav button should exist");
+    expect(navButtons.files).to.equal(true, "Files nav button should exist");
+    expect(navButtons.prompt).to.equal(true, "Prompt nav button should exist");
     expect(navButtons.history).to.equal(true, "History nav button should exist");
     expect(navButtons.settings).to.equal(true, "Settings nav button should exist");
+  });
+
+  it("should have the header with controls", async () => {
+    const headerControls = await browser.execute(() => {
+      return {
+        header: document.querySelector('[data-testid="app-header"]') !== null,
+        addFolder: document.querySelector('[data-testid="add-folder-btn"]') !== null,
+        searchToggle: document.querySelector('[data-testid="search-toggle-btn"]') !== null,
+      };
+    });
+
+    expect(headerControls.header).to.equal(true, "Header should exist");
+    expect(headerControls.addFolder).to.equal(true, "Add folder button should exist");
+    expect(headerControls.searchToggle).to.equal(true, "Search toggle button should exist");
   });
 });
 
@@ -102,9 +115,9 @@ describe("Navigation", () => {
     expect(hasContainer).to.equal(true);
   });
 
-  it("should navigate to Browser view", async () => {
+  it("should navigate to Prompt view", async () => {
     await browser.execute(() => {
-      const btn = document.querySelector('[data-testid="nav-browser"]') as HTMLElement;
+      const btn = document.querySelector('[data-testid="nav-prompt"]') as HTMLElement;
       btn?.click();
     });
 
@@ -117,9 +130,9 @@ describe("Navigation", () => {
     expect(hasContainer).to.equal(true);
   });
 
-  it("should navigate back to Main view", async () => {
+  it("should navigate back to Files view", async () => {
     await browser.execute(() => {
-      const btn = document.querySelector('[data-testid="nav-main"]') as HTMLElement;
+      const btn = document.querySelector('[data-testid="nav-files"]') as HTMLElement;
       btn?.click();
     });
 

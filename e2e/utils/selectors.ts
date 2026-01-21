@@ -8,22 +8,31 @@ export const Selectors = {
   appContainer: '[data-testid="app-container"]',
   appHeader: '[data-testid="app-header"]',
   appTitle: '[data-testid="app-title"]',
-  navMain: '[data-testid="nav-main"]',
-  navBrowser: '[data-testid="nav-browser"]',
+  sidebar: '[data-testid="sidebar"]',
+  navFiles: '[data-testid="nav-files"]',
+  navPrompt: '[data-testid="nav-prompt"]',
   navHistory: '[data-testid="nav-history"]',
   navSettings: '[data-testid="nav-settings"]',
   selectionInfo: '[data-testid="selection-info"]',
 
+  // Header controls
+  addFolderBtn: '[data-testid="add-folder-btn"]',
+  clearContextBtn: '[data-testid="clear-context-btn"]',
+  searchToggleBtn: '[data-testid="search-toggle-btn"]',
+  clearSearchBtn: '[data-testid="clear-search-btn"]',
+
   // File Tree
   fileTreeContainer: '[data-testid="file-tree-container"]',
   fileTreeSearch: '[data-testid="file-tree-search"]',
-  addFolderBtn: '[data-testid="add-folder-btn"]',
   fileTreeScroll: '[data-testid="file-tree-scroll"]',
   emptyState: '[data-testid="empty-state"]',
   treeNode: '[data-testid="tree-node"]',
+  treeNodeFolder: '[data-testid="tree-node"][data-node-type="folder"]',
+  treeNodeFile: '[data-testid="tree-node"][data-node-type="file"]',
   expandIcon: '[data-testid="expand-icon"]',
   treeCheckbox: '[data-testid="tree-checkbox"]',
   treeLabel: '[data-testid="tree-label"]',
+  treeIcon: '[data-testid="tree-icon"]',
 
   // Prompt Builder
   promptBuilder: '[data-testid="prompt-builder"]',
@@ -75,26 +84,30 @@ export const Selectors = {
  */
 export const FallbackSelectors = {
   // App
-  appContainer: ".app-container",
-  appHeader: ".app-header",
+  appContainer: "#root > div",
+  appHeader: "header",
   appTitle: ".app-header h1",
 
-  // Navigation buttons (using text content)
-  navMain: 'button:has-text("Main")',
-  navBrowser: 'button:has-text("Browser")',
-  navHistory: 'button:has-text("History")',
-  navSettings: 'button:has-text("Settings")',
+  // Navigation buttons (sidebar icons by title)
+  navFiles: 'button[title="Files"]',
+  navPrompt: 'button[title="Prompt"]',
+  navHistory: 'button[title="History"]',
+  navSettings: 'button[title="Settings"]',
+
+  // Header controls
+  addFolderBtn: 'button[title="Add Folder to Index"]',
+  clearContextBtn: 'button[title="Clear Context"]',
+  searchToggleBtn: 'button[title="Search"]',
 
   // File Tree
-  fileTreeContainer: ".file-tree-container",
-  fileTreeSearch: ".search-input",
-  addFolderBtn: ".add-folder-btn",
-  fileTreeScroll: ".file-tree-scroll",
-  emptyState: ".empty-state",
-  treeNode: ".tree-node",
-  expandIcon: ".expand-icon",
-  treeCheckbox: ".tree-checkbox",
-  treeLabel: ".tree-label",
+  fileTreeContainer: '[data-testid="file-tree-container"]',
+  fileTreeSearch: 'input[placeholder="Search files..."]',
+  fileTreeScroll: '[data-testid="file-tree-scroll"]',
+  emptyState: '[data-testid="empty-state"]',
+  treeNode: '[data-testid="tree-node"]',
+  expandIcon: '[data-testid="expand-icon"]',
+  treeCheckbox: '[data-testid="tree-checkbox"], input[type="checkbox"]',
+  treeLabel: '[data-testid="tree-label"]',
 
   // Prompt Builder
   templateSelect: 'select:near(label:has-text("Select Template"))',
