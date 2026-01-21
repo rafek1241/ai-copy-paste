@@ -15,7 +15,7 @@ Focuses on the requested application changes to the Prompt Builder.
 ## Phase 2: E2E Test Suite Alignment
 Updating the existing WebdriverIO tests to match the new UI structure and logic.
 
-- [ ] Task: Fix File Tree and Token Counter Tests
+- [~] Task: Fix File Tree and Token Counter Tests
     - [ ] Run `e2e/tests/file-tree.spec.ts` and identify failures
     - [ ] Update selectors for file/folder selection
     - [ ] Verify token count assertions match the new UI
