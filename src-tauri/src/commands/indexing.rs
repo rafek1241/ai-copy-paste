@@ -399,38 +399,41 @@ fn parallel_index_folder(
     // Second pass: batch insert into database
     let mut conn = db.lock()
         .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))?;
-    
-    // Build a path -> parent_path mapping
-    let mut path_to_parent: HashMap<String, Option<String>> = HashMap::new();
-    for entry in &entries {
-        let parent_path = PathBuf::from(&entry.path)
-            .parent()
-            .and_then(|p| p.to_str())
-            .map(|s| s.to_string());
-        path_to_parent.insert(entry.path.clone(), parent_path);
-    }
-    
+
+    // Sort entries by path depth to ensure parents are processed before children
+    let mut sorted_entries = entries;
+    sorted_entries.sort_by_key(|entry| {
+        entry.path.matches(std::path::MAIN_SEPARATOR).count()
+    });
+
+    // Build an in-memory path -> id mapping to track insertions
+    let mut path_to_id: HashMap<String, i64> = HashMap::new();
+
     // Insert in batches of 1000
     const BATCH_SIZE: usize = 1000;
     let mut total_inserted = 0u64;
-    
-    for (batch_idx, chunk) in entries.chunks(BATCH_SIZE).enumerate() {
+
+    for (batch_idx, chunk) in sorted_entries.chunks(BATCH_SIZE).enumerate() {
         let tx = conn.transaction()?;
-        
+
         for entry in chunk {
-            // Get or insert parent_id
-            let parent_id = if let Some(Some(parent_path)) = path_to_parent.get(&entry.path) {
-                // Look up parent in database
-                tx.query_row(
-                    "SELECT id FROM files WHERE path = ?",
-                    params![parent_path],
-                    |row| row.get::<_, i64>(0),
-                )
-                .ok()
-            } else {
-                None
-            };
-            
+            // Get parent_id by looking up parent path
+            let parent_id = PathBuf::from(&entry.path)
+                .parent()
+                .and_then(|p| p.to_str())
+                .and_then(|parent_path| {
+                    // First check in-memory mapping (for this batch)
+                    path_to_id.get(parent_path).copied().or_else(|| {
+                        // Then check database (for previous batches)
+                        tx.query_row(
+                            "SELECT id FROM files WHERE path = ?",
+                            params![parent_path],
+                            |row| row.get::<_, i64>(0),
+                        )
+                        .ok()
+                    })
+                });
+
             // Check if entry already exists
             let existing: Option<(i64, Option<String>)> = tx
                 .query_row(
@@ -440,7 +443,7 @@ fn parallel_index_folder(
                 )
                 .optional()?;
 
-            if let Some((id, existing_fingerprint)) = existing {
+            let current_id = if let Some((id, existing_fingerprint)) = existing {
                 // Entry exists - check if we need to update
                 if existing_fingerprint != entry.fingerprint {
                     tx.execute(
@@ -448,10 +451,11 @@ fn parallel_index_folder(
                         params![entry.size, entry.mtime, entry.fingerprint, entry.name, parent_id, id],
                     )?;
                 }
+                id
             } else {
                 // Insert new entry
                 tx.execute(
-                    "INSERT INTO files (parent_id, name, path, size, mtime, is_dir, fingerprint) 
+                    "INSERT INTO files (parent_id, name, path, size, mtime, is_dir, fingerprint)
                      VALUES (?, ?, ?, ?, ?, ?, ?)",
                     params![
                         parent_id,
@@ -463,9 +467,13 @@ fn parallel_index_folder(
                         entry.fingerprint,
                     ],
                 )?;
-            }
+                tx.last_insert_rowid()
+            };
+
+            // Store the path -> id mapping for future lookups within this session
+            path_to_id.insert(entry.path.clone(), current_id);
         }
-        
+
         tx.commit()?;
         total_inserted += chunk.len() as u64;
         log::debug!("Inserted batch {} ({} entries)", batch_idx + 1, total_inserted);
