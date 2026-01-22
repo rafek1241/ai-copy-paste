@@ -85,7 +85,7 @@ describe('PromptBuilder', () => {
     await builderRef?.buildAndCopy();
 
     await waitFor(() => {
-      expect(screen.getByText(/Please select at least one file/i)).toBeDefined();
+      expect(screen.getByText(/Please select files or enter custom instructions/i)).toBeDefined();
     });
   });
 

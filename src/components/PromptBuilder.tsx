@@ -42,8 +42,8 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
   };
 
   const handleBuildPrompt = async () => {
-    if (selectedFileIds.length === 0) {
-      setError("Please select at least one file");
+    if (selectedFileIds.length === 0 && !customInstructions.trim()) {
+      setError("Please select files or enter custom instructions");
       return;
     }
 

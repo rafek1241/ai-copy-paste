@@ -23,8 +23,10 @@ function App() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [activeTab, setActiveTab] = useState<ActiveTab>("files");
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [dragActive, setDragActive] = useState(false);
+  const [shouldClearFileTree, setShouldClearFileTree] = useState<boolean>(false);
   const promptBuilderRef = useRef<PromptBuilderHandle>(null);
 
   // TODO: Add real token counting logic. For now, using a placeholder or calculating based on file size approximation if possible, 
@@ -71,9 +73,9 @@ function App() {
     };
   }, []);
 
-  const handleSelectionChange = (_paths: string[], ids: number[]) => {
+  const handleSelectionChange = (paths: string[], ids: number[]) => {
     setSelectedFileIds(ids);
-    // In a real app, we might recalculate token count here or request it from backend
+    setSelectedPaths(paths);
   };
 
   const handleSidebarChange = (tab: SidebarTab) => {
@@ -109,8 +111,10 @@ function App() {
 
   const handleClearContext = async () => {
     try {
+      setShouldClearFileTree(true);
       await invoke('clear_index');
       setSelectedFileIds([]);
+      setSelectedPaths([]);
       window.location.reload();
     } catch (error) {
       console.error('Failed to clear index:', error);
@@ -152,6 +156,8 @@ function App() {
                 <FileTree
                   onSelectionChange={handleSelectionChange}
                   searchQuery={searchQuery}
+                  initialSelectedPaths={selectedPaths}
+                  shouldClearSelection={shouldClearFileTree}
                 />
               ) : (
                 <PromptBuilder

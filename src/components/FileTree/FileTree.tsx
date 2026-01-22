@@ -8,9 +8,11 @@ import { cn } from '@/lib/utils';
 interface FileTreeProps {
   onSelectionChange?: (selectedPaths: string[], selectedIds: number[]) => void;
   searchQuery?: string;
+  initialSelectedPaths?: string[];
+  shouldClearSelection?: boolean;
 }
 
-export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQuery = "" }) => {
+export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQuery = "", initialSelectedPaths, shouldClearSelection }) => {
   const [nodesMap, setNodesMap] = useState<Record<number, TreeNode>>({});
   const [rootIds, setRootIds] = useState<number[]>([]);
   const [flatTree, setFlatTree] = useState<TreeNode[]>([]);
@@ -340,6 +342,43 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
       }
     };
   }, [loadRootEntries]);
+
+  // Restore selected state from initialSelectedPaths
+  useEffect(() => {
+    if (initialSelectedPaths && initialSelectedPaths.length > 0 && rootIds.length > 0) {
+      const newMap = { ...nodesMap };
+      const pathsSet = new Set(initialSelectedPaths);
+
+      Object.values(newMap).forEach(node => {
+        if (!node.is_dir && pathsSet.has(node.path)) {
+          newMap[node.id] = { ...node, checked: true };
+          updateParentSelection(newMap, node.parent_id);
+        }
+      });
+
+      setNodesMap(newMap);
+    }
+  }, [initialSelectedPaths, rootIds.length]);
+
+  // Clear all selections when signaled
+  useEffect(() => {
+    if (shouldClearSelection) {
+      const newMap = { ...nodesMap };
+
+      Object.keys(newMap).forEach(id => {
+        const node = newMap[Number(id)];
+        if (node) {
+          newMap[Number(id)] = { ...node, checked: false, indeterminate: false };
+        }
+      });
+
+      setNodesMap(newMap);
+
+      if (onSelectionChange) {
+        onSelectionChange([], []);
+      }
+    }
+  }, [shouldClearSelection, onSelectionChange]);
 
   // Load root entries on mount
   useEffect(() => {
