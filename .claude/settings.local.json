@@ -10,5 +10,8 @@
       "Bash(npm run build:*)",
       "Bash(cargo build:*)"
     ]
+  },
+  "enabledPlugins": {
+    "conductor@conductor": true
   }
 }
