@@ -1,8 +1,0 @@
-{
-  "track_id": "ui_test_fixes_20260119",
-  "type": "bug",
-  "status": "new",
-  "created_at": "2026-01-19T13:45:00Z",
-  "updated_at": "2026-01-19T13:45:00Z",
-  "description": "Fix the UI tests for new UI that I made. Ensure that selection of the file tree, token counting and copy context button works correctly. Refine Prompt Builder logic for template selection and remove variables/manage links."
-}
