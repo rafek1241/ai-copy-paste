@@ -20,6 +20,7 @@ export interface BuildPromptResponse {
 }
 
 export interface FileContent {
+  id: number;
   path: string;
   content: string;
 }

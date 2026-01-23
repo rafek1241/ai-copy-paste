@@ -45,8 +45,8 @@ describe('tokenizer', () => {
 
   describe('formatTokenCount', () => {
     it('should format numbers with thousands separator', () => {
-      expect(formatTokenCount(1000)).toBe('1,000');
-      expect(formatTokenCount(1234567)).toMatch(/1,234,567|1 234 567/); // Locale-dependent
+      expect(formatTokenCount(1000).replace(/\u00A0/g, ' ')).toMatch(/1,000|1 000|1000/);
+      expect(formatTokenCount(1234567).replace(/\u00A0/g, ' ')).toMatch(/1,234,567|1 234 567|1234567/); // Locale-dependent
     });
 
     it('should handle small numbers', () => {

@@ -2,10 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { ScrollArea } from './ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 interface AppSettings {
   excluded_extensions: string[];
@@ -40,7 +37,13 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
     setLoading(true);
     try {
       const loaded = await invoke<AppSettings>('load_settings');
-      setSettings(loaded);
+      if (loaded && typeof loaded === 'object') {
+        setSettings({
+          ...settings,
+          ...loaded,
+          excluded_extensions: loaded.excluded_extensions || [],
+        });
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -149,156 +152,189 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
   };
 
   if (loading) {
-    return <div className="p-5 h-full">Loading settings...</div>;
+    return (
+      <div className="flex-1 flex items-center justify-center bg-[#0d1117] text-white/40">
+        <span className="material-symbols-outlined animate-spin mr-2">progress_activity</span>
+        <span className="text-[11px] font-medium uppercase tracking-widest">Loading Settings...</span>
+      </div>
+    );
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-5 space-y-5">
-        <div className="flex justify-between items-center">
-          <h3 className="text-base font-semibold text-foreground">Settings</h3>
+    <div className="flex-1 flex flex-col bg-[#0d1117] h-full overflow-y-auto custom-scrollbar" data-testid="settings-view">
+      <div className="p-4 space-y-6">
+        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+          <h3 className="text-[14px] font-bold text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-primary">settings</span>
+            Application Settings
+          </h3>
           <div className="flex gap-2">
-            <Button onClick={handleExport} variant="default" size="sm">
-              Export
-            </Button>
-            <Button onClick={handleImport} variant="default" size="sm">
-              Import
-            </Button>
-            <Button onClick={handleReset} variant="destructive" size="sm">
-              Reset to Defaults
-            </Button>
+            <button
+              onClick={handleExport}
+              className="px-3 h-7 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[10px] font-bold text-white transition-all flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[14px]">upload</span>
+              EXPORT
+            </button>
+            <button
+              onClick={handleImport}
+              className="px-3 h-7 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[10px] font-bold text-white transition-all flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[14px]">download</span>
+              IMPORT
+            </button>
+            <button
+              onClick={handleReset}
+              className="px-3 h-7 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded text-[10px] font-bold text-red-500 transition-all flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[14px]">restart_alt</span>
+              RESET
+            </button>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Excluded File Extensions</CardTitle>
-              <CardDescription>
-                Files with these extensions will be skipped during indexing
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex gap-2">
-                <Input
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Files section */}
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <label className="block text-[10px] font-bold text-white/50 uppercase tracking-wider">
+                Excluded Extensions:
+              </label>
+              <div className="flex gap-1.5">
+                <input
                   type="text"
                   value={newExtension}
                   onChange={(e) => setNewExtension(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addExtension()}
-                  placeholder="e.g., .exe or exe"
-                  className="flex-1"
+                  placeholder="e.g. .exe"
+                  className="flex-1 h-8 px-3 bg-white/5 border border-white/10 rounded text-[11px] text-white placeholder:text-white/20 focus:outline-none focus:border-primary/50 transition-colors"
                 />
-                <Button onClick={addExtension} size="sm">
-                  Add
-                </Button>
+                <button
+                  onClick={addExtension}
+                  className="px-3 h-8 bg-primary hover:bg-primary/90 text-white text-[10px] font-bold rounded transition-colors"
+                >
+                  ADD
+                </button>
               </div>
-
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 min-h-[40px] p-2 bg-black/20 rounded-md border border-white/5">
+                {settings.excluded_extensions.length === 0 && (
+                  <span className="text-[10px] text-white/20 italic p-1">No exclusions.</span>
+                )}
                 {settings.excluded_extensions.map((ext) => (
-                  <div key={ext} className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded text-xs text-foreground">
+                  <div key={ext} className="flex items-center gap-1.5 pl-2 pr-1 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-white/70 group hover:border-white/20 transition-colors">
                     <span>{ext}</span>
                     <button
                       onClick={() => removeExtension(ext)}
-                      className="bg-none border-none text-muted-foreground cursor-pointer text-base p-0 w-4 h-4 flex items-center justify-center hover:text-destructive"
-                      title="Remove extension"
+                      className="size-4 flex items-center justify-center text-white/30 hover:text-red-400 transition-colors"
                     >
-                      ×
+                      <span className="material-symbols-outlined text-[12px]">close</span>
                     </button>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Token Limit</CardTitle>
-              <CardDescription>
-                Maximum number of tokens to include in a prompt
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Input
-                type="number"
-                value={settings.token_limit}
-                onChange={(e) => setSettings(prev => ({ ...prev, token_limit: parseInt(e.target.value) || 0 }))}
-                min="1000"
-                max="1000000"
-                step="1000"
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Default Template</CardTitle>
-              <CardDescription>
-                Template to use by default when building prompts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <select
-                value={settings.default_template}
-                onChange={(e) => setSettings(prev => ({ ...prev, default_template: e.target.value }))}
-                className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="agent">Agent</option>
-                <option value="planning">Planning</option>
-                <option value="debugging">Debugging</option>
-                <option value="review">Code Review</option>
-              </select>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Cache Size (MB)</CardTitle>
-              <CardDescription>
-                Maximum size of the text extraction cache
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Input
-                type="number"
-                value={settings.cache_size_mb}
-                onChange={(e) => setSettings(prev => ({ ...prev, cache_size_mb: parseInt(e.target.value) || 0 }))}
-                min="10"
-                max="1000"
-                step="10"
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input
-                  type="checkbox"
-                  checked={settings.auto_save_history}
-                  onChange={(e) => setSettings(prev => ({ ...prev, auto_save_history: e.target.checked }))}
-                  className="w-4 h-4 cursor-pointer"
-                />
-                <span>Automatically save session history</span>
+            <div className="space-y-3">
+              <label className="block text-[10px] font-bold text-white/50 uppercase tracking-wider text-green-400/80">
+                Cache Management:
               </label>
-              <p className="text-xs text-muted-foreground mt-3">
-                When enabled, your file selections will be automatically saved to history
-              </p>
-            </CardContent>
-          </Card>
+              <div className="p-4 bg-white/5 border border-white/10 rounded-md space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="text-[11px] font-bold text-white">Cache Size Limit</div>
+                    <div className="text-[9px] text-white/30">Max extraction storage (MB)</div>
+                  </div>
+                  <input
+                    type="number"
+                    value={settings.cache_size_mb}
+                    onChange={(e) => setSettings(prev => ({ ...prev, cache_size_mb: parseInt(e.target.value) || 0 }))}
+                    className="w-20 h-7 px-2 bg-black/40 border border-white/10 rounded text-[11px] text-white text-right focus:outline-none focus:border-primary/50"
+                    min="10" max="1000" step="10"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Prompt section */}
+          <div className="space-y-6">
+            <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-md">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] font-bold text-white">Token Warning Limit</div>
+                  <div className="text-[9px] text-white/30">Alert when context exceeds this limit</div>
+                </div>
+                <input
+                  type="number"
+                  value={settings.token_limit}
+                  onChange={(e) => setSettings(prev => ({ ...prev, token_limit: parseInt(e.target.value) || 0 }))}
+                  className="w-24 h-7 px-2 bg-black/40 border border-white/10 rounded text-[11px] text-white text-right focus:outline-none focus:border-primary/50"
+                  min="1000" max="1000000" step="1000"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] font-bold text-white">Default AI Template</div>
+                  <div className="text-[9px] text-white/30">Standard instruction for prompts</div>
+                </div>
+                <div className="relative">
+                  <select
+                    value={settings.default_template}
+                    onChange={(e) => setSettings(prev => ({ ...prev, default_template: e.target.value }))}
+                    className="w-32 h-7 pl-2 pr-6 bg-black/40 border border-white/10 rounded text-[11px] text-white appearance-none focus:outline-none focus:border-primary/50"
+                  >
+                    <option value="agent">Agent</option>
+                    <option value="planning">Planning</option>
+                    <option value="debugging">Debugging</option>
+                    <option value="review">Review</option>
+                  </select>
+                  <span className="absolute right-1 top-1/2 -translate-y-1/2 material-symbols-outlined text-[14px] text-white/20 pointer-events-none">expand_more</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white/5 border border-white/10 rounded-md">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="pt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={settings.auto_save_history}
+                    onChange={(e) => setSettings(prev => ({ ...prev, auto_save_history: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="size-4 border border-white/20 rounded bg-black/40 peer-checked:bg-primary peer-checked:border-primary transition-all flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[12px] text-white scale-0 peer-checked:scale-100 transition-transform">check</span>
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-[11px] font-bold text-white group-hover:text-primary transition-colors">Auto-save History</div>
+                  <div className="text-[9px] text-white/30 leading-relaxed">Persist file selections to history automatically on building prompt.</div>
+                </div>
+              </label>
+            </div>
+          </div>
         </div>
 
-        <div className="mt-6 pt-4 border-t border-border">
-          <Button
+        <div className="pt-4 mt-4 border-t border-white/5">
+          <button
             onClick={saveSettings}
             disabled={saving}
-            className="w-full"
-            size="lg"
+            className={cn(
+              "w-full h-10 rounded font-bold text-[11px] tracking-widest uppercase transition-all flex items-center justify-center gap-2",
+              saving ? "bg-white/5 text-white/20 cursor-wait" : "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/10 active:scale-[0.99]"
+            )}
           >
-            {saving ? 'Saving...' : 'Save Settings'}
-          </Button>
+            {saving ? (
+              <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+            ) : (
+              <span className="material-symbols-outlined text-[16px]">save</span>
+            )}
+            {saving ? 'SAVING...' : 'SAVE CONFIGURATION'}
+          </button>
         </div>
       </div>
-    </ScrollArea>
+    </div>
   );
 };
 

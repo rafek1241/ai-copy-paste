@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button } from './ui/button';
-import { Card, CardContent } from './ui/card';
-import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
 
 interface HistoryEntry {
@@ -123,123 +120,147 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
     return new Date(timestamp * 1000).toLocaleString();
   };
 
-  const getStatusIcon = (id: number) => {
-    const result = validationResults.get(id);
-    if (!result) return '⏳';
-    return result.valid ? '✓' : '⚠️';
-  };
-
-  const getStatusText = (id: number) => {
-    const result = validationResults.get(id);
-    if (!result) return 'Validating...';
-    if (result.valid) return 'All paths valid';
-    return `${result.missing_paths.length} path(s) missing`;
-  };
 
   if (loading && history.length === 0) {
-    return <div className="p-5 h-full">Loading history...</div>;
+    return (
+      <div className="flex-1 flex items-center justify-center bg-[#0d1117] text-white/40">
+        <span className="material-symbols-outlined animate-spin mr-2">progress_activity</span>
+        <span className="text-[11px] font-medium uppercase tracking-widest">Loading History...</span>
+      </div>
+    );
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-5 space-y-5">
-        <div className="flex justify-between items-center">
-          <h3 className="text-base font-semibold text-foreground">Session History</h3>
+    <div className="flex-1 flex flex-col bg-[#0d1117] h-full overflow-y-auto custom-scrollbar" data-testid="history-view">
+      <div className="p-4 space-y-4">
+        <div className="flex items-center justify-between border-b border-white/5 pb-4 mb-2">
+          <h3 className="text-[14px] font-bold text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-primary">history</span>
+            Session History
+          </h3>
           {history.length > 0 && (
-            <Button onClick={handleClearAll} variant="destructive" size="sm">
-              Clear All
-            </Button>
+            <button
+              onClick={handleClearAll}
+              className="px-3 h-7 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded text-[10px] font-bold text-red-500 transition-all flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+              CLEAR ALL
+            </button>
           )}
         </div>
 
         {history.length === 0 ? (
-          <div className="text-center py-10 px-5 text-muted-foreground">
-            <p>No history entries yet</p>
-            <p className="text-[13px] mt-2">Your recent sessions will appear here</p>
+          <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+            <div className="size-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+              <span className="material-symbols-outlined text-white/20 text-[24px]">history_toggle_off</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest">No entries found</p>
+              <p className="text-[10px] text-white/20">Your recent context sessions will appear here.</p>
+            </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="space-y-2">
             {history.map((entry) => (
-              <Card key={entry.id}>
+              <div
+                key={entry.id}
+                className={cn(
+                  "border rounded-md transition-all overflow-hidden",
+                  expandedEntries.has(entry.id!) ? "bg-white/5 border-white/20 shadow-lg" : "bg-white/[0.02] border-white/5 hover:border-white/10"
+                )}
+              >
                 <div
-                  className="flex justify-between items-center p-3 cursor-pointer transition-colors hover:bg-accent"
+                  className="flex items-center gap-3 p-3 cursor-pointer select-none"
                   onClick={() => toggleExpanded(entry.id!)}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg" title={getStatusText(entry.id!)}>
-                      {getStatusIcon(entry.id!)}
+                  <div className={cn(
+                    "size-8 rounded flex items-center justify-center",
+                    validationResults.get(entry.id!)?.valid ? "bg-green-500/10 text-green-500" : "bg-yellow-500/10 text-yellow-500"
+                  )}>
+                    <span className="material-symbols-outlined text-[18px]">
+                      {validationResults.get(entry.id!)?.valid ? 'check_circle' : 'warning'}
                     </span>
-                    <div className="flex flex-col gap-1">
-                      <div className="text-[13px] text-foreground font-medium">{formatDate(entry.created_at)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {entry.selected_paths.length} file(s) • {entry.root_paths.length} root(s)
-                        {entry.template_id && ` • Template: ${entry.template_id}`}
-                      </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-white tracking-tight">{formatDate(entry.created_at)}</span>
+                      {!validationResults.get(entry.id!)?.valid && (
+                        <span className="px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-500/20 rounded text-[8px] font-bold text-yellow-500 uppercase tracking-tighter">
+                          MISSING ASSETS
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[9px] text-white/30 truncate mt-0.5">
+                      {entry.selected_paths.length} files • {entry.root_paths.length} root directories
                     </div>
                   </div>
-                  <span className="text-muted-foreground text-xs">{expandedEntries.has(entry.id!) ? '▼' : '▶'}</span>
+
+                  <span className={cn(
+                    "material-symbols-outlined text-[18px] text-white/20 transition-transform duration-300",
+                    expandedEntries.has(entry.id!) && "rotate-180"
+                  )}>
+                    expand_more
+                  </span>
                 </div>
 
                 {expandedEntries.has(entry.id!) && (
-                  <CardContent className="pt-0 pb-4 px-4 border-t border-border">
-                    <div className="mt-3 space-y-3">
-                      <div>
-                        <strong className="block mb-1.5 text-[13px] text-foreground">Root Paths:</strong>
-                        <ul className="list-none text-xs text-muted-foreground max-h-[200px] overflow-y-auto">
-                          {entry.root_paths.map((path, idx) => (
-                            <li key={idx} className="py-1 break-all">{path}</li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div>
-                        <strong className="block mb-1.5 text-[13px] text-foreground">
-                          Selected Files ({entry.selected_paths.length}):
-                        </strong>
-                        <ul className="list-none text-xs text-muted-foreground max-h-[200px] overflow-y-auto">
-                          {entry.selected_paths.slice(0, 10).map((path, idx) => {
+                  <div className="px-4 pb-4 space-y-4 border-t border-white/5 pt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <h4 className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Selected Files</h4>
+                        <div className="max-h-32 overflow-y-auto custom-scrollbar pr-2 space-y-1">
+                          {entry.selected_paths.slice(0, 50).map((path, idx) => {
                             const isMissing = validationResults.get(entry.id!)?.missing_paths.includes(path);
                             return (
-                              <li key={idx} className={cn("py-1 break-all", isMissing && "text-destructive")}>
-                                {path}
-                                {isMissing && <span className="italic"> (missing)</span>}
-                              </li>
+                              <div key={idx} className={cn(
+                                "text-[10px] truncate p-1 rounded",
+                                isMissing ? "bg-red-500/5 text-red-400/80 line-through" : "text-white/60"
+                              )}>
+                                {path.split(/[\\/]/).pop()}
+                                <span className="text-[8px] text-white/10 ml-2">{path}</span>
+                              </div>
                             );
                           })}
-                          {entry.selected_paths.length > 10 && (
-                            <li className="text-primary italic">
-                              ... and {entry.selected_paths.length - 10} more
-                            </li>
+                          {entry.selected_paths.length > 50 && (
+                            <div className="text-[10px] text-primary italic pt-1">+ {entry.selected_paths.length - 50} more files</div>
                           )}
-                        </ul>
+                        </div>
                       </div>
 
-                      {entry.custom_prompt && (
+                      <div className="space-y-4">
                         <div>
-                          <strong className="block mb-1.5 text-[13px] text-foreground">Custom Prompt:</strong>
-                          <div className="text-[13px] text-muted-foreground p-2 bg-background rounded whitespace-pre-wrap break-words">
-                            {entry.custom_prompt}
+                          <h4 className="text-[9px] font-bold text-white/40 uppercase tracking-widest mb-2">Instructions</h4>
+                          <div className="p-2 bg-black/40 border border-white/5 rounded text-[10px] text-white/50 min-h-[40px] italic">
+                            {entry.template_id || 'Custom'} Template • {entry.custom_prompt?.substring(0, 100) || 'No custom instructions'}...
                           </div>
                         </div>
-                      )}
 
-                      <div className="flex gap-2 mt-3">
-                        <Button onClick={() => handleRestore(entry)} variant="default" size="sm">
-                          Restore Session
-                        </Button>
-                        <Button onClick={() => handleDelete(entry.id!)} variant="secondary" size="sm">
-                          Delete
-                        </Button>
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={() => handleRestore(entry)}
+                            className="flex-1 h-8 bg-primary hover:bg-primary/90 text-white text-[10px] font-bold rounded shadow-lg shadow-primary/10 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">history_edu</span>
+                            RESTORE SESSION
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry.id!)}
+                            className="px-3 h-8 bg-white/5 hover:bg-white/10 border border-white/10 text-white/40 hover:text-red-400 transition-colors rounded"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </CardContent>
+                  </div>
                 )}
-              </Card>
+              </div>
             ))}
           </div>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 };
 

@@ -1,33 +1,32 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import {
   getTemplates,
-  buildPromptFromFiles,
   PromptTemplate,
-  BuildPromptResponse,
 } from "../services/prompts";
-import { TokenCounter } from "./TokenCounter";
-import { ModelName } from "../services/tokenizer";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ScrollArea } from "./ui/scroll-area";
+import { assemblePrompt } from "../services/assembly";
+import { cn } from "@/lib/utils";
 
 interface PromptBuilderProps {
   selectedFileIds: number[];
   onPromptBuilt?: (prompt: string) => void;
 }
 
-export const PromptBuilder: React.FC<PromptBuilderProps> = ({
+export interface PromptBuilderHandle {
+  buildAndCopy: () => Promise<void>;
+}
+
+export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>(({
   selectedFileIds,
   onPromptBuilt,
-}) => {
+}, ref) => {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("agent");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [customInstructions, setCustomInstructions] = useState<string>("");
-  const [builtPrompt, setBuiltPrompt] = useState<string>("");
-  const [isBuilding, setIsBuilding] = useState(false);
   const [error, setError] = useState<string>("");
-  const [buildResponse, setBuildResponse] = useState<BuildPromptResponse | null>(null);
-  const [selectedModel, setSelectedModel] = useState<ModelName>("gpt-4o");
+
+  useImperativeHandle(ref, () => ({
+    buildAndCopy: handleBuildPrompt
+  }));
 
   useEffect(() => {
     loadTemplates();
@@ -36,30 +35,33 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
   const loadTemplates = async () => {
     try {
       const templateList = await getTemplates();
-      setTemplates(templateList);
+      setTemplates(templateList.filter(t => t.id !== 'custom'));
     } catch (err) {
       setError(`Failed to load templates: ${err}`);
     }
   };
 
   const handleBuildPrompt = async () => {
-    if (selectedFileIds.length === 0) {
-      setError("Please select at least one file");
+    if (selectedFileIds.length === 0 && !customInstructions.trim()) {
+      setError("Please select files or enter custom instructions");
       return;
     }
 
-    setIsBuilding(true);
     setError("");
 
     try {
-      const response = await buildPromptFromFiles({
-        template_id: selectedTemplate,
-        custom_instructions: customInstructions || undefined,
-        file_ids: selectedFileIds,
-      });
+      // Use the "custom" template which is just a pass-through
+      // If the user's instructions don't include the files placeholder, append it
+      let finalInstructions = customInstructions || "";
+      if (!finalInstructions.includes("{{files}}")) {
+        finalInstructions += "\n\n---CONTEXT:\n\n{{files}}";
+      }
 
-      setBuiltPrompt(response.prompt);
-      setBuildResponse(response);
+      const response = await assemblePrompt({
+        templateId: "custom",
+        customInstructions: finalInstructions,
+        fileIds: selectedFileIds,
+      });
 
       // Copy to clipboard automatically
       await navigator.clipboard.writeText(response.prompt);
@@ -69,144 +71,94 @@ export const PromptBuilder: React.FC<PromptBuilderProps> = ({
       }
     } catch (err) {
       setError(`Failed to build prompt: ${err}`);
-    } finally {
-      setIsBuilding(false);
+      throw err;
     }
   };
-
-  const handleCopyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(builtPrompt);
-      alert("Prompt copied to clipboard!");
-    } catch (err) {
-      setError(`Failed to copy to clipboard: ${err}`);
-    }
-  };
-
-  const selectedTemplateObj = templates.find((t) => t.id === selectedTemplate);
 
   return (
-    <div className="p-5 max-w-7xl mx-auto space-y-5">
-      <h2 className="text-xl font-semibold mb-5">Prompt Builder</h2>
-
-      {/* Template Selection */}
-      <div className="space-y-2">
-        <label className="block font-semibold text-sm">
-          Select Template:
-        </label>
-        <select
-          value={selectedTemplate}
-          onChange={(e) => setSelectedTemplate(e.target.value)}
-          className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
-        </select>
-        {selectedTemplateObj && (
-          <div className="mt-2 text-xs text-muted-foreground italic">
-            {selectedTemplateObj.description}
-          </div>
-        )}
-      </div>
-
-      {/* Model Selection */}
-      <div className="space-y-2">
-        <label className="block font-semibold text-sm">
-          Target AI Model:
-        </label>
-        <select
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value as ModelName)}
-          className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          <option value="gpt-4o">GPT-4o (128K tokens)</option>
-          <option value="gpt-4o-mini">GPT-4o Mini (128K tokens)</option>
-          <option value="gpt-4-turbo">GPT-4 Turbo (128K tokens)</option>
-          <option value="gpt-4">GPT-4 (8K tokens)</option>
-          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (16K tokens)</option>
-          <option value="claude-3-opus">Claude 3 Opus (200K tokens)</option>
-          <option value="claude-3-sonnet">Claude 3 Sonnet (200K tokens)</option>
-          <option value="claude-3-haiku">Claude 3 Haiku (200K tokens)</option>
-          <option value="gemini-pro">Gemini Pro (32K tokens)</option>
-        </select>
-      </div>
-
+    <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-[#0d1117] p-3 gap-4" data-testid="prompt-builder">
       {/* Custom Instructions */}
-      <div className="space-y-2">
-        <label className="block font-semibold text-sm">
-          Custom Instructions (optional):
-        </label>
-        <textarea
-          value={customInstructions}
-          onChange={(e) => setCustomInstructions(e.target.value)}
-          placeholder="Add any specific instructions or context..."
-          className="w-full min-h-[100px] px-3 py-2 text-sm rounded-md border border-input bg-background font-mono resize-y focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+      <div className="flex flex-col gap-2">
+        <label className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Custom Instructions</label>
+        <div className="relative">
+          <textarea
+            className="w-full h-32 bg-[#161b22] border border-border-dark rounded-md p-3 text-white/90 placeholder-white/20 font-mono text-[11px] leading-relaxed resize-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+            placeholder="Describe how the context should be processed..."
+            value={customInstructions}
+            onChange={(e) => setCustomInstructions(e.target.value)}
+            data-testid="custom-instructions"
+          ></textarea>
+
+        </div>
       </div>
 
-      {/* File Selection Info */}
-      <Card>
-        <CardContent className="pt-6">
-          <span className="font-semibold">Selected Files:</span> {selectedFileIds.length}
-          {buildResponse && (
-            <span className="ml-5 text-muted-foreground">
-              ({buildResponse.file_count} files, {buildResponse.total_chars.toLocaleString()} characters)
-            </span>
-          )}
-        </CardContent>
-      </Card>
+      {/* Templates */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Templates</label>
 
-      {/* Build Button */}
-      <Button
-        onClick={handleBuildPrompt}
-        disabled={isBuilding || selectedFileIds.length === 0}
-        className="w-full"
-        size="lg"
-      >
-        {isBuilding ? "Building..." : "Build & Copy to Clipboard"}
-      </Button>
 
-      {/* Error Display */}
-      {error && (
-        <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm">
-          {error}
+        <div className="grid grid-cols-2 gap-2" data-testid="templates-grid">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              onClick={() => {
+                setSelectedTemplate(template.id);
+                setCustomInstructions(template.template);
+              }}
+              className={cn(
+                "flex flex-col gap-1 p-2 rounded border transition-all text-left group",
+                selectedTemplate === template.id
+                  ? "bg-[#161b22] border-primary/50 ring-1 ring-primary/20"
+                  : "border-border-dark bg-[#161b22]/50 hover:bg-[#161b22] hover:border-white/20"
+              )}
+            >
+              <div className={cn(
+                "flex items-center gap-1.5 group-hover:text-blue-300",
+                getTemplateColor(template.id)
+              )}>
+                <span className="material-symbols-outlined text-[16px]">{getTemplateIcon(template.id)}</span>
+                <span className="text-[10px] font-semibold text-white/90">{template.name}</span>
+              </div>
+              <p className="text-[9px] text-white/40 line-clamp-2">{template.description}</p>
+            </button>
+          ))}
         </div>
-      )}
 
-      {/* Token Counter */}
-      {builtPrompt && (
-        <div>
-          <TokenCounter text={builtPrompt} modelName={selectedModel} />
+        <div className="mt-2 p-2 rounded border border-dashed border-border-dark flex items-center justify-center gap-2 text-white/30 hover:text-white/50 hover:border-white/20 cursor-pointer transition-colors">
+          <span className="material-symbols-outlined text-[14px]">add_circle</span>
+          <span className="text-[10px]">Create New Template</span>
         </div>
-      )}
+      </div>
 
-      {/* Prompt Preview */}
-      {builtPrompt && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Prompt Preview</CardTitle>
-              <Button
-                onClick={handleCopyToClipboard}
-                variant="default"
-                size="sm"
-              >
-                📋 Copy to Clipboard
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[500px] w-full rounded-md border p-4">
-              <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
-                {builtPrompt}
-              </pre>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+      {
+        error && (
+          <div className="p-2 bg-red-900/20 border border-red-900/50 text-red-200 rounded text-[10px]" data-testid="error-display">
+            {error}
+          </div>
+        )
+      }
+    </div >
   );
-};
+});
+
+function getTemplateIcon(id: string): string {
+  switch (id) {
+    case 'agent': return 'smart_toy';
+    case 'refactor': return 'architecture';
+    case 'fix': return 'bug_report'; // Assuming 'Find Bugs' maps to 'fix'
+    case 'explain': return 'menu_book';
+    case 'audit': return 'security'; // Security audit
+    default: return 'description';
+  }
+}
+
+function getTemplateColor(id: string): string {
+  switch (id) {
+    case 'agent': return 'text-blue-400';
+    case 'refactor': return 'text-green-400';
+    case 'fix': return 'text-red-400';
+    case 'explain': return 'text-purple-400';
+    case 'audit': return 'text-yellow-400';
+    default: return 'text-blue-400';
+  }
+}

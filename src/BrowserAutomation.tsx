@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 
 /**
  * BrowserAutomation component - Test interface for Phase 6 browser automation
@@ -57,26 +59,20 @@ function BrowserAutomation() {
   }
 
   return (
-    <div style={{ padding: "20px", margin: "0 auto", height: "100%", overflowY: "auto" }}>
-      <h1>🤖 AI Context Collector - Browser Automation Test</h1>
-      <p style={{ color: "#666", marginBottom: "30px" }}>
+    <div className="p-5 mx-auto h-full overflow-y-auto">
+      <h1 className="text-2xl font-bold mb-2">🤖 AI Context Collector - Browser Automation Test</h1>
+      <p className="text-muted-foreground mb-8">
         Test Phase 6: Browser automation with Playwright
       </p>
 
-      <div style={{ marginBottom: "20px" }}>
-        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+      <div className="mb-5">
+        <label className="block mb-2 font-bold text-sm">
           AI Interface:
         </label>
         <select
           value={interface_}
           onChange={(e) => setInterface(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px",
-            fontSize: "14px",
-            borderRadius: "4px",
-            border: "1px solid #ccc",
-          }}
+          className="w-full p-2.5 text-sm rounded-md border border-input bg-background"
         >
           {availableInterfaces.length > 0 ? (
             availableInterfaces.map((iface) => (
@@ -95,99 +91,57 @@ function BrowserAutomation() {
         </select>
       </div>
 
-      <div style={{ marginBottom: "20px" }}>
-        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+      <div className="mb-5">
+        <label className="block mb-2 font-bold text-sm">
           Prompt Text:
         </label>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px",
-            fontSize: "14px",
-            borderRadius: "4px",
-            border: "1px solid #ccc",
-            minHeight: "150px",
-            fontFamily: "monospace",
-          }}
+          className="w-full p-2.5 text-sm rounded-md border border-input bg-background min-h-[150px] font-mono"
           placeholder="Enter your prompt here..."
         />
-        <div style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+        <div className="text-xs text-muted-foreground mt-1">
           {prompt.length} characters
         </div>
       </div>
 
-      <div style={{ marginBottom: "20px" }}>
-        <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+      <div className="mb-5">
+        <label className="block mb-2 font-bold text-sm">
           Custom URL (optional):
         </label>
-        <input
+        <Input
           type="text"
           value={customUrl}
           onChange={(e) => setCustomUrl(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px",
-            fontSize: "14px",
-            borderRadius: "4px",
-            border: "1px solid #ccc",
-          }}
           placeholder="Leave empty to use default URL"
         />
       </div>
 
-      <button
+      <Button
         onClick={launchBrowser}
         disabled={loading}
-        style={{
-          width: "100%",
-          padding: "12px",
-          fontSize: "16px",
-          fontWeight: "bold",
-          backgroundColor: loading ? "#ccc" : "#007bff",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: loading ? "not-allowed" : "pointer",
-        }}
+        className="w-full py-3 text-base font-bold"
+        size="lg"
       >
         {loading ? "Launching..." : "🚀 Launch Browser"}
-      </button>
+      </Button>
 
       {status && (
-        <div
-          style={{
-            marginTop: "20px",
-            padding: "12px",
-            backgroundColor: "#d4edda",
-            border: "1px solid #c3e6cb",
-            borderRadius: "4px",
-            color: "#155724",
-          }}
-        >
+        <div className="mt-5 p-3 bg-green-50 border border-green-200 rounded-md text-green-800">
           {status}
         </div>
       )}
 
       {error && (
-        <div
-          style={{
-            marginTop: "20px",
-            padding: "12px",
-            backgroundColor: "#f8d7da",
-            border: "1px solid #f5c6cb",
-            borderRadius: "4px",
-            color: "#721c24",
-          }}
-        >
+        <div className="mt-5 p-3 bg-red-50 border border-red-200 rounded-md text-red-800">
           {error}
         </div>
       )}
 
-      <div style={{ marginTop: "40px", padding: "20px", backgroundColor: "#f8f9fa", borderRadius: "4px" }}>
-        <h3>How it works:</h3>
-        <ol>
+      <div className="mt-10 p-5 bg-muted rounded-lg">
+        <h3 className="text-lg font-semibold mb-3">How it works:</h3>
+        <ol className="list-decimal list-inside space-y-1 mb-4">
           <li>Select an AI interface (ChatGPT, Claude, etc.)</li>
           <li>Enter your prompt text</li>
           <li>Click "Launch Browser"</li>
@@ -196,8 +150,8 @@ function BrowserAutomation() {
           <li>The browser stays open for you to review and submit</li>
         </ol>
 
-        <h3 style={{ marginTop: "20px" }}>Key Features:</h3>
-        <ul>
+        <h3 className="text-lg font-semibold mb-3">Key Features:</h3>
+        <ul className="list-disc list-inside space-y-1">
           <li>✓ Browser remains open after automation</li>
           <li>✓ Multiple fallback selectors for robustness</li>
           <li>✓ Anti-automation detection mitigations</li>
