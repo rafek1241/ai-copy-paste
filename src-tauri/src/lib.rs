@@ -2,6 +2,7 @@ mod cache;
 mod commands;
 mod db;
 mod error;
+pub mod gitignore;
 mod templates;
 
 use cache::TextCache;

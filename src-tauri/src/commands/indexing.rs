@@ -1,5 +1,6 @@
 use crate::db::DbConnection;
 use crate::error::{AppError, AppResult};
+use crate::gitignore::GitignoreManager;
 use rayon::prelude::*;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -11,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
+
+use super::settings::load_settings_internal;
 
 /// Progress information for indexing operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -324,12 +327,33 @@ fn parallel_index_folder(
     db: &DbConnection,
 ) -> AppResult<u64> {
     log::info!("Starting parallel traversal of {:?}", root);
-    
+
+    // Load settings to check respect_gitignore flag
+    let settings = load_settings_internal(db).unwrap_or_default();
+    let respect_gitignore = settings.respect_gitignore;
+    log::info!("Gitignore support: {}", if respect_gitignore { "enabled" } else { "disabled" });
+
+    // Create gitignore manager and discover .gitignore files if enabled
+    let gitignore_manager = if respect_gitignore {
+        let mut manager = GitignoreManager::new(root);
+        match manager.discover_gitignores(root) {
+            Ok(count) => log::info!("Loaded {} .gitignore files", count),
+            Err(e) => log::warn!("Error discovering .gitignore files: {}", e),
+        }
+        Some(Arc::new(manager))
+    } else {
+        None
+    };
+
     // First pass: collect all entries using parallel walkdir
     let processed_count = Arc::new(AtomicU64::new(0));
     let error_count = Arc::new(AtomicU64::new(0));
+    let ignored_count = Arc::new(AtomicU64::new(0));
     let last_progress_time = Arc::new(Mutex::new(Instant::now()));
-    
+
+    // Clone Arc for closure
+    let gitignore_manager_clone = gitignore_manager.clone();
+
     // Collect entries with parallel iteration
     let entries: Vec<FileEntry> = WalkDir::new(root)
         .follow_links(false) // Don't follow symlinks to avoid cycles
@@ -337,7 +361,7 @@ fn parallel_index_folder(
         .par_bridge() // Enable parallel processing
         .filter_map(|entry_result| {
             let count = processed_count.fetch_add(1, Ordering::Relaxed);
-            
+
             // Throttle progress events to max 10 per second
             let should_emit = {
                 let mut last_time = last_progress_time.lock().unwrap();
@@ -349,24 +373,24 @@ fn parallel_index_folder(
                     false
                 }
             };
-            
+
             if should_emit {
                 let current_path = entry_result.as_ref()
                     .map(|e| e.path().to_string_lossy().to_string())
                     .unwrap_or_else(|_| "Unknown".to_string());
-                    
+
                 let progress = IndexProgress {
                     processed: count,
                     total_estimate: count + 100, // Rough estimate
                     current_path,
                     errors: error_count.load(Ordering::Relaxed),
                 };
-                
+
                 if let Err(e) = app.emit("indexing-progress", &progress) {
                     log::warn!("Failed to emit progress event: {}", e);
                 }
             }
-            
+
             match entry_result {
                 Ok(entry) => {
                     // Skip symlinks
@@ -374,7 +398,17 @@ fn parallel_index_folder(
                         log::debug!("Skipping symlink: {:?}", entry.path());
                         return None;
                     }
-                    
+
+                    // Check gitignore patterns if enabled
+                    if let Some(ref manager) = gitignore_manager_clone {
+                        let is_dir = entry.file_type().is_dir();
+                        if manager.is_ignored_with_type(entry.path(), is_dir) {
+                            ignored_count.fetch_add(1, Ordering::Relaxed);
+                            log::debug!("Ignoring (gitignore): {:?}", entry.path());
+                            return None;
+                        }
+                    }
+
                     match FileEntry::from_dir_entry(&entry) {
                         Ok(file_entry) => Some(file_entry),
                         Err(e) => {
@@ -392,6 +426,11 @@ fn parallel_index_folder(
             }
         })
         .collect();
+
+    let ignored = ignored_count.load(Ordering::Relaxed);
+    if ignored > 0 {
+        log::info!("Ignored {} entries due to .gitignore patterns", ignored);
+    }
 
     let total_entries = entries.len();
     log::info!("Collected {} entries, now inserting into database", total_entries);
@@ -623,11 +662,163 @@ mod tests {
     #[test]
     fn test_permission_error_recovery() {
         let conn = create_test_db();
-        
+
         // Try to index a non-existent path
         let result = traverse_and_insert(&conn, &PathBuf::from("/nonexistent/path"), None);
-        
+
         // Should return an error but not panic
         assert!(result.is_err());
+    }
+
+    // Gitignore integration tests
+    mod gitignore_integration {
+        use super::*;
+        use crate::gitignore::GitignoreManager;
+
+        fn create_test_directory_with_gitignore() -> TempDir {
+            let temp_dir = TempDir::new().unwrap();
+            let path = temp_dir.path();
+
+            // Create test directory structure
+            fs::create_dir_all(path.join("src")).unwrap();
+            fs::create_dir_all(path.join("node_modules/package")).unwrap();
+            fs::create_dir_all(path.join("build")).unwrap();
+
+            // Create test files
+            fs::write(path.join("main.rs"), "fn main() {}").unwrap();
+            fs::write(path.join("src/lib.rs"), "pub fn lib() {}").unwrap();
+            fs::write(path.join("node_modules/package/index.js"), "module.exports = {}").unwrap();
+            fs::write(path.join("build/output.js"), "compiled").unwrap();
+            fs::write(path.join("debug.log"), "log content").unwrap();
+
+            // Create .gitignore
+            fs::write(path.join(".gitignore"), "node_modules/\nbuild/\n*.log\n").unwrap();
+
+            temp_dir
+        }
+
+        #[test]
+        fn test_gitignore_manager_filters_node_modules() {
+            let temp_dir = create_test_directory_with_gitignore();
+            let path = temp_dir.path();
+
+            let mut manager = GitignoreManager::new(path);
+            manager.discover_gitignores(path).unwrap();
+
+            // node_modules should be ignored
+            assert!(manager.is_ignored(&path.join("node_modules")));
+            assert!(manager.is_ignored(&path.join("node_modules/package/index.js")));
+
+            // src should not be ignored
+            assert!(!manager.is_ignored(&path.join("src")));
+            assert!(!manager.is_ignored(&path.join("src/lib.rs")));
+        }
+
+        #[test]
+        fn test_gitignore_manager_filters_build_directory() {
+            let temp_dir = create_test_directory_with_gitignore();
+            let path = temp_dir.path();
+
+            let mut manager = GitignoreManager::new(path);
+            manager.discover_gitignores(path).unwrap();
+
+            // build should be ignored
+            assert!(manager.is_ignored(&path.join("build")));
+            assert!(manager.is_ignored(&path.join("build/output.js")));
+        }
+
+        #[test]
+        fn test_gitignore_manager_filters_log_files() {
+            let temp_dir = create_test_directory_with_gitignore();
+            let path = temp_dir.path();
+
+            let mut manager = GitignoreManager::new(path);
+            manager.discover_gitignores(path).unwrap();
+
+            // .log files should be ignored
+            assert!(manager.is_ignored(&path.join("debug.log")));
+
+            // .rs files should not be ignored
+            assert!(!manager.is_ignored(&path.join("main.rs")));
+        }
+
+        #[test]
+        fn test_gitignore_file_not_ignored() {
+            let temp_dir = create_test_directory_with_gitignore();
+            let path = temp_dir.path();
+
+            let mut manager = GitignoreManager::new(path);
+            manager.discover_gitignores(path).unwrap();
+
+            // .gitignore itself should never be ignored
+            assert!(!manager.is_ignored(&path.join(".gitignore")));
+        }
+
+        #[test]
+        fn test_gitignore_count_after_discovery() {
+            let temp_dir = create_test_directory_with_gitignore();
+            let path = temp_dir.path();
+
+            let mut manager = GitignoreManager::new(path);
+            let count = manager.discover_gitignores(path).unwrap();
+
+            assert_eq!(count, 1);
+            assert_eq!(manager.gitignore_count(), 1);
+        }
+
+        #[test]
+        fn test_nested_gitignore_files() {
+            let temp_dir = TempDir::new().unwrap();
+            let path = temp_dir.path();
+
+            // Create directory structure
+            fs::create_dir_all(path.join("src")).unwrap();
+            fs::write(path.join("src/main.rs"), "fn main() {}").unwrap();
+            fs::write(path.join("src/debug.log"), "debug log").unwrap();
+            fs::write(path.join("src/important.log"), "important log").unwrap();
+
+            // Root .gitignore ignores all .log files
+            fs::write(path.join(".gitignore"), "*.log\n").unwrap();
+
+            // Nested .gitignore whitelists important.log
+            fs::write(path.join("src/.gitignore"), "!important.log\n").unwrap();
+
+            let mut manager = GitignoreManager::new(path);
+            manager.discover_gitignores(path).unwrap();
+
+            // debug.log should be ignored
+            assert!(manager.is_ignored(&path.join("src/debug.log")));
+
+            // important.log should NOT be ignored (whitelisted)
+            assert!(!manager.is_ignored(&path.join("src/important.log")));
+        }
+
+        #[test]
+        fn test_file_entry_collection_with_walkdir() {
+            let temp_dir = create_test_directory_with_gitignore();
+            let path = temp_dir.path();
+
+            let mut manager = GitignoreManager::new(path);
+            manager.discover_gitignores(path).unwrap();
+
+            // Collect entries using walkdir and filter with gitignore
+            let entries: Vec<PathBuf> = WalkDir::new(path)
+                .follow_links(false)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| !manager.is_ignored_with_type(e.path(), e.file_type().is_dir()))
+                .map(|e| e.path().to_path_buf())
+                .collect();
+
+            // Check that ignored entries are not in the list
+            assert!(!entries.iter().any(|p| p.to_string_lossy().contains("node_modules")));
+            assert!(!entries.iter().any(|p| p.to_string_lossy().contains("build")));
+            assert!(!entries.iter().any(|p| p.to_string_lossy().ends_with(".log")));
+
+            // Check that non-ignored entries are in the list
+            assert!(entries.iter().any(|p| p.to_string_lossy().contains("src")));
+            assert!(entries.iter().any(|p| p.to_string_lossy().contains("main.rs")));
+            assert!(entries.iter().any(|p| p.to_string_lossy().contains(".gitignore")));
+        }
     }
 }

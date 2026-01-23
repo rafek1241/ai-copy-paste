@@ -10,6 +10,7 @@ interface AppSettings {
   default_template: string;
   auto_save_history: boolean;
   cache_size_mb: number;
+  respect_gitignore: boolean;
 }
 
 interface SettingsProps {
@@ -23,6 +24,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
     default_template: 'agent',
     auto_save_history: true,
     cache_size_mb: 100,
+    respect_gitignore: true,
   });
 
   const [loading, setLoading] = useState(true);
@@ -232,6 +234,26 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="p-4 bg-white/5 border border-white/10 rounded-md">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="pt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={settings.respect_gitignore}
+                    onChange={(e) => setSettings(prev => ({ ...prev, respect_gitignore: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="size-4 border border-white/20 rounded bg-black/40 peer-checked:bg-primary peer-checked:border-primary transition-all flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[12px] text-white scale-0 peer-checked:scale-100 transition-transform">check</span>
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-[11px] font-bold text-white group-hover:text-primary transition-colors">Respect .gitignore Rules</div>
+                  <div className="text-[9px] text-white/30 leading-relaxed">Automatically exclude files matching .gitignore patterns during indexing.</div>
+                </div>
+              </label>
             </div>
 
             <div className="space-y-3">
