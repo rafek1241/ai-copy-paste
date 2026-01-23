@@ -31,12 +31,11 @@ describe("FileTree Filters", () => {
         const srcButton = screen.getByText("SRC");
         const allButton = screen.getByText("ALL");
 
-        // Initially ALL should be active (assuming default)
-        // We'll check for a specific class or data attribute
-        expect(allButton).toHaveClass("bg-primary");
+        // Initially ALL should be active (uses bg-primary/20 for active state)
+        expect(allButton).toHaveClass("bg-primary/20");
 
         fireEvent.click(srcButton);
-        expect(srcButton).toHaveClass("bg-primary");
-        expect(allButton).not.toHaveClass("bg-primary");
+        expect(srcButton).toHaveClass("bg-primary/20");
+        expect(allButton).not.toHaveClass("bg-primary/20");
     });
 });

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import App from "./App";
 
 import { mockInvoke } from "./test/setup";
@@ -12,14 +12,14 @@ describe("App Layout", () => {
         // Check for Sidebar (aside)
         const aside = container.querySelector("aside");
         expect(aside).toBeInTheDocument();
-        expect(aside).toHaveClass("w-[42px]");
+        expect(aside).toHaveClass("w-10");
 
         // Check for main content container
         const mainContent = container.querySelector(".flex-1.flex.flex-col");
         expect(mainContent).toBeInTheDocument();
 
         // Check for Header
-        const header = screen.getByRole("banner");
+        const header = screen.getByTestId("app-header");
         expect(header).toBeInTheDocument();
         expect(header).toHaveClass("h-10");
 

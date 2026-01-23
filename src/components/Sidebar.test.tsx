@@ -8,7 +8,7 @@ describe("Sidebar", () => {
 
         expect(screen.getByText("terminal")).toBeInTheDocument();
         expect(screen.getByText("folder")).toBeInTheDocument();
-        expect(screen.getByText("auto_awesome")).toBeInTheDocument();
+        expect(screen.getByText("list_alt")).toBeInTheDocument(); // Prompt icon
         expect(screen.getByText("history")).toBeInTheDocument();
         expect(screen.getByText("settings")).toBeInTheDocument();
     });
@@ -23,16 +23,17 @@ describe("Sidebar", () => {
         expect(onTabChange).toHaveBeenCalledWith("prompt");
     });
 
-    it("expands on hover", () => {
+    it("renders with correct width class", () => {
         render(<Sidebar />);
         const sidebar = screen.getByTestId("sidebar");
 
-        expect(sidebar).toHaveClass("w-[42px]");
+        expect(sidebar).toHaveClass("w-10");
+    });
 
-        fireEvent.mouseEnter(sidebar);
-        expect(sidebar).toHaveClass("w-48");
+    it("highlights active tab", () => {
+        render(<Sidebar activeTab="history" />);
+        const historyBtn = screen.getByTestId("nav-history");
 
-        fireEvent.mouseLeave(sidebar);
-        expect(sidebar).toHaveClass("w-[42px]");
+        expect(historyBtn).toHaveClass("text-white");
     });
 });

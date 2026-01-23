@@ -111,12 +111,12 @@ jobs:
           fi
           echo "Frontend build verified"
 
-      - name: Build Tauri app (Release)
+      - name: Build Tauri app
         run: |
-          # Use release build to properly embed frontend
-          # Debug builds connect to devUrl, release builds use frontendDist
-          cd src-tauri
-          cargo build --release
+          # Use Tauri CLI to properly embed frontend
+          # cargo build --release does NOT embed frontend properly
+          # --no-bundle skips creating installers (faster)
+          npx tauri build --no-bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""

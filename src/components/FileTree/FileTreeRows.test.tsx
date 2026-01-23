@@ -50,7 +50,8 @@ describe("FileTree Rows", () => {
         // .ts files use "terminal" icon (my implementation choice)
         expect(screen.getByText("terminal")).toHaveClass("material-symbols-outlined");
 
-        // Check for chevron icon
-        expect(screen.getByText("chevron_right")).toHaveClass("material-symbols-outlined");
+        // Check for chevron icon (there are multiple - one visible for folder, one invisible for file alignment)
+        const chevrons = screen.getAllByText("chevron_right");
+        expect(chevrons[0]).toHaveClass("material-symbols-outlined");
     });
 });

@@ -482,17 +482,14 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                     </span>
 
                     <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
-                      <div
-                        className="size-2.5 rounded-sm border border-border-dark flex items-center justify-center cursor-pointer select-none"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleCheck(node.id, !node.checked);
-                        }}
+                      <input
+                        type="checkbox"
+                        className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-2.5 rounded-sm bg-transparent text-primary focus:ring-0 focus:ring-offset-0 select-none"
+                        checked={node.checked}
+                        onChange={() => toggleCheck(node.id, !node.checked)}
+                        ref={(el) => { if (el) el.indeterminate = node.indeterminate; }}
                         data-testid="tree-checkbox"
-                        data-checked={node.checked}
-                      >
-                        {node.checked && <div className="size-1.5 bg-primary rounded-[1px]" />}
-                      </div>
+                      />
                     </div>
 
                     <span className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2 select-none" data-testid="tree-icon">folder</span>

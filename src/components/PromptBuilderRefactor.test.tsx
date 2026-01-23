@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { PromptBuilder } from "./PromptBuilder";
 import { mockInvoke } from "../test/setup";
 
@@ -8,13 +8,13 @@ describe("PromptBuilder Refactor", () => {
         mockInvoke.mockClear();
     });
 
-    it("renders custom instructions textarea with new styling", () => {
+    it("renders custom instructions textarea with correct styling", () => {
         mockInvoke.mockResolvedValue([]); // Default for any calls
         render(<PromptBuilder selectedFileIds={[1]} />);
 
         const textarea = screen.getByTestId("custom-instructions");
-        expect(textarea).toHaveClass("bg-white/5");
-        expect(textarea).toHaveClass("border-white/10");
+        expect(textarea).toHaveClass("bg-[#161b22]");
+        expect(textarea).toHaveClass("border-border-dark");
     });
 
     it("renders templates in a 2x2 grid", async () => {
