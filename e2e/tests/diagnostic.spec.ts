@@ -38,13 +38,13 @@ describe("App Loading Diagnostic", () => {
     console.log(JSON.stringify(docState, null, 2));
     console.log("=== END DOCUMENT STATE ===");
 
-    // Simple assertions
-    expect(docState.rootExists).to.equal(true, "Root element should exist");
+    // Simple assertions using Jest/WDIO style
+    expect(docState.rootExists).toBe(true);
 
     // If root has children, the app rendered
     if (docState.rootChildCount > 0) {
       console.log("SUCCESS: App rendered content in #root");
-      expect(docState.rootChildCount).to.be.greaterThan(0);
+      expect(docState.rootChildCount).toBeGreaterThan(0);
     } else {
       console.log("WARNING: #root has no children - app may not have rendered");
       // Don't fail - just log for debugging

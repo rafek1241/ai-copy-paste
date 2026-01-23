@@ -11,14 +11,14 @@ describe("Application Launch", () => {
 
   it("should have a window with content", async () => {
     const source = await browser.getPageSource();
-    expect(source.length).to.be.greaterThan(100, "Page should have content");
+    expect(source.length).toBeGreaterThan(100);
   });
 
   it("should have the root element", async () => {
     const rootExists = await browser.execute(() => {
       return document.getElementById("root") !== null;
     });
-    expect(rootExists).to.equal(true, "#root element should exist");
+    expect(rootExists).toBe(true);
   });
 
   it("should render the React app", async () => {
@@ -29,7 +29,7 @@ describe("Application Launch", () => {
       return root !== null && root.children.length > 0;
     });
 
-    expect(hasContent).to.equal(true, "React should render content in #root");
+    expect(hasContent).toBe(true);
   });
 
   it("should have the app container", async () => {
@@ -37,7 +37,7 @@ describe("Application Launch", () => {
       return document.querySelector('[data-testid="app-container"]') !== null;
     });
 
-    expect(hasAppContainer).to.equal(true, "App container should exist");
+    expect(hasAppContainer).toBe(true);
   });
 
   it("should have the sidebar", async () => {
@@ -45,7 +45,7 @@ describe("Application Launch", () => {
       return document.querySelector('[data-testid="sidebar"]') !== null;
     });
 
-    expect(hasSidebar).to.equal(true, "Sidebar should exist");
+    expect(hasSidebar).toBe(true);
   });
 
   it("should have navigation buttons", async () => {
@@ -58,10 +58,10 @@ describe("Application Launch", () => {
       };
     });
 
-    expect(navButtons.files).to.equal(true, "Files nav button should exist");
-    expect(navButtons.prompt).to.equal(true, "Prompt nav button should exist");
-    expect(navButtons.history).to.equal(true, "History nav button should exist");
-    expect(navButtons.settings).to.equal(true, "Settings nav button should exist");
+    expect(navButtons.files).toBe(true);
+    expect(navButtons.prompt).toBe(true);
+    expect(navButtons.history).toBe(true);
+    expect(navButtons.settings).toBe(true);
   });
 
   it("should have the header with controls", async () => {
@@ -73,9 +73,9 @@ describe("Application Launch", () => {
       };
     });
 
-    expect(headerControls.header).to.equal(true, "Header should exist");
-    expect(headerControls.addFolder).to.equal(true, "Add folder button should exist");
-    expect(headerControls.searchToggle).to.equal(true, "Search toggle button should exist");
+    expect(headerControls.header).toBe(true);
+    expect(headerControls.addFolder).toBe(true);
+    expect(headerControls.searchToggle).toBe(true);
   });
 });
 
@@ -97,7 +97,7 @@ describe("Navigation", () => {
       return document.querySelector('[data-testid="app-container"]') !== null;
     });
 
-    expect(hasContainer).to.equal(true);
+    expect(hasContainer).toBe(true);
   });
 
   it("should navigate to History view", async () => {
@@ -112,7 +112,7 @@ describe("Navigation", () => {
       return document.querySelector('[data-testid="app-container"]') !== null;
     });
 
-    expect(hasContainer).to.equal(true);
+    expect(hasContainer).toBe(true);
   });
 
   it("should navigate to Prompt view", async () => {
@@ -127,7 +127,7 @@ describe("Navigation", () => {
       return document.querySelector('[data-testid="app-container"]') !== null;
     });
 
-    expect(hasContainer).to.equal(true);
+    expect(hasContainer).toBe(true);
   });
 
   it("should navigate back to Files view", async () => {
@@ -142,6 +142,6 @@ describe("Navigation", () => {
       return document.querySelector('[data-testid="app-container"]') !== null;
     });
 
-    expect(hasContainer).to.equal(true);
+    expect(hasContainer).toBe(true);
   });
 });

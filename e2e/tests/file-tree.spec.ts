@@ -17,17 +17,17 @@ describe("File Tree", () => {
   describe("Initial State", () => {
     it("should display the file tree container", async () => {
       const container = await $(Selectors.fileTreeContainer);
-      expect(await container.isDisplayed()).to.be.true;
+      expect(await container.isDisplayed()).toBe(true);
     });
 
     it("should display the Add Folder button", async () => {
       const addFolderBtn = await $(Selectors.addFolderBtn);
-      expect(await addFolderBtn.isDisplayed()).to.be.true;
+      expect(await addFolderBtn.isDisplayed()).toBe(true);
     });
 
     it("should display the search toggle button", async () => {
       const searchToggleBtn = await $(Selectors.searchToggleBtn);
-      expect(await searchToggleBtn.isDisplayed()).to.be.true;
+      expect(await searchToggleBtn.isDisplayed()).toBe(true);
     });
 
     it("should show empty state when no folders are indexed", async () => {
@@ -50,7 +50,7 @@ describe("File Tree", () => {
       ]);
 
       // Either empty state or existing nodes is valid
-      expect(emptyStateOrTree).to.not.be.null;
+      expect(emptyStateOrTree).not.toBeNull();
     });
   });
 
@@ -101,12 +101,12 @@ describe("File Tree", () => {
 
     it("should display indexed files in the tree", async () => {
       const nodeCount = await fileTreePage.getVisibleNodeCount();
-      expect(nodeCount).to.be.at.least(1);
+      expect(nodeCount).toBeGreaterThanOrEqual(1);
     });
 
     it("should display file icons correctly", async () => {
       const nodes = await fileTreePage.getVisibleNodes();
-      expect(nodes.length).to.be.at.least(1);
+      expect(nodes.length).toBeGreaterThanOrEqual(1);
 
       // Check that nodes have tree-icon elements (Material Symbols)
       for (const node of nodes) {
@@ -114,8 +114,8 @@ describe("File Tree", () => {
         if (await icon.isExisting()) {
           // Material Symbols icons contain icon names like "folder", "terminal", etc.
           const iconText = await icon.getText();
-          expect(iconText).to.be.a("string");
-          expect(iconText.length).to.be.at.least(1);
+          expect(typeof iconText).toBe("string");
+          expect(iconText.length).toBeGreaterThanOrEqual(1);
         }
       }
     });
@@ -153,7 +153,7 @@ describe("File Tree", () => {
           const isNowExpanded = (await expandIcon.getAttribute("data-expanded")) === "true";
 
           // State should have changed
-          expect(isNowExpanded).to.not.equal(initialExpanded);
+          expect(isNowExpanded).not.toBe(initialExpanded);
 
           // Toggle back if needed
           if (isNowExpanded !== initialExpanded) {
@@ -180,7 +180,7 @@ describe("File Tree", () => {
 
             // Should have more nodes after expanding (if folder has children)
             // Or same if folder is empty
-            expect(newCount).to.be.at.least(initialCount);
+            expect(newCount).toBeGreaterThanOrEqual(initialCount);
 
             break;
           }
@@ -210,7 +210,7 @@ describe("File Tree", () => {
           await browser.pause(200);
 
           const isNowSelected = await checkbox.isSelected();
-          expect(isNowSelected).to.not.equal(wasSelected);
+          expect(isNowSelected).not.toBe(wasSelected);
 
           // Toggle back
           await checkbox.click();
@@ -233,7 +233,7 @@ describe("File Tree", () => {
           await browser.pause(300);
 
           const newCount = await appPage.getSelectedFilesCount();
-          expect(newCount).to.be.at.least(initialCount);
+          expect(newCount).toBeGreaterThanOrEqual(initialCount);
 
           // Deselect
           await checkbox.click();
@@ -259,7 +259,7 @@ describe("File Tree", () => {
 
             // Check that selection count increased
             const count = await appPage.getSelectedFilesCount();
-            expect(count).to.be.at.least(0);
+            expect(count).toBeGreaterThanOrEqual(0);
 
             // Deselect
             await checkbox.click();
@@ -279,7 +279,7 @@ describe("File Tree", () => {
       // Search input should now be visible
       const searchInput = await $(Selectors.fileTreeSearch);
       const isDisplayed = await searchInput.isDisplayed();
-      expect(isDisplayed).to.be.true;
+      expect(isDisplayed).toBe(true);
     });
 
     it("should filter tree when searching", async () => {
@@ -293,7 +293,7 @@ describe("File Tree", () => {
 
       // Results may be different (could be more or less depending on matches)
       // Just verify search doesn't break the UI
-      expect(filteredCount).to.be.at.least(0);
+      expect(filteredCount).toBeGreaterThanOrEqual(0);
 
       // Clear search
       await fileTreePage.clearSearch();
@@ -321,7 +321,7 @@ describe("File Tree", () => {
         }
         // Note: Search might return parent folders too
         // so we just check that UI doesn't break
-        expect(nodes.length).to.be.at.least(0);
+        expect(nodes.length).toBeGreaterThanOrEqual(0);
       }
 
       await fileTreePage.clearSearch();
@@ -345,7 +345,7 @@ describe("File Tree", () => {
 
       // Just verify no errors occurred
       const isDisplayed = await searchInput.isDisplayed();
-      expect(isDisplayed).to.be.true;
+      expect(isDisplayed).toBe(true);
 
       await fileTreePage.clearSearch();
     });
@@ -384,9 +384,9 @@ describe("File Tree", () => {
           // Verify that nodes have correct indentation/padding
           for (const node of allNodes) {
             const style = await node.getAttribute("style");
-            expect(style).to.be.a("string");
+            expect(typeof style).toBe("string");
             // paddingLeft should be set based on tree level
-            expect(style).to.match(/paddingLeft/);
+            expect(style).toMatch(/paddingLeft/);
           }
         }
       }
@@ -428,7 +428,7 @@ describe("File Tree", () => {
                 const childPadding = parseInt(childPaddingMatch[1], 10);
 
                 // Child should have more padding than parent (indented)
-                expect(childPadding).to.be.greaterThan(parentPadding);
+                expect(childPadding).toBeGreaterThan(parentPadding);
               }
             }
           }
@@ -458,11 +458,11 @@ describe("File Tree", () => {
             const newCount = await fileTreePage.getVisibleNodeCount();
 
             // Should have fewer or equal nodes after collapsing
-            expect(newCount).to.be.at.most(initialCount);
+            expect(newCount).toBeLessThanOrEqual(initialCount);
 
             // Verify folder is collapsed
             const isNowExpanded = await expandIcon.getAttribute("data-expanded") === "true";
-            expect(isNowExpanded).to.be.false;
+            expect(isNowExpanded).toBe(false);
 
             break;
           }
@@ -536,7 +536,7 @@ describe("File Tree", () => {
         }
       }
 
-      expect(rootNode).to.not.be.null;
+      expect(rootNode).not.toBeNull();
 
       if (rootNode) {
         // Expand the root folder
@@ -549,7 +549,7 @@ describe("File Tree", () => {
         // Get root padding
         const rootStyle = await rootNode.getAttribute("style");
         const rootPaddingMatch = rootStyle.match(/paddingLeft:\s*"?(\d+)px"?/);
-        expect(rootPaddingMatch).to.not.be.null;
+        expect(rootPaddingMatch).not.toBeNull();
 
         if (rootPaddingMatch) {
           const rootPadding = parseInt(rootPaddingMatch[1], 10);
@@ -569,17 +569,17 @@ describe("File Tree", () => {
             }
           }
 
-          expect(level1Node).to.not.be.null;
+          expect(level1Node).not.toBeNull();
 
           if (level1Node) {
             const level1Style = await level1Node.getAttribute("style");
             const level1PaddingMatch = level1Style.match(/paddingLeft:\s*"?(\d+)px"?/);
-            expect(level1PaddingMatch).to.not.be.null;
+            expect(level1PaddingMatch).not.toBeNull();
 
             if (level1PaddingMatch) {
               const level1Padding = parseInt(level1PaddingMatch[1], 10);
               // level1 should have more padding than root (is indented)
-              expect(level1Padding).to.be.greaterThan(rootPadding);
+              expect(level1Padding).toBeGreaterThan(rootPadding);
             }
           }
         }
@@ -604,7 +604,7 @@ describe("File Tree", () => {
       }
 
       // Should have at least 2 different padding levels (root and children)
-      expect(paddingLevels.size).to.be.at.least(2);
+      expect(paddingLevels.size).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -701,7 +701,7 @@ describe("File Tree", () => {
               const match = style.match(/paddingLeft:\s*"?(\d+)px"?/);
               if (match) {
                 const childPadding = parseInt(match[1], 10);
-                expect(childPadding).to.be.greaterThan(parentPadding);
+                expect(childPadding).toBeGreaterThan(parentPadding);
               }
               break;
             }
@@ -729,16 +729,16 @@ describe("File Tree", () => {
       const newCount = await fileTreePage.getVisibleNodeCount();
 
       // Should have nodes after refresh
-      expect(newCount).to.be.at.least(1);
+      expect(newCount).toBeGreaterThanOrEqual(1);
 
       // Verify tree structure is intact
       const allNodes = await fileTreePage.getVisibleNodes();
 
       for (const node of allNodes) {
         const style = await node.getAttribute("style");
-        expect(style).to.be.a("string");
+        expect(typeof style).toBe("string");
         // Verify paddingLeft is set correctly
-        expect(style).to.match(/paddingLeft/);
+        expect(style).toMatch(/paddingLeft/);
       }
     });
 
@@ -776,7 +776,7 @@ describe("File Tree", () => {
 
           // Should not have significantly more nodes (no duplication)
           // Allow for small variation due to refresh state
-          expect(newCount).to.be.at.most(initialCount * 1.5);
+          expect(newCount).toBeLessThanOrEqual(initialCount * 1.5);
         }
       }
     });
