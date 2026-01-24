@@ -1,6 +1,7 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { render } from './test-utils';
 import App from '../App';
-import { vi, expect, it, describe, beforeEach } from 'vitest';
+import { expect, it, describe, beforeEach } from 'vitest';
 import { mockInvoke, mockListen } from './setup';
 
 describe('App Global Drop Zone', () => {

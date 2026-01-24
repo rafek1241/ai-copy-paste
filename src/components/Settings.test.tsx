@@ -1,6 +1,7 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { render } from '../test/test-utils';
 import Settings from './Settings';
-import { vi, expect, it, describe, beforeEach } from 'vitest';
+import { expect, it, describe, beforeEach } from 'vitest';
 import { mockInvoke } from '../test/setup';
 
 describe('Settings Component', () => {
