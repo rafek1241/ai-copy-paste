@@ -45,17 +45,28 @@ function App() {
     let unlistenDragLeave: UnlistenFn | undefined;
     let unlistenDragDrop: UnlistenFn | undefined;
     let isIndexing = false;
+    let isMounted = true;
 
     const setupDragDrop = async () => {
-      unlistenDragEnter = await listen("tauri://drag-enter", () => {
+      const uDragEnter = await listen("tauri://drag-enter", () => {
         setDragActive(true);
       });
+      if (!isMounted) {
+        uDragEnter();
+        return;
+      }
+      unlistenDragEnter = uDragEnter;
 
-      unlistenDragLeave = await listen("tauri://drag-leave", () => {
+      const uDragLeave = await listen("tauri://drag-leave", () => {
         setDragActive(false);
       });
+      if (!isMounted) {
+        uDragLeave();
+        return;
+      }
+      unlistenDragLeave = uDragLeave;
 
-      unlistenDragDrop = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
+      const uDragDrop = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
         setDragActive(false);
         
         if (isIndexing) return;
@@ -75,11 +86,17 @@ function App() {
         }
         isIndexing = false;
       });
+      if (!isMounted) {
+        uDragDrop();
+        return;
+      }
+      unlistenDragDrop = uDragDrop;
     };
 
     setupDragDrop();
 
     return () => {
+      isMounted = false;
       unlistenDragEnter?.();
       unlistenDragLeave?.();
       unlistenDragDrop?.();
