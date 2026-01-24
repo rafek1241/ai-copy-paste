@@ -10,8 +10,11 @@ interface Toast {
   duration?: number;
 }
 
-interface ToastContextValue {
+interface ToastState {
   toasts: Toast[];
+}
+
+interface ToastActions {
   addToast: (message: string, variant?: ToastVariant, duration?: number) => void;
   removeToast: (id: string) => void;
   success: (message: string, duration?: number) => void;
@@ -20,7 +23,8 @@ interface ToastContextValue {
   info: (message: string, duration?: number) => void;
 }
 
-const ToastContext = React.createContext<ToastContextValue | null>(null);
+const ToastStateContext = React.createContext<ToastState | null>(null);
+const ToastActionsContext = React.createContext<ToastActions | null>(null);
 
 interface ToastProviderProps {
   children: React.ReactNode;
@@ -61,29 +65,41 @@ export function ToastProvider({ children }: ToastProviderProps) {
     [addToast]
   );
 
-  const value = React.useMemo(
-    () => ({ toasts, addToast, removeToast, success, error, warning, info }),
-    [toasts, addToast, removeToast, success, error, warning, info]
+  const actions = React.useMemo(
+    () => ({ addToast, removeToast, success, error, warning, info }),
+    [addToast, removeToast, success, error, warning, info]
   );
 
+  const state = React.useMemo(() => ({ toasts }), [toasts]);
+
   return (
-    <ToastContext.Provider value={value}>
-      {children}
-      <ToastContainer />
-    </ToastContext.Provider>
+    <ToastStateContext.Provider value={state}>
+      <ToastActionsContext.Provider value={actions}>
+        {children}
+        <ToastContainer />
+      </ToastActionsContext.Provider>
+    </ToastStateContext.Provider>
   );
 }
 
 export function useToast() {
-  const context = React.useContext(ToastContext);
+  const context = React.useContext(ToastActionsContext);
   if (!context) {
     throw new Error("useToast must be used within a ToastProvider");
   }
   return context;
 }
 
+function useToastState() {
+  const context = React.useContext(ToastStateContext);
+  if (!context) {
+    throw new Error("useToastState must be used within a ToastProvider");
+  }
+  return context;
+}
+
 function ToastContainer() {
-  const { toasts } = useToast();
+  const { toasts } = useToastState();
 
   return (
     <div

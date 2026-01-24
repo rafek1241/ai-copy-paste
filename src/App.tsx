@@ -44,6 +44,7 @@ function App() {
     let unlistenDragEnter: UnlistenFn | undefined;
     let unlistenDragLeave: UnlistenFn | undefined;
     let unlistenDragDrop: UnlistenFn | undefined;
+    let isIndexing = false;
 
     const setupDragDrop = async () => {
       unlistenDragEnter = await listen("tauri://drag-enter", () => {
@@ -56,6 +57,10 @@ function App() {
 
       unlistenDragDrop = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
         setDragActive(false);
+        
+        if (isIndexing) return;
+        isIndexing = true;
+
         const paths = event.payload.paths;
         if (paths && paths.length > 0) {
           for (const path of paths) {
@@ -68,6 +73,7 @@ function App() {
             }
           }
         }
+        isIndexing = false;
       });
     };
 
@@ -78,7 +84,7 @@ function App() {
       unlistenDragLeave?.();
       unlistenDragDrop?.();
     };
-  }, [success, showError]);
+  }, []);
 
   const handleSelectionChange = useCallback((paths: string[], ids: number[]) => {
     setSelectedFileIds(ids);
