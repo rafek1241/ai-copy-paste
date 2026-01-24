@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TreeNode, FileEntry } from '../../types';
 import { cn } from '@/lib/utils';
+import { parseSearchQuery, matchesSearchFilters, getMatchScore, SearchFilters } from '@/lib/searchFilters';
 
 interface FileTreeProps {
   onSelectionChange?: (selectedPaths: string[], selectedIds: number[]) => void;
@@ -32,14 +33,17 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
   const SRC_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.c', '.cpp', '.h', '.java', '.rb', '.php', '.css', '.html', '.sh', '.yaml', '.json'];
   const DOCS_EXTENSIONS = ['.md', '.txt', '.pdf', '.docx', '.doc', '.odt', '.rtf'];
 
+  // Parse search query into structured filters (memoized for performance)
+  const parsedFilters = useMemo<SearchFilters>(() => {
+    return parseSearchQuery(searchQuery);
+  }, [searchQuery]);
+
   const matchesFilter = useCallback((node: TreeNode): boolean => {
-    // Search query matching
+    // Search query matching using advanced filters
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      // Match filename or full path
-      const matchesSearch = node.name.toLowerCase().includes(query) ||
-        (node.path && node.path.toLowerCase().includes(query));
-      if (!matchesSearch) return false;
+      if (!matchesSearchFilters(node, parsedFilters)) {
+        return false;
+      }
     }
 
     if (filterType === 'ALL') return true;
@@ -52,7 +56,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     if (filterType === 'SRC') return SRC_EXTENSIONS.includes(ext);
     if (filterType === 'DOCS') return DOCS_EXTENSIONS.includes(ext);
     return true;
-  }, [filterType, searchQuery]);
+  }, [filterType, searchQuery, parsedFilters]);
 
   // Convert tree to flat list for virtual scrolling
   const buildFlatTree = useCallback((ids: number[], map: Record<number, TreeNode>, level = 0): TreeNode[] => {
@@ -68,7 +72,11 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
 
       // Always add directories to maintain tree hierarchy
       // Add files only if they match the filter
-      const nodeWithLevel = { ...node, level } as any;
+      // Include match score for sorting when using file: filter
+      const matchScore = searchQuery && parsedFilters.fileName
+        ? getMatchScore(node, parsedFilters)
+        : 1;
+      const nodeWithLevel = { ...node, level, matchScore } as TreeNode & { level: number; matchScore: number };
       result.push(nodeWithLevel);
 
       // If expanded and has children, recursively add them
@@ -76,8 +84,25 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
         result.push(...buildFlatTree(node.childIds, map, level + 1));
       }
     }
+
+    // Sort by match score (highest first) when using file: filter
+    // Keep directories in their hierarchy position
+    if (searchQuery && parsedFilters.fileName && level === 0) {
+      // Sort files by match score, keeping folder order
+      result.sort((a, b) => {
+        // Folders come before files at the same level
+        if (a.is_dir && !b.is_dir) return -1;
+        if (!a.is_dir && b.is_dir) return 1;
+
+        // Sort files by match score (higher is better)
+        const scoreA = (a as any).matchScore || 0;
+        const scoreB = (b as any).matchScore || 0;
+        return scoreB - scoreA;
+      });
+    }
+
     return result;
-  }, [matchesFilter, searchQuery]);
+  }, [matchesFilter, searchQuery, parsedFilters]);
 
   // Update flat tree when nodes map or root ids change
   useEffect(() => {

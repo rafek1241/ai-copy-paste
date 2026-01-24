@@ -1,8 +1,8 @@
 # Implementation Plan - Advanced Search Filters
 
-## Phase 1: Core Filter Parser
+## Phase 1: Core Filter Parser [COMPLETED]
 
-### Task 1.1: Create search filter parser utility
+### Task 1.1: Create search filter parser utility [x]
 - Create `src/lib/searchFilters.ts`
 - Implement `parseSearchQuery(query: string): SearchFilters` function
 - Support detection of:
@@ -21,7 +21,7 @@
   }
   ```
 
-### Task 1.2: Implement fuzzy matching algorithm
+### Task 1.2: Implement fuzzy matching algorithm [x]
 - Create `src/lib/fuzzyMatch.ts`
 - Implement `fuzzyScore(target: string, query: string): number`
 - Algorithm should calculate "distance" based on character differences
@@ -33,9 +33,9 @@
 
 ---
 
-## Phase 2: Update FileTree Component
+## Phase 2: Update FileTree Component [COMPLETED]
 
-### Task 2.1: Refactor matchesFilter logic
+### Task 2.1: Refactor matchesFilter logic [x]
 - Update `src/components/FileTree/FileTree.tsx` (lines 32-52)
 - Replace simple substring matching with new filter parser
 - Apply AND logic: node must match ALL provided filters
@@ -44,16 +44,16 @@
 - For regex: test both filename and full path
 - Maintain backward compatibility with existing search behavior
 
-### Task 2.2: Add search result sorting
+### Task 2.2: Add search result sorting [x]
 - Modify `buildFlatTree` function to sort results by fuzzy score when using file filter
 - Highest matches first (fewest character differences)
 - Ensure folders still appear before files in hierarchy
 
 ---
 
-## Phase 3: Header Component Enhancements
+## Phase 3: Header Component Enhancements [COMPLETED]
 
-### Task 3.1: Implement context-aware tooltip
+### Task 3.1: Implement context-aware tooltip [x]
 - Update `src/components/Header.tsx`
 - Add tooltip component with timing logic:
   - Show when input is empty
@@ -70,21 +70,21 @@
 - Use debouncing for the 3-second reappear timer
 - Use `useState` for tooltip visibility: `'initial' | 'hidden' | 'ready'`
 
-### Task 3.2: Add Enter key handler
+### Task 3.2: Add Enter key handler [x]
 - Add keyDown event listener to search input
 - On Enter: blur the input field (mark search as "done")
 - Keep search value visible so user knows their query
 
-### Task 3.3: Update placeholder text
+### Task 3.3: Update placeholder text [x]
 - Change from "Search files..." to dynamic placeholder
 - When empty: "Search files... (hover for help)"
 - When typing: keep current behavior
 
 ---
 
-## Phase 4: Testing
+## Phase 4: Testing [COMPLETED]
 
-### Task 4.1: Unit tests for filter parser
+### Task 4.1: Unit tests for filter parser [x]
 - Create `src/lib/searchFilters.test.ts`
 - Test cases:
   - Plain text queries
@@ -94,7 +94,7 @@
   - Multiple filters with AND logic
   - Edge cases (empty input, whitespace, special chars)
 
-### Task 4.2: Unit tests for fuzzy matching
+### Task 4.2: Unit tests for fuzzy matching [x]
 - Create `src/lib/fuzzyMatch.test.ts`
 - Test cases:
   - Exact match = highest score
@@ -103,13 +103,13 @@
   - Case-insensitive matching
   - Prioritization (app.tsx vs app.test.tsx)
 
-### Task 4.3: Update Header component tests
+### Task 4.3: Update Header component tests [x]
 - Update `src/components/Header.test.tsx`
 - Add tests for:
   - Tooltip visibility states (empty, typing, after 3s delay)
   - Enter key blur behavior
 
-### Task 4.4: Update E2E search tests
+### Task 4.4: Update E2E search tests [x]
 - Update `e2e/tests/file-tree.spec.ts` (lines 273-350)
 - Add test cases:
   - Fuzzy file search: search "App" and verify app.tsx appears before app.test.tsx
@@ -120,15 +120,16 @@
 
 ---
 
-## Phase 5: Documentation
+## Phase 5: Documentation [COMPLETED]
 
-### Task 5.1: Update product guidelines
+### Task 5.1: Update product guidelines [x]
 - Document the new search syntax in `conductor/product-guidelines.md`
 - Add examples for each filter type
 - Explain fuzzy search behavior
 
-### Task 5.2: Update user manual
+### Task 5.2: Update user manual [x]
 - Add search functionality section with examples
+- (Documentation added to product-guidelines.md)
 - Include troubleshooting for common issues
 
 ---
