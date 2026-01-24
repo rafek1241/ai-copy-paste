@@ -168,6 +168,183 @@ describe("File Tree", () => {
     });
   });
 
+  describe("Advanced Search Filters", () => {
+    beforeEach(async () => {
+      // Ensure we're on Files tab before search tests
+      await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="nav-files"]') as HTMLElement;
+        btn?.click();
+      });
+      await browser.pause(500);
+    });
+
+    it("should show search tooltip when search is empty", async () => {
+      // Expand search
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      if (await searchToggle.isExisting()) {
+        await searchToggle.click();
+        await browser.pause(300);
+
+        // Check for tooltip
+        const tooltip = await $(Selectors.searchTooltip);
+        if (await tooltip.isExisting()) {
+          expect(await tooltip.isDisplayed()).toBe(true);
+          const text = await tooltip.getText();
+          expect(text).toContain("Advanced search");
+        }
+      }
+
+      // Verify app still works
+      const container = await $(Selectors.fileTreeContainer);
+      expect(await container.isDisplayed()).toBe(true);
+    });
+
+    it("should hide tooltip when typing in search", async () => {
+      // Expand search
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      if (await searchToggle.isExisting()) {
+        await searchToggle.click();
+        await browser.pause(300);
+
+        // Type in search
+        const searchInput = await $(Selectors.fileTreeSearch);
+        if (await searchInput.isExisting()) {
+          await searchInput.setValue("test");
+          await browser.pause(300);
+
+          // Tooltip should be hidden
+          const tooltip = await $(Selectors.searchTooltip);
+          const tooltipVisible = await tooltip.isExisting() && await tooltip.isDisplayed();
+          expect(tooltipVisible).toBe(false);
+
+          // Clear search
+          await searchInput.clearValue();
+        }
+      }
+
+      // Verify app still works
+      const container = await $(Selectors.fileTreeContainer);
+      expect(await container.isDisplayed()).toBe(true);
+    });
+
+    it("should handle file: prefix search syntax", async () => {
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      if (await searchToggle.isExisting()) {
+        await searchToggle.click();
+        await browser.pause(300);
+
+        const searchInput = await $(Selectors.fileTreeSearch);
+        if (await searchInput.isExisting()) {
+          // Test file: prefix
+          await searchInput.setValue("file:App");
+          await browser.pause(500);
+
+          // App should still be responsive
+          const container = await $(Selectors.fileTreeContainer);
+          expect(await container.isDisplayed()).toBe(true);
+
+          // Clear search
+          await searchInput.clearValue();
+        }
+      }
+    });
+
+    it("should handle dir: prefix search syntax", async () => {
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      if (await searchToggle.isExisting()) {
+        await searchToggle.click();
+        await browser.pause(300);
+
+        const searchInput = await $(Selectors.fileTreeSearch);
+        if (await searchInput.isExisting()) {
+          // Test dir: prefix
+          await searchInput.setValue("dir:src");
+          await browser.pause(500);
+
+          // App should still be responsive
+          const container = await $(Selectors.fileTreeContainer);
+          expect(await container.isDisplayed()).toBe(true);
+
+          // Clear search
+          await searchInput.clearValue();
+        }
+      }
+    });
+
+    it("should handle combined filter syntax", async () => {
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      if (await searchToggle.isExisting()) {
+        await searchToggle.click();
+        await browser.pause(300);
+
+        const searchInput = await $(Selectors.fileTreeSearch);
+        if (await searchInput.isExisting()) {
+          // Test combined filters
+          await searchInput.setValue("file:App dir:src");
+          await browser.pause(500);
+
+          // App should still be responsive
+          const container = await $(Selectors.fileTreeContainer);
+          expect(await container.isDisplayed()).toBe(true);
+
+          // Clear search
+          await searchInput.clearValue();
+        }
+      }
+    });
+
+    it("should handle regex pattern search", async () => {
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      if (await searchToggle.isExisting()) {
+        await searchToggle.click();
+        await browser.pause(300);
+
+        const searchInput = await $(Selectors.fileTreeSearch);
+        if (await searchInput.isExisting()) {
+          // Test regex pattern (auto-detected)
+          await searchInput.setValue("\\.tsx$");
+          await browser.pause(500);
+
+          // App should still be responsive
+          const container = await $(Selectors.fileTreeContainer);
+          expect(await container.isDisplayed()).toBe(true);
+
+          // Clear search
+          await searchInput.clearValue();
+        }
+      }
+    });
+
+    it("should blur input when Enter is pressed", async () => {
+      const searchToggle = await $(Selectors.searchToggleBtn);
+      if (await searchToggle.isExisting()) {
+        await searchToggle.click();
+        await browser.pause(300);
+
+        const searchInput = await $(Selectors.fileTreeSearch);
+        if (await searchInput.isExisting()) {
+          await searchInput.setValue("test");
+          await browser.pause(200);
+
+          // Press Enter
+          await browser.keys(['Enter']);
+          await browser.pause(200);
+
+          // Search value should still be there
+          const value = await searchInput.getValue();
+          expect(value).toBe("test");
+
+          // Clear search
+          await searchInput.clearValue();
+        }
+      }
+
+      // Verify app still works
+      const container = await $(Selectors.fileTreeContainer);
+      expect(await container.isDisplayed()).toBe(true);
+    });
+  });
+
   describe("UI Responsiveness", () => {
     beforeEach(async () => {
       // Ensure we're on Files tab

@@ -20,3 +20,35 @@
 ## Action & Recovery
 - **Silent Execution**: Execute destructive actions (e.g., removing folders, clearing history) immediately without confirmation dialogs. Assume the user is an expert who understands their intent.
 - **Focus on Utility**: Avoid interrupting the user's workflow with unnecessary prompts or warnings.
+
+## Advanced Search Functionality
+
+The file tree search supports advanced filtering capabilities for precise file discovery:
+
+### Search Syntax
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `file:<name>` | Fuzzy filename matching | `file:App` matches `App.tsx`, `AppHeader.tsx` |
+| `dir:<name>` | Filter by directory name | `dir:src` shows only files within `src/` directories |
+| Regex (auto-detected) | Pattern matching with regex | `\.test\.ts$` matches all test files |
+| Plain text | Simple substring search | `utils` matches filenames or paths containing "utils" |
+
+### Combined Filters (AND Logic)
+
+Multiple patterns can be combined with spaces. All conditions must match:
+- `file:App dir:src` - Files matching "App" in "src" directories
+- `file:test dir:components` - Test files in component directories
+
+### Fuzzy Matching Behavior
+
+- Case-insensitive matching
+- Prefix matches rank higher than substring matches
+- Exact filename matches (without extension) rank highest
+- Minimum score threshold of 0.3 filters out low-quality matches
+
+### UI Behavior
+
+- **Tooltip**: Hover over empty search input to see syntax help
+- **Enter key**: Blurs input to indicate search is complete
+- **Real-time filtering**: Results update as you type
