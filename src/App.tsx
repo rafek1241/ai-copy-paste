@@ -12,7 +12,8 @@ import { listen, emit, UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "./components/ui/toast";
 import { useConfirmDialog } from "./components/ui/alert-dialog";
-import { useAppSettings } from "./contexts/AppContext";
+import { useAppSettings, useAppCustomInstructions } from "./contexts/AppContext";
+import { useSessionPersistence } from "./hooks/useSessionPersistence";
 import "./App.css";
 
 type View = "main" | "history" | "settings";
@@ -35,6 +36,15 @@ function App() {
   const { success, error: showError } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const { settings } = useAppSettings();
+  const { customInstructions, setCustomInstructions } = useAppCustomInstructions();
+
+  // Session persistence - restores state on mount, saves on change
+  const { saveToHistory, clearSession } = useSessionPersistence(
+    selectedPaths,
+    customInstructions,
+    setSelectedPaths,
+    setCustomInstructions
+  );
 
   // Token counting state
   const [tokenCount] = useState<number>(0);
@@ -154,10 +164,18 @@ function App() {
     if (!confirmed) return;
 
     try {
+      // Save current session to history before clearing
+      const saved = await saveToHistory();
+      if (saved) {
+        console.log("Session saved to history before clearing");
+      }
+
       setShouldClearFileTree(true);
       await invoke("clear_index");
       setSelectedFileIds([]);
       setSelectedPaths([]);
+      setCustomInstructions("");
+      clearSession();
 
       // Emit refresh event instead of reloading the page
       await emit("refresh-file-tree");
@@ -170,7 +188,7 @@ function App() {
       console.error("Failed to clear index:", err);
       showError("Failed to clear context");
     }
-  }, [confirm, success, showError]);
+  }, [confirm, success, showError, saveToHistory, clearSession, setCustomInstructions]);
 
   const handleCopyContext = useCallback(async () => {
     if (promptBuilderRef.current) {
@@ -213,14 +231,16 @@ function App() {
               <Settings />
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
-                {activeTab === "files" ? (
+                {/* Keep both components mounted but hide inactive one to preserve state */}
+                <div className={activeTab === "files" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
                   <FileTree
                     onSelectionChange={handleSelectionChange}
                     searchQuery={searchQuery}
                     initialSelectedPaths={selectedPaths}
                     shouldClearSelection={shouldClearFileTree}
                   />
-                ) : (
+                </div>
+                <div className={activeTab === "prompt" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
                   <PromptBuilder
                     ref={promptBuilderRef}
                     selectedFileIds={selectedFileIds}
@@ -228,7 +248,7 @@ function App() {
                       console.log("Built prompt:", prompt);
                     }}
                   />
-                )}
+                </div>
               </div>
             )}
           </main>

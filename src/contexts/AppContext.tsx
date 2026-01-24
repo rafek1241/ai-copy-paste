@@ -19,6 +19,9 @@ interface AppState {
   selectedFileIds: number[];
   selectedPaths: string[];
 
+  // Custom instructions for prompt building
+  customInstructions: string;
+
   // UI state
   searchQuery: string;
   isDragActive: boolean;
@@ -33,6 +36,7 @@ type AppAction =
   | { type: "SET_TAB"; payload: ActiveTab }
   | { type: "SET_SELECTION"; payload: { ids: number[]; paths: string[] } }
   | { type: "CLEAR_SELECTION" }
+  | { type: "SET_CUSTOM_INSTRUCTIONS"; payload: string }
   | { type: "SET_SEARCH"; payload: string }
   | { type: "SET_DRAG_ACTIVE"; payload: boolean }
   | { type: "SET_LOADING"; payload: boolean }
@@ -44,6 +48,7 @@ const initialState: AppState = {
   activeTab: "files",
   selectedFileIds: [],
   selectedPaths: [],
+  customInstructions: "",
   searchQuery: "",
   isDragActive: false,
   isLoading: false,
@@ -68,6 +73,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
       };
     case "CLEAR_SELECTION":
       return { ...state, selectedFileIds: [], selectedPaths: [] };
+    case "SET_CUSTOM_INSTRUCTIONS":
+      return { ...state, customInstructions: action.payload };
     case "SET_SEARCH":
       return { ...state, searchQuery: action.payload };
     case "SET_DRAG_ACTIVE":
@@ -94,6 +101,7 @@ interface AppContextValue {
   setTab: (tab: ActiveTab) => void;
   setSelection: (ids: number[], paths: string[]) => void;
   clearSelection: () => void;
+  setCustomInstructions: (instructions: string) => void;
   setSearch: (query: string) => void;
   setDragActive: (active: boolean) => void;
   setLoading: (loading: boolean) => void;
@@ -129,6 +137,10 @@ export function AppProvider({ children }: AppProviderProps) {
     dispatch({ type: "SET_SEARCH", payload: query });
   }, []);
 
+  const setCustomInstructions = useCallback((instructions: string) => {
+    dispatch({ type: "SET_CUSTOM_INSTRUCTIONS", payload: instructions });
+  }, []);
+
   const setDragActive = useCallback((active: boolean) => {
     dispatch({ type: "SET_DRAG_ACTIVE", payload: active });
   }, []);
@@ -149,12 +161,13 @@ export function AppProvider({ children }: AppProviderProps) {
       setTab,
       setSelection,
       clearSelection,
+      setCustomInstructions,
       setSearch,
       setDragActive,
       setLoading,
       updateSettings,
     }),
-    [state, setView, setTab, setSelection, clearSelection, setSearch, setDragActive, setLoading, updateSettings]
+    [state, setView, setTab, setSelection, clearSelection, setCustomInstructions, setSearch, setDragActive, setLoading, updateSettings]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -197,4 +210,9 @@ export function useAppDrag() {
 export function useAppSettings() {
   const { state, updateSettings } = useApp();
   return { settings: state.settings, updateSettings };
+}
+
+export function useAppCustomInstructions() {
+  const { state, setCustomInstructions } = useApp();
+  return { customInstructions: state.customInstructions, setCustomInstructions };
 }

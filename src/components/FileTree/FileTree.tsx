@@ -88,9 +88,23 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
   const loadRootEntries = useCallback(async () => {
     try {
       const entries = await invoke<FileEntry[]>('get_children', { parentId: null });
+
+      // Filter out paths that are nested inside other root directory entries
+      // This prevents showing files at root level when their parent directory is also indexed
+      const filteredEntries = entries.filter(entry => {
+        // Check if this entry's path is a subpath of any directory entry
+        const isNested = entries.some(other =>
+          other.is_dir &&
+          other.id !== entry.id &&
+          (entry.path.startsWith(other.path + '\\') || entry.path.startsWith(other.path + '/'))
+        );
+        return !isNested;
+      });
+
       const newNodesMap: Record<number, TreeNode> = {};
       const newRootIds: number[] = [];
 
+      // Populate map with ALL entries (including nested ones) so they can be adopted later
       entries.forEach(entry => {
         newNodesMap[entry.id] = {
           ...entry,
@@ -100,6 +114,10 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
           hasChildren: entry.is_dir,
           childIds: [],
         };
+      });
+
+      // Populate root IDs only with non-nested entries
+      filteredEntries.forEach(entry => {
         newRootIds.push(entry.id);
       });
 
@@ -138,14 +156,46 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
       const newNodesMap = { ...nodesMap };
       const childIds = children.map(c => c.id);
 
+      // Also find orphaned root-level entries that should belong to this directory
+      // These are files indexed before their parent directory was added
+      const parentPath = node.path;
+      const orphanedChildren: TreeNode[] = [];
+
+      Object.values(nodesMap).forEach(existingNode => {
+        // Check if this is a root-level entry (parent_id is null) that's a direct child of current node
+        if (existingNode.parent_id === null && existingNode.id !== nodeId) {
+          const existingPath = existingNode.path;
+          // Check if path starts with parent path + separator
+          if (existingPath.startsWith(parentPath + '\\') || existingPath.startsWith(parentPath + '/')) {
+            // Check if it's a direct child (no additional separators after parent path)
+            const relativePath = existingPath.substring(parentPath.length + 1);
+            if (!relativePath.includes('\\') && !relativePath.includes('/')) {
+              // This is a direct child - adopt it
+              orphanedChildren.push({
+                ...existingNode,
+                parent_id: nodeId, // Update parent reference
+              });
+            }
+          }
+        }
+      });
+
+      // Merge children from backend with orphaned children
+      const allChildIds = [...childIds, ...orphanedChildren.map(c => c.id)];
+
       // Update parent
-      newNodesMap[nodeId] = { ...node, expanded: true, childIds };
+      newNodesMap[nodeId] = { ...node, expanded: true, childIds: allChildIds };
 
       // Add children to map
       children.forEach(child => {
         if (!newNodesMap[child.id]) {
           newNodesMap[child.id] = child;
         }
+      });
+
+      // Update orphaned children with new parent_id
+      orphanedChildren.forEach(child => {
+        newNodesMap[child.id] = child;
       });
 
       setNodesMap(newNodesMap);

@@ -60,6 +60,7 @@ export const config: Options.Testrunner = {
     "./tests/diagnostic.spec.ts",
     "./tests/app-launch.spec.ts",
     "./tests/file-tree.spec.ts",
+    "./tests/regression-issues.spec.ts",
   ],
   exclude: [],
 

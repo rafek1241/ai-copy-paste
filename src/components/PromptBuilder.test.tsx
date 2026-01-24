@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PromptBuilder } from './PromptBuilder';
 import * as promptsService from '../services/prompts';
 import * as assemblyService from '../services/assembly';
+import { AppProvider } from '../contexts/AppContext';
 
 // Mock services
 vi.mock('../services/prompts', () => ({
@@ -16,6 +17,11 @@ vi.mock('../services/assembly', () => ({
 vi.mock('../hooks/useTokenCount', () => ({
   useTokenCount: () => ({ totalTokens: 0, isCalculating: false }),
 }));
+
+// Wrapper component for tests
+const TestWrapper = ({ children }: { children: React.ReactNode }) => (
+  <AppProvider>{children}</AppProvider>
+);
 
 describe('PromptBuilder', () => {
   const mockTemplates = [
@@ -36,7 +42,7 @@ describe('PromptBuilder', () => {
   });
 
   it('should load templates on mount', async () => {
-    render(<PromptBuilder selectedFileIds={[]} />);
+    render(<PromptBuilder selectedFileIds={[]} />, { wrapper: TestWrapper });
     await waitFor(() => {
       expect(promptsService.getTemplates).toHaveBeenCalled();
       expect(screen.getByText('Agent')).toBeDefined();
@@ -56,7 +62,8 @@ describe('PromptBuilder', () => {
       <PromptBuilder
         selectedFileIds={[1]}
         ref={(ref) => { builderRef = ref; }}
-      />
+      />,
+      { wrapper: TestWrapper }
     );
 
     // Wait for templates to load
@@ -68,7 +75,7 @@ describe('PromptBuilder', () => {
     expect(assemblyService.assemblePrompt).toHaveBeenCalledWith({
       templateId: 'custom',
       fileIds: [1],
-      customInstructions: "\n\n---CONTEXT:\n\n{{files}}",
+      customInstructions: "---CONTEXT:\n\n{{files}}",
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Built prompt');
   });
@@ -79,7 +86,8 @@ describe('PromptBuilder', () => {
       <PromptBuilder
         selectedFileIds={[]}
         ref={(ref) => { builderRef = ref; }}
-      />
+      />,
+      { wrapper: TestWrapper }
     );
 
     await builderRef?.buildAndCopy();
@@ -97,7 +105,8 @@ describe('PromptBuilder', () => {
       <PromptBuilder
         selectedFileIds={[1]}
         ref={(ref) => { builderRef = ref; }}
-      />
+      />,
+      { wrapper: TestWrapper }
     );
 
     // Wait for templates to load
@@ -112,5 +121,31 @@ describe('PromptBuilder', () => {
     await waitFor(() => {
       expect(screen.getByText(/Failed to build prompt: Error: Build failed/i)).toBeDefined();
     });
+  });
+
+  it('should copy only custom instructions when no files selected', async () => {
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFileIds={[]}
+        ref={(ref) => { builderRef = ref; }}
+      />,
+      { wrapper: TestWrapper }
+    );
+
+    // Wait for templates to load
+    await waitFor(() => expect(promptsService.getTemplates).toHaveBeenCalled());
+
+    // Enter custom instructions
+    const textarea = screen.getByTestId('custom-instructions');
+    fireEvent.change(textarea, { target: { value: 'Test instructions only' } });
+
+    // Trigger build
+    await builderRef?.buildAndCopy();
+
+    // Should NOT call assemblePrompt (no files)
+    expect(assemblyService.assemblePrompt).not.toHaveBeenCalled();
+    // Should copy just the instructions, no ---CONTEXT
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Test instructions only');
   });
 });
