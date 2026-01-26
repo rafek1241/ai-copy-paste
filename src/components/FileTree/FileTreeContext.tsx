@@ -15,19 +15,19 @@ export const DOCS_EXTENSIONS = [
   ".md", ".txt", ".pdf", ".docx", ".doc", ".odt", ".rtf"
 ];
 
-// State types
+// State types - using path as key instead of numeric ID
 interface FileTreeState {
-  nodesMap: Record<number, TreeNode>;
-  rootIds: number[];
+  nodesMap: Record<string, TreeNode>;  // Keyed by path
+  rootPaths: string[];
   flatTree: (TreeNode & { level: number })[];
   filterType: FilterType;
   isLoading: boolean;
 }
 
 type FileTreeAction =
-  | { type: "SET_NODES"; payload: { map: Record<number, TreeNode>; rootIds: number[] } }
+  | { type: "SET_NODES"; payload: { map: Record<string, TreeNode>; rootPaths: string[] } }
   | { type: "UPDATE_NODE"; payload: TreeNode }
-  | { type: "UPDATE_NODES_MAP"; payload: Record<number, TreeNode> }
+  | { type: "UPDATE_NODES_MAP"; payload: Record<string, TreeNode> }
   | { type: "SET_FLAT_TREE"; payload: (TreeNode & { level: number })[] }
   | { type: "SET_FILTER"; payload: FilterType }
   | { type: "SET_LOADING"; payload: boolean }
@@ -35,7 +35,7 @@ type FileTreeAction =
 
 const initialState: FileTreeState = {
   nodesMap: {},
-  rootIds: [],
+  rootPaths: [],
   flatTree: [],
   filterType: "ALL",
   isLoading: false,
@@ -44,11 +44,11 @@ const initialState: FileTreeState = {
 function fileTreeReducer(state: FileTreeState, action: FileTreeAction): FileTreeState {
   switch (action.type) {
     case "SET_NODES":
-      return { ...state, nodesMap: action.payload.map, rootIds: action.payload.rootIds };
+      return { ...state, nodesMap: action.payload.map, rootPaths: action.payload.rootPaths };
     case "UPDATE_NODE":
       return {
         ...state,
-        nodesMap: { ...state.nodesMap, [action.payload.id]: action.payload },
+        nodesMap: { ...state.nodesMap, [action.payload.path]: action.payload },
       };
     case "UPDATE_NODES_MAP":
       return { ...state, nodesMap: action.payload };
@@ -71,13 +71,13 @@ interface FileTreeContextValue {
   dispatch: React.Dispatch<FileTreeAction>;
   // Actions
   loadRootEntries: () => Promise<void>;
-  loadChildren: (nodeId: number) => Promise<TreeNode[]>;
-  toggleExpand: (nodeId: number) => Promise<void>;
-  toggleCheck: (nodeId: number, checked: boolean) => Promise<void>;
+  loadChildren: (nodePath: string) => Promise<TreeNode[]>;
+  toggleExpand: (nodePath: string) => Promise<void>;
+  toggleCheck: (nodePath: string, checked: boolean) => Promise<void>;
   setFilter: (filter: FilterType) => void;
   clearAll: () => void;
   // Selection helpers
-  getSelectedPaths: () => { paths: string[]; ids: number[] };
+  getSelectedPaths: () => string[];
 }
 
 const FileTreeContext = createContext<FileTreeContextValue | null>(null);
@@ -85,7 +85,7 @@ const FileTreeContext = createContext<FileTreeContextValue | null>(null);
 interface FileTreeProviderProps {
   children: ReactNode;
   searchQuery?: string;
-  onSelectionChange?: (paths: string[], ids: number[]) => void;
+  onSelectionChange?: (paths: string[]) => void;
 }
 
 export function FileTreeProvider({ children, searchQuery = "", onSelectionChange }: FileTreeProviderProps) {
@@ -115,10 +115,10 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   // Build flat tree for virtual scrolling
   const buildFlatTree = useCallback(
-    (ids: number[], map: Record<number, TreeNode>, level = 0): (TreeNode & { level: number })[] => {
+    (paths: string[], map: Record<string, TreeNode>, level = 0): (TreeNode & { level: number })[] => {
       const result: (TreeNode & { level: number })[] = [];
-      for (const id of ids) {
-        const node = map[id];
+      for (const path of paths) {
+        const node = map[path];
         if (!node) continue;
 
         const isMatch = matchesFilter(node);
@@ -126,8 +126,8 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
         result.push({ ...node, level });
 
-        if (node.expanded && node.childIds) {
-          result.push(...buildFlatTree(node.childIds, map, level + 1));
+        if (node.expanded && node.childPaths) {
+          result.push(...buildFlatTree(node.childPaths, map, level + 1));
         }
       }
       return result;
@@ -137,31 +137,31 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   // Update flat tree when state changes
   React.useEffect(() => {
-    const flatTree = buildFlatTree(state.rootIds, state.nodesMap);
+    const flatTree = buildFlatTree(state.rootPaths, state.nodesMap);
     dispatch({ type: "SET_FLAT_TREE", payload: flatTree });
-  }, [state.nodesMap, state.rootIds, buildFlatTree]);
+  }, [state.nodesMap, state.rootPaths, buildFlatTree]);
 
   // Load root entries
   const loadRootEntries = useCallback(async () => {
     dispatch({ type: "SET_LOADING", payload: true });
     try {
-      const entries = await invoke<FileEntry[]>("get_children", { parentId: null });
-      const newNodesMap: Record<number, TreeNode> = {};
-      const newRootIds: number[] = [];
+      const entries = await invoke<FileEntry[]>("get_children", { parentPath: null });
+      const newNodesMap: Record<string, TreeNode> = {};
+      const newRootPaths: string[] = [];
 
       entries.forEach((entry) => {
-        newNodesMap[entry.id] = {
+        newNodesMap[entry.path] = {
           ...entry,
           expanded: false,
           checked: false,
           indeterminate: false,
           hasChildren: entry.is_dir,
-          childIds: [],
+          childPaths: [],
         };
-        newRootIds.push(entry.id);
+        newRootPaths.push(entry.path);
       });
 
-      dispatch({ type: "SET_NODES", payload: { map: newNodesMap, rootIds: newRootIds } });
+      dispatch({ type: "SET_NODES", payload: { map: newNodesMap, rootPaths: newRootPaths } });
     } catch (error) {
       console.error("Failed to load root entries:", error);
     } finally {
@@ -170,16 +170,16 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   }, []);
 
   // Load children for a node
-  const loadChildren = useCallback(async (nodeId: number): Promise<TreeNode[]> => {
+  const loadChildren = useCallback(async (nodePath: string): Promise<TreeNode[]> => {
     try {
-      const entries = await invoke<FileEntry[]>("get_children", { parentId: nodeId });
+      const entries = await invoke<FileEntry[]>("get_children", { parentPath: nodePath });
       return entries.map((entry) => ({
         ...entry,
         expanded: false,
         checked: false,
         indeterminate: false,
         hasChildren: entry.is_dir,
-        childIds: [],
+        childPaths: [],
       }));
     } catch (error) {
       console.error("Failed to load children:", error);
@@ -189,20 +189,20 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   // Toggle node expansion
   const toggleExpand = useCallback(
-    async (nodeId: number) => {
-      const node = state.nodesMap[nodeId];
+    async (nodePath: string) => {
+      const node = state.nodesMap[nodePath];
       if (!node || !node.is_dir) return;
 
-      if (!node.expanded && (!node.childIds || node.childIds.length === 0)) {
-        const children = await loadChildren(nodeId);
+      if (!node.expanded && (!node.childPaths || node.childPaths.length === 0)) {
+        const children = await loadChildren(nodePath);
         const newNodesMap = { ...state.nodesMap };
-        const childIds = children.map((c) => c.id);
+        const childPaths = children.map((c) => c.path);
 
-        newNodesMap[nodeId] = { ...node, expanded: true, childIds };
+        newNodesMap[nodePath] = { ...node, expanded: true, childPaths };
 
         children.forEach((child) => {
-          if (!newNodesMap[child.id]) {
-            newNodesMap[child.id] = child;
+          if (!newNodesMap[child.path]) {
+            newNodesMap[child.path] = child;
           }
         });
 
@@ -216,15 +216,15 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   // Helper: Update children selection recursively
   const updateChildrenSelection = useCallback(
-    (map: Record<number, TreeNode>, nodeId: number, checked: boolean) => {
-      const node = map[nodeId];
+    (map: Record<string, TreeNode>, nodePath: string, checked: boolean) => {
+      const node = map[nodePath];
       if (!node) return;
 
-      map[nodeId] = { ...node, checked, indeterminate: false };
+      map[nodePath] = { ...node, checked, indeterminate: false };
 
-      if (node.childIds) {
-        node.childIds.forEach((childId) => {
-          updateChildrenSelection(map, childId, checked);
+      if (node.childPaths) {
+        node.childPaths.forEach((childPath) => {
+          updateChildrenSelection(map, childPath, checked);
         });
       }
     },
@@ -233,13 +233,13 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   // Helper: Update parent selection states
   const updateParentSelection = useCallback(
-    (map: Record<number, TreeNode>, parentId: number | null) => {
-      if (parentId === null) return;
+    (map: Record<string, TreeNode>, parentPath: string | null) => {
+      if (parentPath === null) return;
 
-      const parent = map[parentId];
-      if (!parent || !parent.childIds) return;
+      const parent = map[parentPath];
+      if (!parent || !parent.childPaths) return;
 
-      const children = parent.childIds.map((id) => map[id]).filter(Boolean);
+      const children = parent.childPaths.map((path) => map[path]).filter(Boolean);
       const checkedCount = children.filter((c) => c.checked).length;
       const indeterminateCount = children.filter((c) => c.indeterminate).length;
 
@@ -247,8 +247,8 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
 
       if (parent.checked !== isAllChecked || parent.indeterminate !== isIndeterminate) {
-        map[parentId] = { ...parent, checked: isAllChecked, indeterminate: isIndeterminate };
-        updateParentSelection(map, parent.parent_id);
+        map[parentPath] = { ...parent, checked: isAllChecked, indeterminate: isIndeterminate };
+        updateParentSelection(map, parent.parent_path);
       }
     },
     []
@@ -256,85 +256,83 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   // Helper: Load all children recursively
   const loadAllChildrenRecursively = useCallback(
-    async (nodeId: number, currentMap: Record<number, TreeNode>): Promise<number[]> => {
-      const entries = await invoke<FileEntry[]>("get_children", { parentId: nodeId });
-      const childIds: number[] = [];
+    async (nodePath: string, currentMap: Record<string, TreeNode>): Promise<string[]> => {
+      const entries = await invoke<FileEntry[]>("get_children", { parentPath: nodePath });
+      const childPaths: string[] = [];
 
       for (const entry of entries) {
-        childIds.push(entry.id);
-        let entryChildIds: number[] = [];
+        childPaths.push(entry.path);
+        let entryChildPaths: string[] = [];
         if (entry.is_dir) {
-          entryChildIds = await loadAllChildrenRecursively(entry.id, currentMap);
+          entryChildPaths = await loadAllChildrenRecursively(entry.path, currentMap);
         }
-        currentMap[entry.id] = {
+        currentMap[entry.path] = {
           ...entry,
           expanded: false,
           checked: true,
           indeterminate: false,
           hasChildren: entry.is_dir,
-          childIds: entryChildIds,
+          childPaths: entryChildPaths,
         };
       }
-      return childIds;
+      return childPaths;
     },
     []
   );
 
   // Toggle checkbox
   const toggleCheck = useCallback(
-    async (nodeId: number, checked: boolean) => {
+    async (nodePath: string, checked: boolean) => {
       const newMap = { ...state.nodesMap };
-      const node = newMap[nodeId];
+      const node = newMap[nodePath];
       if (!node) return;
 
-      if (node.is_dir && checked && (!node.childIds || node.childIds.length === 0)) {
-        const childIds = await loadAllChildrenRecursively(nodeId, newMap);
-        newMap[nodeId] = { ...node, checked, indeterminate: false, childIds, expanded: true };
+      if (node.is_dir && checked && (!node.childPaths || node.childPaths.length === 0)) {
+        const childPaths = await loadAllChildrenRecursively(nodePath, newMap);
+        newMap[nodePath] = { ...node, checked, indeterminate: false, childPaths, expanded: true };
       } else {
-        updateChildrenSelection(newMap, nodeId, checked);
+        updateChildrenSelection(newMap, nodePath, checked);
       }
 
-      updateParentSelection(newMap, node.parent_id);
+      updateParentSelection(newMap, node.parent_path);
       dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
 
       // Notify parent
       if (onSelectionChange) {
-        const selected = collectSelected(newMap, state.rootIds);
-        onSelectionChange(selected.paths, selected.ids);
+        const selected = collectSelected(newMap, state.rootPaths);
+        onSelectionChange(selected);
       }
     },
-    [state.nodesMap, state.rootIds, onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection]
+    [state.nodesMap, state.rootPaths, onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection]
   );
 
   // Helper: Collect selected files
   const collectSelected = useCallback(
-    (map: Record<number, TreeNode>, ids: number[]): { paths: string[]; ids: number[] } => {
-      const paths: string[] = [];
-      const selectedIds: number[] = [];
+    (map: Record<string, TreeNode>, paths: string[]): string[] => {
+      const selectedPaths: string[] = [];
 
-      const traverse = (currentIds: number[]) => {
-        for (const id of currentIds) {
-          const node = map[id];
+      const traverse = (currentPaths: string[]) => {
+        for (const path of currentPaths) {
+          const node = map[path];
           if (!node) continue;
           if (node.checked && !node.is_dir) {
-            paths.push(node.path);
-            selectedIds.push(node.id);
+            selectedPaths.push(node.path);
           }
-          if (node.childIds) {
-            traverse(node.childIds);
+          if (node.childPaths) {
+            traverse(node.childPaths);
           }
         }
       };
 
-      traverse(ids);
-      return { paths, ids: selectedIds };
+      traverse(paths);
+      return selectedPaths;
     },
     []
   );
 
   const getSelectedPaths = useCallback(() => {
-    return collectSelected(state.nodesMap, state.rootIds);
-  }, [state.nodesMap, state.rootIds, collectSelected]);
+    return collectSelected(state.nodesMap, state.rootPaths);
+  }, [state.nodesMap, state.rootPaths, collectSelected]);
 
   const setFilter = useCallback((filter: FilterType) => {
     dispatch({ type: "SET_FILTER", payload: filter });

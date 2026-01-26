@@ -25,7 +25,8 @@
       "Bash(done)",
       "Bash(ls:*)",
       "Bash(powershell:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm run check:*)"
     ]
   },
   "enabledPlugins": {

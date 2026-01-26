@@ -26,7 +26,6 @@ interface DragDropPayload {
 function App() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [activeTab, setActiveTab] = useState<ActiveTab>("files");
-  const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [dragActive, setDragActive] = useState(false);
@@ -113,8 +112,7 @@ function App() {
     };
   }, []);
 
-  const handleSelectionChange = useCallback((paths: string[], ids: number[]) => {
-    setSelectedFileIds(ids);
+  const handleSelectionChange = useCallback((paths: string[]) => {
     setSelectedPaths(paths);
   }, []);
 
@@ -172,7 +170,6 @@ function App() {
 
       setShouldClearFileTree(true);
       await invoke("clear_index");
-      setSelectedFileIds([]);
       setSelectedPaths([]);
       setCustomInstructions("");
       clearSession();
@@ -243,7 +240,7 @@ function App() {
                 <div className={activeTab === "prompt" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
                   <PromptBuilder
                     ref={promptBuilderRef}
-                    selectedFileIds={selectedFileIds}
+                    selectedFilePaths={selectedPaths}
                     onPromptBuilt={(prompt) => {
                       console.log("Built prompt:", prompt);
                     }}

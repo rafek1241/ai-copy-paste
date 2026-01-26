@@ -7,7 +7,6 @@ use std::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileContent {
-    pub id: i64,
     pub path: String,
     pub content: String,
 }
@@ -16,7 +15,7 @@ pub struct FileContent {
 pub struct BuildPromptRequest {
     pub template_id: String,
     pub custom_instructions: Option<String>,
-    pub file_ids: Vec<i64>,
+    pub file_paths: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,34 +46,40 @@ pub async fn build_prompt_from_files(
     log::info!(
         "Building prompt with template '{}' for {} files",
         request.template_id,
-        request.file_ids.len()
+        request.file_paths.len()
     );
 
     let conn = db
         .lock()
         .map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    // Get file paths from database
+    // Verify files exist in database and read content
     let mut file_contents = Vec::new();
     let mut total_chars = 0;
 
-    for file_id in &request.file_ids {
-        let path: String = conn
+    for file_path in &request.file_paths {
+        // Verify file exists in index and is not a directory
+        let is_valid: bool = conn
             .query_row(
-                "SELECT path FROM files WHERE id = ? AND is_dir = 0",
-                params![file_id],
-                |row| row.get(0),
+                "SELECT 1 FROM files WHERE path = ? AND is_dir = 0",
+                params![file_path],
+                |_| Ok(true),
             )
-            .map_err(|e| format!("Failed to get file path for id {}: {}", file_id, e))?;
+            .unwrap_or(false);
 
-        match read_file_content(&path) {
+        if !is_valid {
+            log::warn!("File not in index or is a directory: {}", file_path);
+            continue;
+        }
+
+        match read_file_content(file_path) {
             Ok(content) => {
                 total_chars += content.len();
-                file_contents.push((path.clone(), content));
+                file_contents.push((file_path.clone(), content));
             }
             Err(e) => {
-                log::warn!("Failed to read file {}: {}", path, e);
-                file_contents.push((path.clone(), format!("[Error reading file: {}]", e)));
+                log::warn!("Failed to read file {}: {}", file_path, e);
+                file_contents.push((file_path.clone(), format!("[Error reading file: {}]", e)));
             }
         }
     }
@@ -93,38 +98,37 @@ pub async fn build_prompt_from_files(
     })
 }
 
-/// Get file content by ID
+/// Get file content by path
 #[tauri::command]
 pub async fn get_file_content(
-    file_id: i64,
+    file_path: String,
     db: tauri::State<'_, DbConnection>,
 ) -> Result<FileContent, String> {
     let conn = db
         .lock()
         .map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    let path: String = conn
-        .query_row(
-            "SELECT path FROM files WHERE id = ? AND is_dir = 0",
-            params![file_id],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("Failed to get file path: {}", e))?;
+    // Verify file exists in index and is not a directory
+    conn.query_row(
+        "SELECT 1 FROM files WHERE path = ? AND is_dir = 0",
+        params![&file_path],
+        |_| Ok(()),
+    )
+    .map_err(|e| format!("File not found in index: {}", e))?;
 
-    let content = read_file_content(&path)
+    let content = read_file_content(&file_path)
         .map_err(|e| format!("Failed to read file content: {}", e))?;
 
     Ok(FileContent {
-        id: file_id,
-        path,
+        path: file_path,
         content,
     })
 }
 
-/// Get multiple file contents by IDs
+/// Get multiple file contents by paths
 #[tauri::command]
 pub async fn get_file_contents(
-    file_ids: Vec<i64>,
+    file_paths: Vec<String>,
     db: tauri::State<'_, DbConnection>,
 ) -> Result<Vec<FileContent>, String> {
     let conn = db
@@ -133,25 +137,30 @@ pub async fn get_file_contents(
 
     let mut contents = Vec::new();
 
-    for file_id in file_ids {
-        let path: String = conn
+    for file_path in file_paths {
+        // Verify file exists in index and is not a directory
+        let is_valid: bool = conn
             .query_row(
-                "SELECT path FROM files WHERE id = ? AND is_dir = 0",
-                params![file_id],
-                |row| row.get(0),
+                "SELECT 1 FROM files WHERE path = ? AND is_dir = 0",
+                params![&file_path],
+                |_| Ok(true),
             )
-            .map_err(|e| format!("Failed to get file path for id {}: {}", file_id, e))?;
+            .unwrap_or(false);
 
-        match read_file_content(&path) {
+        if !is_valid {
+            log::warn!("File not in index or is a directory: {}", file_path);
+            continue;
+        }
+
+        match read_file_content(&file_path) {
             Ok(content) => {
                 contents.push(FileContent {
-                    id: file_id,
-                    path,
+                    path: file_path,
                     content,
                 });
             }
             Err(e) => {
-                log::warn!("Failed to read file {}: {}", path, e);
+                log::warn!("Failed to read file {}: {}", file_path, e);
             }
         }
     }

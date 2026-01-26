@@ -72,20 +72,20 @@ export const FileTreeRow = memo(function FileTreeRow({
   const paddingLeft = node.level * 12 + 8;
 
   const handleRowClick = useCallback(() => {
-    toggleCheck(node.id, !node.checked);
-  }, [node.id, node.checked, toggleCheck]);
+    toggleCheck(node.path, !node.checked);
+  }, [node.path, node.checked, toggleCheck]);
 
   const handleExpandClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      toggleExpand(node.id);
+      toggleExpand(node.path);
     },
-    [node.id, toggleExpand]
+    [node.path, toggleExpand]
   );
 
   const handleCheckboxChange = useCallback(() => {
-    toggleCheck(node.id, !node.checked);
-  }, [node.id, node.checked, toggleCheck]);
+    toggleCheck(node.path, !node.checked);
+  }, [node.path, node.checked, toggleCheck]);
 
   const handlePathClick = useCallback(
     (e: React.MouseEvent) => {
@@ -124,11 +124,11 @@ export const FileTreeRow = memo(function FileTreeRow({
           }
           if (e.key === "ArrowRight" && !node.expanded) {
             e.preventDefault();
-            toggleExpand(node.id);
+            toggleExpand(node.path);
           }
           if (e.key === "ArrowLeft" && node.expanded) {
             e.preventDefault();
-            toggleExpand(node.id);
+            toggleExpand(node.path);
           }
         }}
       >
@@ -183,7 +183,7 @@ export const FileTreeRow = memo(function FileTreeRow({
 
         {/* Item count */}
         <span className="text-[9px] text-white/30 ml-2 flex-1 whitespace-nowrap">
-          ({node.child_count ?? node.childIds?.length ?? 0} items)
+          ({node.child_count ?? node.childPaths?.length ?? 0} items)
         </span>
 
         {/* Path (clickable to copy) */}

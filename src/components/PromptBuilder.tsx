@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { useAppCustomInstructions } from "../contexts/AppContext";
 
 interface PromptBuilderProps {
-  selectedFileIds: number[];
+  selectedFilePaths: string[];
   onPromptBuilt?: (prompt: string) => void;
 }
 
@@ -17,7 +17,7 @@ export interface PromptBuilderHandle {
 }
 
 export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>(({
-  selectedFileIds,
+  selectedFilePaths,
   onPromptBuilt,
 }, ref) => {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
@@ -43,7 +43,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
   };
 
   const handleBuildPrompt = async () => {
-    if (selectedFileIds.length === 0 && !customInstructions.trim()) {
+    if (selectedFilePaths.length === 0 && !customInstructions.trim()) {
       setError("Please select files or enter custom instructions");
       return;
     }
@@ -52,9 +52,9 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
 
     try {
       const trimmedInstructions = customInstructions.trim();
-      
+
       // If only custom instructions (no files), just copy directly without backend call
-      if (selectedFileIds.length === 0 && trimmedInstructions) {
+      if (selectedFilePaths.length === 0 && trimmedInstructions) {
         await navigator.clipboard.writeText(trimmedInstructions);
         if (onPromptBuilt) {
           onPromptBuilt(trimmedInstructions);
@@ -64,9 +64,9 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
 
       // Build prompt with files
       let finalInstructions = trimmedInstructions;
-      
+
       // Only add context section if files are selected
-      if (selectedFileIds.length > 0) {
+      if (selectedFilePaths.length > 0) {
         if (finalInstructions && !finalInstructions.includes("{{files}}")) {
           finalInstructions += "\n\n---CONTEXT:\n\n{{files}}";
         } else if (!finalInstructions) {
@@ -77,7 +77,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
       const response = await assemblePrompt({
         templateId: "custom",
         customInstructions: finalInstructions,
-        fileIds: selectedFileIds,
+        filePaths: selectedFilePaths,
       });
 
       // Copy to clipboard automatically
