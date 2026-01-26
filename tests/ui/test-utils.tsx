@@ -1,7 +1,7 @@
 import React, { ReactElement } from 'react';
 import { render, RenderOptions } from '@testing-library/react';
-import { ToastProvider } from '../components/ui/toast';
-import { AppProvider } from '../contexts/AppContext';
+import { ToastProvider } from '@/components/ui/toast';
+import { AppProvider } from '@/contexts/AppContext';
 
 interface AllTheProvidersProps {
   children: React.ReactNode;

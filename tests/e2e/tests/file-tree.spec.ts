@@ -16,6 +16,7 @@ describe("File Tree", () => {
     await appPage.waitForLoad();
     await appPage.navigateToMain();
     await fileTreePage.waitForReady();
+    await fileTreePage.ensureTestFixturesIndexed();
   });
 
   describe("Initial State", () => {

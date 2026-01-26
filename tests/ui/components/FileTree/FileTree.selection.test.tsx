@@ -20,59 +20,59 @@ vi.mock('@tanstack/react-virtual', () => ({
 describe('FileTree Selection Propagation', () => {
   const mockNodes = [
     {
-      id: 1,
-      parent_id: null,
-      name: 'folder1',
       path: '/folder1',
+      parent_path: null,
+      name: 'folder1',
       is_dir: true,
       size: null,
       mtime: null,
       token_count: null,
       fingerprint: null,
+      child_count: 2,
     },
     {
-      id: 2,
-      parent_id: 1,
-      name: 'file1.txt',
       path: '/folder1/file1.txt',
+      parent_path: '/folder1',
+      name: 'file1.txt',
       is_dir: false,
       size: 100,
       mtime: 123456,
       token_count: null,
       fingerprint: 'fp1',
+      child_count: null,
     },
     {
-      id: 3,
-      parent_id: 1,
-      name: 'subfolder',
       path: '/folder1/subfolder',
+      parent_path: '/folder1',
+      name: 'subfolder',
       is_dir: true,
       size: null,
       mtime: null,
       token_count: null,
       fingerprint: null,
+      child_count: 1,
     },
     {
-      id: 4,
-      parent_id: 3,
-      name: 'file2.txt',
       path: '/folder1/subfolder/file2.txt',
+      parent_path: '/folder1/subfolder',
+      name: 'file2.txt',
       is_dir: false,
       size: 200,
       mtime: 123457,
       token_count: null,
       fingerprint: 'fp2',
+      child_count: null,
     }
   ];
 
   beforeEach(() => {
     mockInvoke.mockImplementation((command, args) => {
       if (command === 'get_tree_roots') {
-        return Promise.resolve(mockNodes.filter(n => n.parent_id === null));
+        return Promise.resolve(mockNodes.filter(n => n.parent_path === null));
       }
       if (command === 'get_children') {
-        const parentId = args.parentId;
-        return Promise.resolve(mockNodes.filter(n => n.parent_id === parentId));
+        const parentPath = args.parentPath;
+        return Promise.resolve(mockNodes.filter(n => n.parent_path === parentPath));
       }
       return Promise.resolve([]);
     });
@@ -170,40 +170,55 @@ describe('FileTree Selection Propagation', () => {
 
   it('should handle deep nesting propagation correctly', async () => {
     // Create a chain of 5 nested folders (reduced for test reliability)
-    const deepNodes = [];
+    const deepNodes: any[] = [];
+    
+    // Helper to generate path
+    const getPath = (index: number) => {
+      let p = '';
+      for (let i = 1; i <= index; i++) {
+        p += `/folder${i}`;
+      }
+      return p;
+    };
+
     for (let i = 1; i <= 5; i++) {
+      const path = getPath(i);
+      const parentPath = i === 1 ? null : getPath(i - 1);
+      
       deepNodes.push({
-        id: i,
-        parent_id: i === 1 ? null : i - 1,
+        path: path,
+        parent_path: parentPath,
         name: `folder${i}`,
-        path: `/` + Array.from({length: i}, (_, j) => `folder${j+1}`).join('/'),
         is_dir: true,
         size: null,
         mtime: null,
         token_count: null,
         fingerprint: null,
+        child_count: 1,
       });
     }
+    
     // Add one file at the bottom
+    const lastFolder = deepNodes[4];
     deepNodes.push({
-      id: 6,
-      parent_id: 5,
+      path: lastFolder.path + '/leaf.txt',
+      parent_path: lastFolder.path,
       name: 'leaf.txt',
-      path: deepNodes[4].path + '/leaf.txt',
       is_dir: false,
       size: 100,
       mtime: 123456,
       token_count: null,
       fingerprint: 'fp_leaf',
+      child_count: null,
     });
 
     mockInvoke.mockImplementation((command, args) => {
       if (command === 'get_tree_roots') {
-        return Promise.resolve(deepNodes.filter(n => n.parent_id === null));
+        return Promise.resolve(deepNodes.filter(n => n.parent_path === null));
       }
       if (command === 'get_children') {
-        const parentId = args.parentId;
-        return Promise.resolve(deepNodes.filter(n => n.parent_id === parentId));
+        const parentPath = args.parentPath;
+        return Promise.resolve(deepNodes.filter(n => n.parent_path === parentPath));
       }
       return Promise.resolve([]);
     });

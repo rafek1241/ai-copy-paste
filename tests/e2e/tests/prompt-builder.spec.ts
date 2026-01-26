@@ -27,19 +27,15 @@ describe("Prompt Builder", () => {
       fs.writeFileSync(filePath, file.content);
     }
 
-    // Index the fixtures folder
-    try {
-      await fileTreePage.indexFolder(fixturesPath);
-      await browser.pause(2000);
-    } catch {
-      // May already be indexed
-    }
+    // Ensure fixtures are indexed
+    await appPage.navigateToMain();
+    await fileTreePage.ensureTestFixturesIndexed();
   });
 
   describe("Initial State", () => {
     it("should display the Prompt Builder title", async () => {
       const heading = await $("h2*=Prompt Builder");
-      expect(await heading.isDisplayed()).to.be.true;
+      expect(await heading.isDisplayed()).toBe(true);
     });
 
     it("should display template selector", async () => {
@@ -58,7 +54,7 @@ describe("Prompt Builder", () => {
         if (hasTemplateSelect) break;
       }
 
-      expect(hasTemplateSelect).to.be.true;
+      expect(hasTemplateSelect).toBe(true);
     });
 
     it("should display model selector", async () => {
@@ -77,30 +73,30 @@ describe("Prompt Builder", () => {
         if (hasModelSelect) break;
       }
 
-      expect(hasModelSelect).to.be.true;
+      expect(hasModelSelect).toBe(true);
     });
 
     it("should display custom instructions textarea", async () => {
       const textarea = await $('textarea[placeholder*="instructions"]');
-      expect(await textarea.isDisplayed()).to.be.true;
+      expect(await textarea.isDisplayed()).toBe(true);
     });
 
     it("should display Build button", async () => {
       const buildBtn = await $('button*=Build');
-      expect(await buildBtn.isDisplayed()).to.be.true;
+      expect(await buildBtn.isDisplayed()).toBe(true);
     });
 
     it("should show 0 selected files initially", async () => {
       const infoText = await $('div*=Selected Files');
       const text = await infoText.getText();
-      expect(text).to.include("0").or.include("Selected Files");
+      expect(text).toMatch(/0|Selected Files/);
     });
   });
 
   describe("Template Selection", () => {
     it("should have multiple template options", async () => {
       const templates = await promptBuilderPage.getAvailableTemplates();
-      expect(templates.length).to.be.at.least(1);
+      expect(templates.length).toBeGreaterThanOrEqual(1);
     });
 
     it("should include standard templates", async () => {
@@ -109,7 +105,7 @@ describe("Prompt Builder", () => {
 
       // At least some of these should exist
       const hasExpected = templates.some((t) => expectedTemplates.includes(t));
-      expect(hasExpected).to.be.true;
+      expect(hasExpected).toBe(true);
     });
 
     it("should allow selecting different templates", async () => {
@@ -133,7 +129,7 @@ describe("Prompt Builder", () => {
         if (currentValue) break;
       }
 
-      expect(currentValue).to.equal("planning");
+      expect(currentValue).toBe("planning");
 
       // Reset to agent
       await promptBuilderPage.selectTemplate("agent");
@@ -143,7 +139,7 @@ describe("Prompt Builder", () => {
   describe("Model Selection", () => {
     it("should have multiple model options", async () => {
       const models = await promptBuilderPage.getAvailableModels();
-      expect(models.length).to.be.at.least(1);
+      expect(models.length).toBeGreaterThanOrEqual(1);
     });
 
     it("should include GPT and Claude models", async () => {
@@ -152,7 +148,7 @@ describe("Prompt Builder", () => {
       const hasGPT = models.some((m) => m.includes("gpt"));
       const hasClaude = models.some((m) => m.includes("claude"));
 
-      expect(hasGPT || hasClaude).to.be.true;
+      expect(hasGPT || hasClaude).toBe(true);
     });
 
     it("should allow selecting different models", async () => {
@@ -170,7 +166,7 @@ describe("Prompt Builder", () => {
       await promptBuilderPage.setCustomInstructions(instructions);
 
       const value = await promptBuilderPage.getCustomInstructions();
-      expect(value).to.equal(instructions);
+      expect(value).toBe(instructions);
 
       // Clear
       await promptBuilderPage.setCustomInstructions("");
@@ -187,7 +183,7 @@ describe("Prompt Builder", () => {
       // Instructions might be preserved or cleared depending on implementation
       // Just verify no errors
       const textarea = await $("textarea");
-      expect(await textarea.isDisplayed()).to.be.true;
+      expect(await textarea.isDisplayed()).toBe(true);
 
       await promptBuilderPage.setCustomInstructions("");
       await promptBuilderPage.selectTemplate("agent");
@@ -207,14 +203,14 @@ describe("Prompt Builder", () => {
 
       // Either shows error or button is disabled
       const isDisabled = await buildBtn.getAttribute("disabled");
-      expect(isError || isDisabled !== null).to.be.true;
+      expect(isError || isDisabled !== null).toBe(true);
     });
 
     it("should have disabled build button when no files selected", async () => {
       const isEnabled = await promptBuilderPage.isBuildButtonEnabled();
       // Button may be disabled or will show error when clicked
       // Both behaviors are valid
-      expect(typeof isEnabled).to.equal("boolean");
+      expect(typeof isEnabled).toBe("boolean");
     });
   });
 
@@ -264,7 +260,7 @@ describe("Prompt Builder", () => {
       const isPreviewDisplayed = await promptBuilderPage.isPromptPreviewDisplayed();
 
       // May or may not show preview depending on state
-      expect(typeof isPreviewDisplayed).to.equal("boolean");
+      expect(typeof isPreviewDisplayed).toBe("boolean");
     });
 
     it("should display token count after building prompt", async function () {
@@ -279,7 +275,7 @@ describe("Prompt Builder", () => {
       const tokenCounter = await $('div*=tokens, span*=tokens');
       const exists = await tokenCounter.isExisting();
 
-      expect(typeof exists).to.equal("boolean");
+      expect(typeof exists).toBe("boolean");
     });
 
     it("should copy prompt to clipboard automatically", async function () {
@@ -300,7 +296,7 @@ describe("Prompt Builder", () => {
       const isError = await promptBuilderPage.isErrorDisplayed();
 
       // Either preview is shown or error - both indicate the build attempted
-      expect(isPreviewDisplayed || isError || true).to.be.true;
+      expect(isPreviewDisplayed || isError || true).toBe(true);
     });
   });
 
@@ -315,14 +311,14 @@ describe("Prompt Builder", () => {
 
       if (await promptBuilderPage.isPromptPreviewDisplayed()) {
         const content = await promptBuilderPage.getPromptContent();
-        expect(content.length).to.be.at.least(0);
+        expect(content.length).toBeGreaterThanOrEqual(0);
       }
     });
 
     it("should have copy to clipboard button in preview", async function () {
       if (await promptBuilderPage.isPromptPreviewDisplayed()) {
         const copyBtn = await $('button*=Copy');
-        expect(await copyBtn.isExisting()).to.be.true;
+        expect(await copyBtn.isExisting()).toBe(true);
       } else {
         this.skip();
       }
@@ -335,7 +331,7 @@ describe("Prompt Builder", () => {
       const templates = await promptBuilderPage.getAvailableTemplates();
 
       // Should have at least default templates
-      expect(templates.length).to.be.at.least(0);
+      expect(templates.length).toBeGreaterThanOrEqual(0);
     });
 
     it("should display meaningful error messages", async () => {
@@ -363,7 +359,7 @@ describe("Prompt Builder", () => {
       const isError = await promptBuilderPage.isErrorDisplayed();
       if (isError) {
         const errorMsg = await promptBuilderPage.getErrorMessage();
-        expect(errorMsg.length).to.be.at.least(1);
+        expect(errorMsg.length).toBeGreaterThanOrEqual(1);
       }
     });
   });

@@ -21,19 +21,19 @@ describe("Settings", () => {
   describe("Settings Page Display", () => {
     it("should display settings page when navigating to Settings", async () => {
       const isDisplayed = await settingsPage.isDisplayed();
-      expect(isDisplayed).to.be.true;
+      expect(isDisplayed).toBe(true);
     });
 
     it("should display settings heading", async () => {
       const heading = await $("h2");
       const text = await heading.getText();
-      expect(text.toLowerCase()).to.include("settings");
+      expect(text.toLowerCase()).toContain("settings");
     });
 
     it("should display configuration options", async () => {
       // Check for common settings elements
       const labels = await $$("label");
-      expect(labels.length).to.be.at.least(1);
+      expect(labels.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -41,7 +41,7 @@ describe("Settings", () => {
     it("should have input fields for settings", async () => {
       const inputs = await $$("input");
       // Should have some input fields
-      expect(inputs.length).to.be.at.least(0);
+      expect(inputs.length).toBeGreaterThanOrEqual(0);
     });
 
     it("should allow entering values in settings fields", async () => {
@@ -55,7 +55,7 @@ describe("Settings", () => {
         await input.setValue("test-value");
 
         const newValue = await input.getValue();
-        expect(newValue).to.equal("test-value");
+        expect(newValue).toBe("test-value");
 
         // Restore original value
         await input.clearValue();
@@ -71,25 +71,25 @@ describe("Settings", () => {
       const saveBtn = await $('button*=Save');
       const exists = await saveBtn.isExisting();
       // Save button may or may not exist depending on implementation
-      expect(typeof exists).to.equal("boolean");
+      expect(typeof exists).toBe("boolean");
     });
 
     it("should have Reset button", async () => {
       const resetBtn = await $('button*=Reset');
       const exists = await resetBtn.isExisting();
-      expect(typeof exists).to.equal("boolean");
+      expect(typeof exists).toBe("boolean");
     });
 
     it("should have Export button", async () => {
       const exportBtn = await $('button*=Export');
       const exists = await exportBtn.isExisting();
-      expect(typeof exists).to.equal("boolean");
+      expect(typeof exists).toBe("boolean");
     });
 
     it("should have Import button", async () => {
       const importBtn = await $('button*=Import');
       const exists = await importBtn.isExisting();
-      expect(typeof exists).to.equal("boolean");
+      expect(typeof exists).toBe("boolean");
     });
   });
 
@@ -106,7 +106,7 @@ describe("Settings", () => {
         const isSuccess = await settingsPage.isSuccessMessageDisplayed();
 
         // Just verify no crash
-        expect(true).to.be.true;
+        expect(true).toBe(true);
       }
     });
 
@@ -119,7 +119,7 @@ describe("Settings", () => {
 
         // Settings should be reset to defaults
         // Implementation dependent
-        expect(true).to.be.true;
+        expect(true).toBe(true);
       }
     });
 
@@ -153,7 +153,7 @@ describe("Settings", () => {
       if (testValue && inputs.length > 0) {
         const currentValue = await inputs[0].getValue();
         // Just verify no errors - persistence depends on implementation
-        expect(typeof currentValue).to.equal("string");
+        expect(typeof currentValue).toBe("string");
       }
     });
   });
@@ -169,7 +169,7 @@ describe("Settings", () => {
         await browser.pause(500);
 
         // Dialog may have opened - can't interact with native dialogs
-        expect(true).to.be.true;
+        expect(true).toBe(true);
       }
     });
 
@@ -181,7 +181,7 @@ describe("Settings", () => {
         await browser.pause(500);
 
         // Dialog may have opened
-        expect(true).to.be.true;
+        expect(true).toBe(true);
       }
     });
   });
@@ -201,7 +201,7 @@ describe("Settings Integration", () => {
 
     const heading = await $("h2");
     const text = await heading.getText();
-    expect(text.toLowerCase()).to.include("settings");
+    expect(text.toLowerCase()).toContain("settings");
   });
 
   it("should return to previous view after Settings", async () => {
@@ -212,6 +212,6 @@ describe("Settings Integration", () => {
     await browser.pause(200);
 
     const isFileTreeDisplayed = await appPage.isFileTreeDisplayed();
-    expect(isFileTreeDisplayed).to.be.true;
+    expect(isFileTreeDisplayed).toBe(true);
   });
 });

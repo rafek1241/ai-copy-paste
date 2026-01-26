@@ -312,6 +312,21 @@ export class FileTreePage extends BasePage {
   }
 
   /**
+   * Ensure that test fixtures are indexed and visible
+   */
+  async ensureTestFixturesIndexed(): Promise<void> {
+    const nodeCount = await this.getVisibleNodeCount();
+    if (nodeCount === 0) {
+      console.log("FileTreePage: Tree is empty, indexing test fixtures...");
+      const fixturesPath = this.getTestFixturesPath();
+      await this.indexFolder(fixturesPath);
+      await this.waitForNodes(1, 20000);
+    } else {
+      console.log(`FileTreePage: Tree already has ${nodeCount} nodes`);
+    }
+  }
+
+  /**
    * Get the test fixtures directory path
    */
   getTestFixturesPath(): string {

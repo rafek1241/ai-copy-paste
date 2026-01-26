@@ -24,11 +24,11 @@ describe("FileTree Rows", () => {
 
     it("renders rows with Material Symbols icons", async () => {
         // Mock get_tree_roots to return a file and a folder
-        mockInvoke.mockImplementation((cmd) => {
-            if (cmd === 'get_tree_roots') {
+        mockInvoke.mockImplementation((cmd, args) => {
+            if (cmd === 'get_children' && args?.parentPath === null) {
                 return Promise.resolve([
-                    { id: 1, name: 'src', path: '/src', is_dir: true, size: null, mtime: null, token_count: null, fingerprint: null },
-                    { id: 2, name: 'main.ts', path: '/src/main.ts', is_dir: false, size: 1024, mtime: null, token_count: null, fingerprint: null }
+                    { path: '/src', parent_path: null, name: 'src', is_dir: true, size: null, mtime: null, token_count: null, fingerprint: null, child_count: 1 },
+                    { path: '/main.ts', parent_path: null, name: 'main.ts', is_dir: false, size: 1024, mtime: null, token_count: null, fingerprint: null, child_count: null }
                 ]);
             }
             return Promise.resolve([]);

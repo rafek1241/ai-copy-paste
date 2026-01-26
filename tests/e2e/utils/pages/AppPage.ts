@@ -180,6 +180,18 @@ export class AppPage extends BasePage {
   }
 
   /**
+   * Click the Clear Context button in the header
+   */
+  async clearContext(): Promise<void> {
+    try {
+      await this.safeClick(Selectors.clearContextBtn);
+    } catch {
+      await this.safeClick(FallbackSelectors.clearContextBtn);
+    }
+    await browser.pause(500); // Wait for clear to take effect
+  }
+
+  /**
    * Check if the application is in files view
    */
   async isInFilesView(): Promise<boolean> {

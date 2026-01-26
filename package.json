@@ -12,7 +12,8 @@
     "test:ui": "vitest run --ui",
     "test:coverage": "vitest run --coverage",
     "test:rust": "cd src-tauri && cargo test",
-    "test:e2e": "wdio run tests/e2e/wdio.conf.ts",
+    "driver": "tauri-driver --native-driver bin/msedgedriver.exe",
+    "test:e2e": "powershell -Command \"$p = Start-Process tauri-driver -ArgumentList '--native-driver bin/msedgedriver.exe' -NoNewWindow -PassThru; wdio run tests/e2e/wdio.conf.ts; Stop-Process -Id $p.Id\"",
     "test:e2e:headless": "CI=true wdio run tests/e2e/wdio.conf.ts",
     "build:tauri": "cd src-tauri && cargo build",
     "build:tauri:release": "cd src-tauri && cargo build --release"

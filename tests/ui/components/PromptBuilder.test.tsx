@@ -6,15 +6,15 @@ import * as assemblyService from '@/services/assembly';
 import { AppProvider } from '@/contexts/AppContext';
 
 // Mock services
-vi.mock('../services/prompts', () => ({
+vi.mock('@/services/prompts', () => ({
   getTemplates: vi.fn(),
 }));
 
-vi.mock('../services/assembly', () => ({
+vi.mock('@/services/assembly', () => ({
   assemblePrompt: vi.fn(),
 }));
 
-vi.mock('../hooks/useTokenCount', () => ({
+vi.mock('@/hooks/useTokenCount', () => ({
   useTokenCount: () => ({ totalTokens: 0, isCalculating: false }),
 }));
 

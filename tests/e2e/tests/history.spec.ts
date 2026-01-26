@@ -21,15 +21,13 @@ describe("History Panel", () => {
   describe("History Page Display", () => {
     it("should display history page when navigating to History", async () => {
       const isDisplayed = await historyPage.isDisplayed();
-      expect(isDisplayed).to.be.true;
+      expect(isDisplayed).toBe(true);
     });
 
     it("should display history heading", async () => {
       const heading = await $("h2");
       const text = await heading.getText();
-      expect(text.toLowerCase()).to.satisfy((t: string) =>
-        t.includes("history") || t.includes("session")
-      );
+      expect(text.toLowerCase()).toMatch(/history|session/);
     });
   });
 
@@ -39,7 +37,7 @@ describe("History Panel", () => {
       const count = await historyPage.getHistoryCount();
 
       // Either empty or has entries - both valid states
-      expect(count).to.be.at.least(0);
+      expect(count).toBeGreaterThanOrEqual(0);
     });
 
     it("should display appropriate message when no history", async () => {
@@ -50,7 +48,7 @@ describe("History Panel", () => {
         const emptyMsg = await $('div*=No history, p*=No entries, div*=empty');
         const exists = await emptyMsg.isExisting();
         // Message may or may not exist
-        expect(typeof exists).to.equal("boolean");
+        expect(typeof exists).toBe("boolean");
       }
     });
   });
@@ -61,7 +59,7 @@ describe("History Panel", () => {
 
       if (count > 0) {
         const entries = await historyPage.getHistoryEntries();
-        expect(entries.length).to.be.at.least(1);
+        expect(entries.length).toBeGreaterThanOrEqual(1);
       }
     });
 
@@ -75,7 +73,7 @@ describe("History Panel", () => {
 
       const details = await historyPage.getEntryDetails(0);
       // May have date, file count, or template info
-      expect(typeof details).to.equal("object");
+      expect(typeof details).toBe("object");
     });
   });
 
@@ -92,7 +90,7 @@ describe("History Panel", () => {
       if (entry) {
         const restoreBtn = await entry.$('button*=Restore, button*=Load');
         const hasRestore = await restoreBtn.isExisting();
-        expect(typeof hasRestore).to.equal("boolean");
+        expect(typeof hasRestore).toBe("boolean");
       }
     });
 
@@ -108,14 +106,14 @@ describe("History Panel", () => {
       if (entry) {
         const deleteBtn = await entry.$('button*=Delete, button*=Remove');
         const hasDelete = await deleteBtn.isExisting();
-        expect(typeof hasDelete).to.equal("boolean");
+        expect(typeof hasDelete).toBe("boolean");
       }
     });
 
     it("should have clear all functionality", async () => {
       const clearBtn = await $('button*=Clear');
       const hasClear = await clearBtn.isExisting();
-      expect(typeof hasClear).to.equal("boolean");
+      expect(typeof hasClear).toBe("boolean");
     });
   });
 
@@ -128,7 +126,7 @@ describe("History Panel", () => {
       await browser.pause(200);
 
       const isFileTreeDisplayed = await appPage.isFileTreeDisplayed();
-      expect(isFileTreeDisplayed).to.be.true;
+      expect(isFileTreeDisplayed).toBe(true);
     });
 
     it("should preserve history when navigating between views", async () => {
@@ -142,7 +140,7 @@ describe("History Panel", () => {
       const newCount = await historyPage.getHistoryCount();
 
       // Count should be same after navigation
-      expect(newCount).to.equal(initialCount);
+      expect(newCount).toBe(initialCount);
     });
   });
 });
@@ -163,7 +161,7 @@ describe("History with Prompt Building", () => {
     const count = await historyPage.getHistoryCount();
 
     // Just verify we can access history count
-    expect(count).to.be.at.least(0);
+    expect(count).toBeGreaterThanOrEqual(0);
   });
 
   it("should limit history entries to max count", async () => {
@@ -172,6 +170,6 @@ describe("History with Prompt Building", () => {
     const count = await historyPage.getHistoryCount();
 
     // Should not exceed max limit
-    expect(count).to.be.at.most(100); // Reasonable upper bound
+    expect(count).toBeLessThanOrEqual(100); // Reasonable upper bound
   });
 });

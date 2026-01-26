@@ -3,12 +3,12 @@ import { assemblePrompt } from '@/services/assembly';
 import * as promptsService from '@/services/prompts';
 import * as extractionService from '@/services/extraction';
 
-vi.mock('./prompts', () => ({
+vi.mock('@/services/prompts', () => ({
   getFileContents: vi.fn(),
   buildPromptFromFiles: vi.fn(),
 }));
 
-vi.mock('./extraction', () => ({
+vi.mock('@/services/extraction', () => ({
   extractText: vi.fn(),
 }));
 

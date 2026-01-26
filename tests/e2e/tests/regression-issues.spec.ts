@@ -19,18 +19,23 @@ describe("Regression Tests", () => {
     await appPage.waitForLoad();
     await appPage.navigateToMain();
 
-    // Clear any existing indexed data
+    // Clear any existing indexed data using the UI button
     try {
-      await browser.execute(() => {
-        // @ts-ignore - Tauri API available in browser context
-        if (window.__TAURI__) {
-          // @ts-ignore
-          return window.__TAURI__.core.invoke("clear_index");
-        }
-      });
-      await browser.pause(500);
-    } catch {
-      // May fail if no data exists
+      await appPage.clearContext();
+    } catch (e) {
+      console.log("Could not clear context via UI, attempting direct invoke...");
+      try {
+        await browser.execute(() => {
+          // @ts-ignore - Tauri API available in browser context
+          if (window.__TAURI__) {
+            // @ts-ignore
+            return window.__TAURI__.core.invoke("clear_index");
+          }
+        });
+        await browser.pause(500);
+      } catch {
+        // May fail if no data exists
+      }
     }
   });
 
@@ -44,13 +49,9 @@ describe("Regression Tests", () => {
       const testFile = path.join(fixturesPath, "clipboard-test.ts");
       fs.writeFileSync(testFile, 'export const test = "clipboard test";');
 
-      // Index the fixtures folder
-      try {
-        await fileTreePage.indexFolder(fixturesPath);
-        await browser.pause(2000);
-      } catch {
-        // May already be indexed
-      }
+      // Ensure fixtures are indexed
+      await appPage.navigateToMain();
+      await fileTreePage.ensureTestFixturesIndexed();
     });
 
     it("should copy only custom instructions when no files selected (no ---CONTEXT:)", async () => {

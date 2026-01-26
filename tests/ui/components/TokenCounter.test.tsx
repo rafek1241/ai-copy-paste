@@ -5,7 +5,7 @@ import * as tokenizerService from '@/services/tokenizer';
 import { useTokenCount } from '@/hooks/useTokenCount';
 
 // Mock tokenizer service
-vi.mock('../services/tokenizer', () => ({
+vi.mock('@/services/tokenizer', () => ({
   countTokens: vi.fn(),
   formatTokenCount: (n: number) => n.toString(),
   calculateTokenPercentage: (u: number, l: number) => (l > 0 ? (u / l) * 100 : 0),
@@ -16,7 +16,7 @@ vi.mock('../services/tokenizer', () => ({
 }));
 
 // Mock useTokenCount hook
-vi.mock('../hooks/useTokenCount', () => ({
+vi.mock('@/hooks/useTokenCount', () => ({
   useTokenCount: vi.fn(),
 }));
 

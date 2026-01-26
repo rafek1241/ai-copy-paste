@@ -5,11 +5,11 @@ import * as promptsService from '@/services/prompts';
 import * as tokenizerService from '@/services/tokenizer';
 
 // Mock services
-vi.mock('../services/prompts', () => ({
+vi.mock('@/services/prompts', () => ({
   getFileContents: vi.fn(),
 }));
 
-vi.mock('../services/tokenizer', () => ({
+vi.mock('@/services/tokenizer', () => ({
   countTokens: vi.fn(),
   countTotalTokens: vi.fn(),
 }));
