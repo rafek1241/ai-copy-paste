@@ -14,7 +14,7 @@ const BINARY_NAMES = ["ai-context-collector", "ai-copy-paste-temp"];
 function getTauriAppPath(): string {
   const platform = os.platform();
   const ext = platform === "win32" ? ".exe" : "";
-  const baseDir = path.join(__dirname, "..", "src-tauri", "target");
+  const baseDir = path.join(__dirname, "..", "..", "src-tauri", "target");
 
   console.log("=== Searching for Tauri binary ===");
   console.log(`Base directory: ${baseDir}`);
@@ -57,10 +57,7 @@ function getTauriAppPath(): string {
 export const config: Options.Testrunner = {
   // Specify test files
   specs: [
-    "./tests/diagnostic.spec.ts",
-    "./tests/app-launch.spec.ts",
-    "./tests/file-tree.spec.ts",
-    "./tests/regression-issues.spec.ts",
+    "./tests/**/*.spec.ts",
   ],
   exclude: [],
 
@@ -106,7 +103,7 @@ export const config: Options.Testrunner = {
     [
       "junit",
       {
-        outputDir: "./e2e/reports",
+        outputDir: "./reports",
         outputFileFormat: function (options: any) {
           return `e2e-results-${options.cid}.xml`;
         },
@@ -116,7 +113,7 @@ export const config: Options.Testrunner = {
 
   // Logging
   logLevel: "info",
-  outputDir: "./e2e/logs",
+  outputDir: "./logs",
 
   // Timeouts
   waitforTimeout: 30000,

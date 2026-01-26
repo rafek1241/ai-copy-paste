@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import Sidebar from "./Sidebar";
+import Sidebar from "@/components/Sidebar";
 
 describe("Sidebar", () => {
     it("renders core navigation icons", () => {

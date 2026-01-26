@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { assemblePrompt } from './assembly';
-import * as promptsService from './prompts';
-import * as extractionService from './extraction';
+import { assemblePrompt } from '@/services/assembly';
+import * as promptsService from '@/services/prompts';
+import * as extractionService from '@/services/extraction';
 
 vi.mock('./prompts', () => ({
   getFileContents: vi.fn(),
@@ -27,13 +27,13 @@ describe('assembly service', () => {
 
     const result = await assemblePrompt({
       templateId: 'agent',
-      fileIds: [1, 2],
+      filePaths: ['/test/1', '/test/2'],
       customInstructions: 'test',
     });
 
     expect(promptsService.buildPromptFromFiles).toHaveBeenCalledWith({
       template_id: 'agent',
-      file_ids: [1, 2],
+      file_paths: ['/test/1', '/test/2'],
       custom_instructions: 'test',
     });
     expect(result.prompt).toBe('Assembled prompt');

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mockInvoke } from '../test/setup';
+import { mockInvoke } from '../setup';
 import {
   getTemplates,
   buildPromptFromFiles,
@@ -9,7 +9,7 @@ import {
   type BuildPromptRequest,
   type BuildPromptResponse,
   type FileContent,
-} from './prompts';
+} from '@/services/prompts';
 
 describe('prompts service', () => {
   beforeEach(() => {
@@ -85,49 +85,40 @@ describe('prompts service', () => {
     });
   });
 
-  describe('getFileContent', () => {
-    it('should fetch single file content', async () => {
-      const mockContent: FileContent = {
-        id: 1,
-        path: '/test/file.txt',
-        content: 'File content here',
-      };
+    describe('getFileContent', () => {
+      it('should fetch single file content', async () => {
+        const mockFile = { path: '/test/file.ts', content: 'test' };
+        mockInvoke.mockResolvedValue(mockFile);
 
-      mockInvoke.mockResolvedValue(mockContent);
+        const result = await getFileContent('/test/file.ts');
 
-      const result = await getFileContent(1);
-
-      expect(mockInvoke).toHaveBeenCalledWith('get_file_content', {
-        fileId: 1,
+        expect(mockInvoke).toHaveBeenCalledWith('get_file_content', {
+          path: '/test/file.ts',
+        });
+        expect(result).toEqual(mockFile);
       });
-      expect(result).toEqual(mockContent);
     });
-  });
 
-  describe('getFileContents', () => {
-    it('should fetch multiple file contents', async () => {
-      const mockContents: FileContent[] = [
-        { id: 1, path: '/test/file1.txt', content: 'Content 1' },
-        { id: 2, path: '/test/file2.txt', content: 'Content 2' },
-      ];
+    describe('getFileContents', () => {
+      it('should fetch multiple file contents', async () => {
+        const mockFiles = [
+          { path: '/test/file1.ts', content: 'test1' },
+          { path: '/test/file2.ts', content: 'test2' },
+        ];
+        mockInvoke.mockResolvedValue(mockFiles);
 
-      mockInvoke.mockResolvedValue(mockContents);
+        const result = await getFileContents(['/test/file1.ts', '/test/file2.ts']);
 
-      const result = await getFileContents([1, 2]);
-
-      expect(mockInvoke).toHaveBeenCalledWith('get_file_contents', {
-        fileIds: [1, 2],
+        expect(mockInvoke).toHaveBeenCalledWith('get_file_contents', {
+          paths: ['/test/file1.ts', '/test/file2.ts'],
+        });
+        expect(result).toEqual(mockFiles);
       });
-      expect(result).toHaveLength(2);
-      expect(result[0].path).toBe('/test/file1.txt');
+
+      it('should handle empty array', async () => {
+        mockInvoke.mockResolvedValue([]);
+        const result = await getFileContents([]);
+        expect(result).toEqual([]);
+      });
     });
-
-    it('should handle empty array', async () => {
-      mockInvoke.mockResolvedValue([]);
-
-      const result = await getFileContents([]);
-
-      expect(result).toEqual([]);
-    });
-  });
 });

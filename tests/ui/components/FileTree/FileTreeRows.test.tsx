@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { FileTree } from "./FileTree";
-import { mockInvoke } from "../../test/setup";
+import { FileTree } from "@/components/FileTree/FileTree";
+import { mockInvoke } from "../../setup";
 
 // Mock virtualizer to just render everything
 vi.mock('@tanstack/react-virtual', () => ({
@@ -23,9 +23,9 @@ describe("FileTree Rows", () => {
     });
 
     it("renders rows with Material Symbols icons", async () => {
-        // Mock get_children to return a file and a folder
-        mockInvoke.mockImplementation((cmd, args) => {
-            if (cmd === 'get_children') {
+        // Mock get_tree_roots to return a file and a folder
+        mockInvoke.mockImplementation((cmd) => {
+            if (cmd === 'get_tree_roots') {
                 return Promise.resolve([
                     { id: 1, name: 'src', path: '/src', is_dir: true, size: null, mtime: null, token_count: null, fingerprint: null },
                     { id: 2, name: 'main.ts', path: '/src/main.ts', is_dir: false, size: 1024, mtime: null, token_count: null, fingerprint: null }

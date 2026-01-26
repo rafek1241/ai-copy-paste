@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TokenCounter } from './TokenCounter';
-import * as tokenizerService from '../services/tokenizer';
-import { useTokenCount } from '../hooks/useTokenCount';
+import { TokenCounter } from '@/components/TokenCounter';
+import * as tokenizerService from '@/services/tokenizer';
+import { useTokenCount } from '@/hooks/useTokenCount';
 
 // Mock tokenizer service
 vi.mock('../services/tokenizer', () => ({
@@ -45,7 +45,7 @@ describe('TokenCounter', () => {
     vi.mocked(tokenizerService.countTokens).mockReturnValue(10);
     vi.mocked(useTokenCount).mockReturnValue({ totalTokens: 50, isCalculating: false });
     
-    render(<TokenCounter text="Hello" selectedFileIds={[1, 2]} />);
+    render(<TokenCounter text="Hello" selectedFilePaths={['/path/1', '/path/2']} />);
     
     await waitFor(() => {
       expect(screen.getByText('60')).toBeDefined();
@@ -63,7 +63,7 @@ describe('TokenCounter', () => {
 
   it('should show loading state while calculating', () => {
     vi.mocked(useTokenCount).mockReturnValue({ totalTokens: 0, isCalculating: true });
-    render(<TokenCounter text="" selectedFileIds={[1]} />);
+    render(<TokenCounter text="" selectedFilePaths={['/path/1']} />);
     
     expect(screen.getByText('...')).toBeDefined();
   });

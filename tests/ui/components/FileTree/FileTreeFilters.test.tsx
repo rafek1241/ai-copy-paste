@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { FileTree } from "./FileTree";
+import { FileTree } from "@/components/FileTree/FileTree";
+import { invoke } from "@tauri-apps/api/core";
 
 // Mock Tauri APIs
 vi.mock("@tauri-apps/api/core", () => ({
@@ -15,6 +16,10 @@ vi.mock("@tauri-apps/api/event", () => ({
 describe("FileTree Filters", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(invoke).mockImplementation((cmd) => {
+            if (cmd === 'get_tree_roots') return Promise.resolve([]);
+            return Promise.resolve([]);
+        });
     });
 
     it("renders ALL, SRC, DOCS filter buttons", () => {

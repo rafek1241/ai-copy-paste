@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PromptBuilder } from './PromptBuilder';
-import * as promptsService from '../services/prompts';
-import * as assemblyService from '../services/assembly';
-import { AppProvider } from '../contexts/AppContext';
+import { PromptBuilder } from '@/components/PromptBuilder';
+import * as promptsService from '@/services/prompts';
+import * as assemblyService from '@/services/assembly';
+import { AppProvider } from '@/contexts/AppContext';
 
 // Mock services
 vi.mock('../services/prompts', () => ({
@@ -42,7 +42,7 @@ describe('PromptBuilder', () => {
   });
 
   it('should load templates on mount', async () => {
-    render(<PromptBuilder selectedFileIds={[]} />, { wrapper: TestWrapper });
+    render(<PromptBuilder selectedFilePaths={[]} />, { wrapper: TestWrapper });
     await waitFor(() => {
       expect(promptsService.getTemplates).toHaveBeenCalled();
       expect(screen.getByText('Agent')).toBeDefined();
@@ -60,7 +60,7 @@ describe('PromptBuilder', () => {
     let builderRef: any = null;
     render(
       <PromptBuilder
-        selectedFileIds={[1]}
+        selectedFilePaths={['/test/path']}
         ref={(ref) => { builderRef = ref; }}
       />,
       { wrapper: TestWrapper }
@@ -74,7 +74,7 @@ describe('PromptBuilder', () => {
 
     expect(assemblyService.assemblePrompt).toHaveBeenCalledWith({
       templateId: 'custom',
-      fileIds: [1],
+      filePaths: ['/test/path'],
       customInstructions: "---CONTEXT:\n\n{{files}}",
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Built prompt');
@@ -84,7 +84,7 @@ describe('PromptBuilder', () => {
     let builderRef: any = null;
     render(
       <PromptBuilder
-        selectedFileIds={[]}
+        selectedFilePaths={[]}
         ref={(ref) => { builderRef = ref; }}
       />,
       { wrapper: TestWrapper }
@@ -103,7 +103,7 @@ describe('PromptBuilder', () => {
     let builderRef: any = null;
     render(
       <PromptBuilder
-        selectedFileIds={[1]}
+        selectedFilePaths={['/test/path']}
         ref={(ref) => { builderRef = ref; }}
       />,
       { wrapper: TestWrapper }
@@ -127,7 +127,7 @@ describe('PromptBuilder', () => {
     let builderRef: any = null;
     render(
       <PromptBuilder
-        selectedFileIds={[]}
+        selectedFilePaths={[]}
         ref={(ref) => { builderRef = ref; }}
       />,
       { wrapper: TestWrapper }

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import Header from "./Header";
+import Header from "@/components/Header";
 
 describe("Header", () => {
     it("renders header with controls", () => {

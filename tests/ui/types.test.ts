@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { FileEntry, IndexProgress } from './types';
+import type { FileEntry, IndexProgress } from '@/types';
 
 describe('types', () => {
   describe('FileEntry', () => {

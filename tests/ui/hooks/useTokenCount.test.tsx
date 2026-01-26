@@ -1,8 +1,8 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { useTokenCount } from './useTokenCount';
-import * as promptsService from '../services/prompts';
-import * as tokenizerService from '../services/tokenizer';
+import { useTokenCount } from '@/hooks/useTokenCount';
+import * as promptsService from '@/services/prompts';
+import * as tokenizerService from '@/services/tokenizer';
 
 // Mock services
 vi.mock('../services/prompts', () => ({
@@ -28,15 +28,15 @@ describe('useTokenCount', () => {
   it('should count tokens for selected files', async () => {
     // Mock file contents
     const mockFiles = [
-      { id: 1, path: 'file1.txt', content: 'Hello' },
-      { id: 2, path: 'file2.txt', content: 'World' },
+      { path: 'file1.txt', content: 'Hello' },
+      { path: 'file2.txt', content: 'World' },
     ];
     vi.mocked(promptsService.getFileContents).mockResolvedValue(mockFiles);
     
     // Mock tokenizer
     vi.mocked(tokenizerService.countTokens).mockReturnValue(1); // 1 token per file
 
-    const { result } = renderHook(() => useTokenCount([1, 2]));
+    const { result } = renderHook(() => useTokenCount(['file1.txt', 'file2.txt']));
 
     // Should be calculating initially
     expect(result.current.isCalculating).toBe(true);
@@ -46,16 +46,16 @@ describe('useTokenCount', () => {
     });
 
     expect(result.current.totalTokens).toBe(2);
-    expect(promptsService.getFileContents).toHaveBeenCalledWith([1, 2]);
+    expect(promptsService.getFileContents).toHaveBeenCalledWith(['file1.txt', 'file2.txt']);
   });
 
   it('should use cached values for previously counted files', async () => {
-    const mockFiles1 = [{ id: 1, path: 'file1.txt', content: 'Hello' }];
+    const mockFiles1 = [{ path: 'file1.txt', content: 'Hello' }];
     vi.mocked(promptsService.getFileContents).mockResolvedValueOnce(mockFiles1);
     vi.mocked(tokenizerService.countTokens).mockReturnValue(5);
 
-    const { result, rerender } = renderHook(({ ids }) => useTokenCount(ids), {
-      initialProps: { ids: [1] },
+    const { result, rerender } = renderHook(({ paths }) => useTokenCount(paths), {
+      initialProps: { paths: ['file1.txt'] },
     });
 
     await waitFor(() => {
@@ -63,10 +63,10 @@ describe('useTokenCount', () => {
     });
 
     // Add another file
-    const mockFiles2 = [{ id: 2, path: 'file2.txt', content: 'World' }];
+    const mockFiles2 = [{ path: 'file2.txt', content: 'World' }];
     vi.mocked(promptsService.getFileContents).mockResolvedValueOnce(mockFiles2);
     
-    rerender({ ids: [1, 2] });
+    rerender({ paths: ['file1.txt', 'file2.txt'] });
 
     await waitFor(() => {
       expect(result.current.totalTokens).toBe(10); // 5 + 5
@@ -74,13 +74,13 @@ describe('useTokenCount', () => {
 
     // Verify getFileContents was called only for the new file
     expect(promptsService.getFileContents).toHaveBeenCalledTimes(2);
-    expect(promptsService.getFileContents).toHaveBeenLastCalledWith([2]);
+    expect(promptsService.getFileContents).toHaveBeenLastCalledWith(['file2.txt']);
   });
 
   it('should handle errors gracefully', async () => {
     vi.mocked(promptsService.getFileContents).mockRejectedValue(new Error('Failed'));
 
-    const { result } = renderHook(() => useTokenCount([1]));
+    const { result } = renderHook(() => useTokenCount(['error.txt']));
 
     await waitFor(() => {
       expect(result.current.isCalculating).toBe(false);

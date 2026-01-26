@@ -1,9 +1,9 @@
 import { screen } from "@testing-library/react";
-import { render } from "./test/test-utils";
+import { render } from "./test-utils";
 import { describe, it, expect } from "vitest";
-import App from "./App";
+import App from "@/App";
 
-import { mockInvoke } from "./test/setup";
+import { mockInvoke } from "./setup";
 
 describe("App Layout", () => {
     it("renders the sidebar and main content area", async () => {

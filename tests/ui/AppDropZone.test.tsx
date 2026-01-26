@@ -1,6 +1,6 @@
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { render } from './test-utils';
-import App from '../App';
+import App from '@/App';
 import { expect, it, describe, beforeEach } from 'vitest';
 import { mockInvoke, mockListen } from './setup';
 
@@ -21,6 +21,9 @@ describe('App Global Drop Zone', () => {
           { id: 'agent', name: 'Agent', content: '...' },
           { id: 'planning', name: 'Planning', content: '...' },
         ]);
+      }
+      if (command === 'get_tree_roots') {
+        return Promise.resolve([]);
       }
       if (command === 'get_children') {
         return Promise.resolve([]);

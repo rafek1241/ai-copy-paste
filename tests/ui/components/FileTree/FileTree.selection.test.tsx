@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { FileTree } from './FileTree';
+import { FileTree } from '@/components/FileTree/FileTree';
 import { vi, expect, it, describe, beforeEach } from 'vitest';
-import { mockInvoke } from '../../test/setup';
+import { mockInvoke } from '../../setup';
 
 // Mock virtualizer to just render everything
 vi.mock('@tanstack/react-virtual', () => ({
@@ -67,6 +67,9 @@ describe('FileTree Selection Propagation', () => {
 
   beforeEach(() => {
     mockInvoke.mockImplementation((command, args) => {
+      if (command === 'get_tree_roots') {
+        return Promise.resolve(mockNodes.filter(n => n.parent_id === null));
+      }
       if (command === 'get_children') {
         const parentId = args.parentId;
         return Promise.resolve(mockNodes.filter(n => n.parent_id === parentId));
@@ -195,6 +198,9 @@ describe('FileTree Selection Propagation', () => {
     });
 
     mockInvoke.mockImplementation((command, args) => {
+      if (command === 'get_tree_roots') {
+        return Promise.resolve(deepNodes.filter(n => n.parent_id === null));
+      }
       if (command === 'get_children') {
         const parentId = args.parentId;
         return Promise.resolve(deepNodes.filter(n => n.parent_id === parentId));

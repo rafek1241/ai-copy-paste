@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, beforeEach } from "vitest";
-import { PromptBuilder } from "./PromptBuilder";
-import { AppProvider } from "../contexts/AppContext";
-import { mockInvoke } from "../test/setup";
+import { PromptBuilder } from "@/components/PromptBuilder";
+import { AppProvider } from "@/contexts/AppContext";
+import { mockInvoke } from "../setup";
 
 const TestWrapper = ({ children }: { children: React.ReactNode }) => (
     <AppProvider>{children}</AppProvider>
@@ -15,7 +15,7 @@ describe("PromptBuilder Refactor", () => {
 
     it("renders custom instructions textarea with correct styling", () => {
         mockInvoke.mockResolvedValue([]); // Default for any calls
-        render(<PromptBuilder selectedFileIds={[1]} />, { wrapper: TestWrapper });
+        render(<PromptBuilder selectedFilePaths={["/test/path"]} />, { wrapper: TestWrapper });
 
         const textarea = screen.getByTestId("custom-instructions");
         expect(textarea).toHaveClass("bg-[#161b22]");
@@ -36,7 +36,7 @@ describe("PromptBuilder Refactor", () => {
             return Promise.resolve([]);
         });
 
-        render(<PromptBuilder selectedFileIds={[1]} />, { wrapper: TestWrapper });
+        render(<PromptBuilder selectedFilePaths={["/test/path"]} />, { wrapper: TestWrapper });
 
         // Wait for templates to load
         const templateGrid = await screen.findByTestId("templates-grid");

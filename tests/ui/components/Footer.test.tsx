@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import Footer from "./Footer";
+import Footer from "@/components/Footer";
 
 describe("Footer", () => {
     it("renders Copy Context button and token info", () => {

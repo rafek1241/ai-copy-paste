@@ -6,7 +6,7 @@ import {
   calculateTokenPercentage,
   getTokenLimitColor,
   TOKEN_LIMITS,
-} from './tokenizer';
+} from '@/services/tokenizer';
 
 describe('tokenizer', () => {
   describe('countTokens', () => {

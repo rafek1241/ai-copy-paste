@@ -17,7 +17,15 @@
       "Bash(npm install:*)",
       "Bash(npx edgedriver:*)",
       "Bash(node:*)",
-      "Bash(npm run build:tauri:release:*)"
+      "Bash(npm run build:tauri:release:*)",
+      "Bash(mkdir -p:*)",
+      "Bash(mv:*)",
+      "Bash(npm test)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(ls:*)",
+      "Bash(powershell:*)",
+      "Bash(grep:*)"
     ]
   },
   "enabledPlugins": {
