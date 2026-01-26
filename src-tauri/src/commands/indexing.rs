@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
+// TODO: there is still a bug with race condition when indexing provided files and folders. Sometimes files are missing in their parent folders.
 
 /// Progress information for indexing operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
