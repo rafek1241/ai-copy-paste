@@ -171,6 +171,8 @@ pub async fn get_file_contents(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_get_templates() {
@@ -179,5 +181,107 @@ mod tests {
             let templates = get_templates().await.unwrap();
             assert!(templates.len() >= 4);
         });
+    }
+
+    #[test]
+    fn test_read_file_content_success() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let content = "Hello, world!";
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = read_file_content(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), content);
+    }
+
+    #[test]
+    fn test_read_file_content_nonexistent() {
+        let result = read_file_content("/nonexistent/path/to/file.txt");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_file_content_serialization() {
+        let file_content = FileContent {
+            path: "/test/path.rs".to_string(),
+            content: "fn main() {}".to_string(),
+        };
+
+        let json = serde_json::to_string(&file_content).unwrap();
+        assert!(json.contains("/test/path.rs"));
+        assert!(json.contains("fn main() {}"));
+
+        let deserialized: FileContent = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.path, file_content.path);
+        assert_eq!(deserialized.content, file_content.content);
+    }
+
+    #[test]
+    fn test_build_prompt_request_serialization() {
+        let request = BuildPromptRequest {
+            template_id: "code-review".to_string(),
+            custom_instructions: Some("Focus on security".to_string()),
+            file_paths: vec!["/path/a.rs".to_string(), "/path/b.rs".to_string()],
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        let deserialized: BuildPromptRequest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.template_id, request.template_id);
+        assert_eq!(deserialized.custom_instructions, request.custom_instructions);
+        assert_eq!(deserialized.file_paths, request.file_paths);
+    }
+
+    #[test]
+    fn test_build_prompt_request_without_custom_instructions() {
+        let request = BuildPromptRequest {
+            template_id: "explain-code".to_string(),
+            custom_instructions: None,
+            file_paths: vec!["/path/file.rs".to_string()],
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        let deserialized: BuildPromptRequest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.template_id, "explain-code");
+        assert!(deserialized.custom_instructions.is_none());
+    }
+
+    #[test]
+    fn test_build_prompt_response_serialization() {
+        let response = BuildPromptResponse {
+            prompt: "Generated prompt content".to_string(),
+            file_count: 3,
+            total_chars: 1500,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        let deserialized: BuildPromptResponse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.prompt, response.prompt);
+        assert_eq!(deserialized.file_count, response.file_count);
+        assert_eq!(deserialized.total_chars, response.total_chars);
+    }
+
+    #[test]
+    fn test_read_file_content_utf8() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let content = "Unicode: 你好世界 🦀 Ñoño";
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = read_file_content(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), content);
+    }
+
+    #[test]
+    fn test_read_file_content_multiline() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let content = "Line 1\nLine 2\nLine 3\n";
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = read_file_content(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), content);
     }
 }
