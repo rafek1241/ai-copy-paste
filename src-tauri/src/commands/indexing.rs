@@ -3,7 +3,6 @@ use crate::error::{AppError, AppResult};
 use rayon::prelude::*;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
-// TODO: there is still a bug with race condition when indexing provided files and folders. Sometimes files are missing in their parent folders.
+// NOTE: Race condition fixed by always storing true parent_path and updating orphaned children when parent is indexed.
 
 /// Progress information for indexing operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,18 +157,28 @@ pub async fn get_children(
 
     let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
-             (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
-             FROM files
-             WHERE parent_path IS ? OR (parent_path IS NULL AND ? IS NULL)
-             ORDER BY is_dir DESC, name ASC",
-        )
-        .map_err(|e| e.to_string())?;
+    // For root queries (parent_path IS NULL), also include orphaned entries
+    // whose parent_path points to a non-existent path in the database.
+    // This ensures files indexed before their parent folder still appear at root level.
+    let query = if parent_path.is_none() {
+        "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
+         (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
+         FROM files
+         WHERE parent_path IS NULL
+            OR (parent_path IS NOT NULL AND NOT EXISTS (SELECT 1 FROM files f2 WHERE f2.path = files.parent_path))
+         ORDER BY is_dir DESC, name ASC"
+    } else {
+        "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
+         (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
+         FROM files
+         WHERE parent_path = ?
+         ORDER BY is_dir DESC, name ASC"
+    };
 
-    let entries = stmt
-        .query_map(params![parent_path, parent_path], |row| {
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+
+    let entries = if parent_path.is_none() {
+        stmt.query_map([], |row| {
             Ok(FileEntry {
                 path: row.get(0)?,
                 parent_path: row.get(1)?,
@@ -184,7 +193,25 @@ pub async fn get_children(
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+    } else {
+        stmt.query_map(params![parent_path], |row| {
+            Ok(FileEntry {
+                path: row.get(0)?,
+                parent_path: row.get(1)?,
+                name: row.get(2)?,
+                size: row.get(3)?,
+                mtime: row.get(4)?,
+                is_dir: row.get::<_, i32>(5)? != 0,
+                token_count: row.get(6)?,
+                fingerprint: row.get(7)?,
+                child_count: row.get(8)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+    };
 
     Ok(entries)
 }
@@ -406,11 +433,9 @@ fn parallel_index_folder(
         .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))?;
 
     // Sort entries by path depth to ensure parents are processed before children
+    // Use Path::components() for reliable cross-platform depth calculation
     let mut sorted_entries = entries;
-    sorted_entries.sort_by_key(|entry| entry.path.matches(std::path::MAIN_SEPARATOR).count());
-
-    // Track which paths we've inserted in this session
-    let mut inserted_paths: HashSet<String> = HashSet::new();
+    sorted_entries.sort_by_key(|entry| Path::new(&entry.path).components().count());
 
     // Insert in batches of 1000
     const BATCH_SIZE: usize = 1000;
@@ -420,18 +445,10 @@ fn parallel_index_folder(
         let tx = conn.transaction()?;
 
         for entry in chunk {
-            // Compute parent_path - only set if parent exists in DB or was just inserted
-            let parent_path = entry.parent_path.as_ref().and_then(|pp| {
-                // Check if parent was inserted in this session or exists in DB
-                if inserted_paths.contains(pp) {
-                    Some(pp.clone())
-                } else {
-                    tx.query_row("SELECT path FROM files WHERE path = ?", params![pp], |row| {
-                        row.get::<_, String>(0)
-                    })
-                    .ok()
-                }
-            });
+            // Always use the true parent_path from the file system.
+            // This ensures correct hierarchy even if parent isn't indexed yet.
+            // When we later index the parent, orphaned children will be found correctly.
+            let parent_path = &entry.parent_path;
 
             // Check if entry already exists
             let existing_fingerprint: Option<Option<String>> = tx
@@ -466,9 +483,6 @@ fn parallel_index_folder(
                     ],
                 )?;
             }
-
-            // Track this path as inserted
-            inserted_paths.insert(entry.path.clone());
         }
 
         tx.commit()?;

@@ -3,10 +3,13 @@ use rusqlite::{Connection, Result};
 /// Initialize the database schema
 pub fn init_database(conn: &Connection) -> Result<()> {
     // Core file index table - using path as PRIMARY KEY
+    // Note: parent_path is NOT a foreign key - it stores the true filesystem parent path
+    // even if that parent hasn't been indexed yet. This allows indexing individual files
+    // without requiring their parent folder to be indexed first.
     conn.execute(
         "CREATE TABLE IF NOT EXISTS files (
             path TEXT PRIMARY KEY,
-            parent_path TEXT REFERENCES files(path),
+            parent_path TEXT,
             name TEXT NOT NULL,
             size INTEGER,
             mtime INTEGER,
