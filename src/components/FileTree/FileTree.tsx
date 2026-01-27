@@ -221,7 +221,16 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     const node = nodesMap[nodePath];
     if (!node || !node.is_dir) return;
 
-    if (!node.expanded && (!node.childPaths || node.childPaths.length === 0)) {
+    // Load children if:
+    // 1. Not expanded yet AND no children loaded, OR
+    // 2. Not expanded yet AND database has more children than we've loaded (child_count > childPaths.length)
+    const needsChildrenLoad = !node.expanded && (
+      !node.childPaths ||
+      node.childPaths.length === 0 ||
+      (node.child_count && node.child_count > node.childPaths.length)
+    );
+
+    if (needsChildrenLoad) {
       const children = await loadChildren(nodePath, nodesMap);
       const newNodesMap = { ...nodesMap };
       const childPaths = children.map(c => c.path);
@@ -255,12 +264,9 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
       // Merge children from backend with orphaned children (avoid duplicates)
       const allChildPaths = [...new Set([...childPaths, ...orphanedChildren.map(c => c.path)])];
 
-      // Add children to map (preserving existing state)
+      // Add ALL children to map - loadChildren already preserves existing state
       children.forEach(child => {
-        // Only add if not already in map with state
-        if (!newNodesMap[child.path] || !newNodesMap[child.path].checked) {
-          newNodesMap[child.path] = child;
-        }
+        newNodesMap[child.path] = child;
       });
 
       // Update orphaned children with new parent_path
