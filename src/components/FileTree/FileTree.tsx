@@ -101,12 +101,107 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
         return !isNested;
       });
 
-      const newNodesMap: Record<string, TreeNode> = {};
-      const newRootPaths: string[] = [];
+      setNodesMap(prevNodesMap => {
+        const newNodesMap: Record<string, TreeNode> = {};
 
-      // Populate map with ALL entries (including nested ones) so they can be adopted later
-      entries.forEach(entry => {
-        newNodesMap[entry.path] = {
+        // First, copy over all existing nodes to preserve state for nodes not in the new entries
+        // This preserves expanded children that were loaded previously
+        Object.entries(prevNodesMap).forEach(([path, node]) => {
+          newNodesMap[path] = node;
+        });
+
+        // Populate/update map with entries, preserving existing state where applicable
+        entries.forEach(entry => {
+          const existingNode = prevNodesMap[entry.path];
+          if (existingNode) {
+            // Preserve existing state (checked, expanded, indeterminate, childPaths)
+            newNodesMap[entry.path] = {
+              ...entry,
+              expanded: existingNode.expanded,
+              checked: existingNode.checked,
+              indeterminate: existingNode.indeterminate,
+              hasChildren: entry.is_dir,
+              childPaths: existingNode.childPaths || [],
+            };
+          } else {
+            // New entry - initialize with default state
+            newNodesMap[entry.path] = {
+              ...entry,
+              expanded: false,
+              checked: false,
+              indeterminate: false,
+              hasChildren: entry.is_dir,
+              childPaths: [],
+            };
+          }
+        });
+
+        // Now handle parent-child relationships for nodes that were previously orphaned
+        // Find selected/expanded nodes that should now be children of newly added directories
+        filteredEntries.forEach(rootEntry => {
+          if (rootEntry.is_dir) {
+            const parentPath = rootEntry.path;
+            const existingChildPaths = newNodesMap[parentPath]?.childPaths || [];
+            const adoptedChildPaths: string[] = [];
+
+            // Find nodes that should be children of this directory
+            Object.values(newNodesMap).forEach(node => {
+              if (node.path !== parentPath && node.parent_path === parentPath) {
+                // This node is a direct child of the root entry
+                if (!existingChildPaths.includes(node.path)) {
+                  adoptedChildPaths.push(node.path);
+                }
+              }
+            });
+
+            // If we found children to adopt, update the parent's childPaths and expand it
+            if (adoptedChildPaths.length > 0) {
+              const allChildPaths = [...new Set([...existingChildPaths, ...adoptedChildPaths])];
+              const hasSelectedChildren = allChildPaths.some(cp => {
+                const child = newNodesMap[cp];
+                return child && (child.checked || child.indeterminate);
+              });
+
+              newNodesMap[parentPath] = {
+                ...newNodesMap[parentPath],
+                childPaths: allChildPaths,
+                // Auto-expand if there are selected children inside
+                expanded: newNodesMap[parentPath].expanded || hasSelectedChildren,
+              };
+
+              // Update parent's checked/indeterminate state based on children
+              updateParentSelectionInMap(newNodesMap, parentPath);
+            }
+          }
+        });
+
+        return newNodesMap;
+      });
+
+      setRootPaths(filteredEntries.map(entry => entry.path));
+    } catch (error) {
+      console.error('Failed to load root entries:', error);
+    }
+  }, []);
+
+  // Load children for a node, preserving existing state
+  const loadChildren = useCallback(async (nodePath: string, existingMap: Record<string, TreeNode>): Promise<TreeNode[]> => {
+    try {
+      const entries = await invoke<FileEntry[]>('get_children', { parentPath: nodePath });
+      return entries.map(entry => {
+        const existingNode = existingMap[entry.path];
+        if (existingNode) {
+          // Preserve existing state
+          return {
+            ...entry,
+            expanded: existingNode.expanded,
+            checked: existingNode.checked,
+            indeterminate: existingNode.indeterminate,
+            hasChildren: entry.is_dir,
+            childPaths: existingNode.childPaths || [],
+          };
+        }
+        return {
           ...entry,
           expanded: false,
           checked: false,
@@ -115,31 +210,6 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
           childPaths: [],
         };
       });
-
-      // Populate root paths only with non-nested entries
-      filteredEntries.forEach(entry => {
-        newRootPaths.push(entry.path);
-      });
-
-      setNodesMap(newNodesMap);
-      setRootPaths(newRootPaths);
-    } catch (error) {
-      console.error('Failed to load root entries:', error);
-    }
-  }, []);
-
-  // Load children for a node
-  const loadChildren = useCallback(async (nodePath: string): Promise<TreeNode[]> => {
-    try {
-      const entries = await invoke<FileEntry[]>('get_children', { parentPath: nodePath });
-      return entries.map(entry => ({
-        ...entry,
-        expanded: false,
-        checked: false,
-        indeterminate: false,
-        hasChildren: entry.is_dir,
-        childPaths: [],
-      }));
     } catch (error) {
       console.error('Failed to load children:', error);
       return [];
@@ -152,43 +222,43 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     if (!node || !node.is_dir) return;
 
     if (!node.expanded && (!node.childPaths || node.childPaths.length === 0)) {
-      const children = await loadChildren(nodePath);
+      const children = await loadChildren(nodePath, nodesMap);
       const newNodesMap = { ...nodesMap };
       const childPaths = children.map(c => c.path);
 
-      // Also find orphaned root-level entries that should belong to this directory
+      // Also find orphaned entries that should belong to this directory
       // These are files indexed before their parent directory was added
       const parentPath = node.path;
       const orphanedChildren: TreeNode[] = [];
 
       Object.values(nodesMap).forEach(existingNode => {
-        // Check if this is a root-level entry (parent_path is null) that's a direct child of current node
-        if (existingNode.parent_path === null && existingNode.path !== nodePath) {
+        // Check if this node should be a direct child of current node
+        if (existingNode.path !== nodePath) {
           const existingPath = existingNode.path;
           // Check if path starts with parent path + separator
           if (existingPath.startsWith(parentPath + '\\') || existingPath.startsWith(parentPath + '/')) {
             // Check if it's a direct child (no additional separators after parent path)
             const relativePath = existingPath.substring(parentPath.length + 1);
             if (!relativePath.includes('\\') && !relativePath.includes('/')) {
-              // This is a direct child - adopt it
-              orphanedChildren.push({
-                ...existingNode,
-                parent_path: nodePath, // Update parent reference
-              });
+              // This is a direct child - only adopt if not already in children
+              if (!childPaths.includes(existingPath)) {
+                orphanedChildren.push({
+                  ...existingNode,
+                  parent_path: nodePath, // Update parent reference
+                });
+              }
             }
           }
         }
       });
 
-      // Merge children from backend with orphaned children
-      const allChildPaths = [...childPaths, ...orphanedChildren.map(c => c.path)];
+      // Merge children from backend with orphaned children (avoid duplicates)
+      const allChildPaths = [...new Set([...childPaths, ...orphanedChildren.map(c => c.path)])];
 
-      // Update parent
-      newNodesMap[nodePath] = { ...node, expanded: true, childPaths: allChildPaths };
-
-      // Add children to map
+      // Add children to map (preserving existing state)
       children.forEach(child => {
-        if (!newNodesMap[child.path]) {
+        // Only add if not already in map with state
+        if (!newNodesMap[child.path] || !newNodesMap[child.path].checked) {
           newNodesMap[child.path] = child;
         }
       });
@@ -197,6 +267,22 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
       orphanedChildren.forEach(child => {
         newNodesMap[child.path] = child;
       });
+
+      // Check if any children are selected - update parent's indeterminate state
+      const childNodes = allChildPaths.map(p => newNodesMap[p]).filter(Boolean);
+      const checkedCount = childNodes.filter(c => c.checked).length;
+      const indeterminateCount = childNodes.filter(c => c.indeterminate).length;
+      const isAllChecked = checkedCount === childNodes.length && childNodes.length > 0;
+      const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
+
+      // Update parent with correct selection state
+      newNodesMap[nodePath] = {
+        ...node,
+        expanded: true,
+        childPaths: allChildPaths,
+        checked: isAllChecked,
+        indeterminate: isIndeterminate,
+      };
 
       setNodesMap(newNodesMap);
     } else {
@@ -257,9 +343,12 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
   };
 
   // Recursively load and index all children for a folder
+  // When setChecked is true, all new entries are marked as checked
+  // When setChecked is false, we preserve existing state or default to unchecked
   const loadAllChildrenRecursively = async (
     nodePath: string,
-    currentMap: Record<string, TreeNode>
+    currentMap: Record<string, TreeNode>,
+    setChecked: boolean = true
   ): Promise<string[]> => {
     const entries = await invoke<FileEntry[]>('get_children', { parentPath: nodePath });
     const childPaths: string[] = [];
@@ -268,16 +357,30 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
       childPaths.push(entry.path);
       let entryChildPaths: string[] = [];
       if (entry.is_dir) {
-        entryChildPaths = await loadAllChildrenRecursively(entry.path, currentMap);
+        entryChildPaths = await loadAllChildrenRecursively(entry.path, currentMap, setChecked);
       }
-      currentMap[entry.path] = {
-        ...entry,
-        expanded: false,
-        checked: true,
-        indeterminate: false,
-        hasChildren: entry.is_dir,
-        childPaths: entryChildPaths,
-      };
+
+      const existingNode = currentMap[entry.path];
+      if (existingNode) {
+        // Preserve existing state, but merge childPaths
+        currentMap[entry.path] = {
+          ...entry,
+          expanded: existingNode.expanded,
+          checked: setChecked ? true : existingNode.checked,
+          indeterminate: setChecked ? false : existingNode.indeterminate,
+          hasChildren: entry.is_dir,
+          childPaths: entryChildPaths.length > 0 ? entryChildPaths : existingNode.childPaths || [],
+        };
+      } else {
+        currentMap[entry.path] = {
+          ...entry,
+          expanded: false,
+          checked: setChecked,
+          indeterminate: false,
+          hasChildren: entry.is_dir,
+          childPaths: entryChildPaths,
+        };
+      }
     }
     return childPaths;
   };
@@ -334,6 +437,27 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
 
     traverse(paths);
     return selectedPaths;
+  };
+
+  // Update a node's selection state based on its children (used in loadRootEntries)
+  const updateParentSelectionInMap = (map: Record<string, TreeNode>, nodePath: string) => {
+    const node = map[nodePath];
+    if (!node || !node.childPaths || node.childPaths.length === 0) return;
+
+    const children = node.childPaths.map(path => map[path]).filter(Boolean);
+    if (children.length === 0) return;
+
+    const checkedCount = children.filter(c => c.checked).length;
+    const indeterminateCount = children.filter(c => c.indeterminate).length;
+
+    const isAllChecked = checkedCount === children.length;
+    const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
+
+    map[nodePath] = {
+      ...node,
+      checked: isAllChecked,
+      indeterminate: isIndeterminate,
+    };
   };
 
   // Handle path copy to clipboard
