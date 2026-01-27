@@ -84,37 +84,50 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     setFlatTree(buildFlatTree(rootPaths, nodesMap));
   }, [nodesMap, rootPaths, buildFlatTree]);
 
+  // Normalize path separators for cross-platform consistency
+  const normalizePath = useCallback((filePath: string): string => {
+    return filePath.replace(/\\/g, '/');
+  }, []);
+
+  // Helper function to get parent directory path
+  const getParentDirectoryPath = useCallback((filePath: string): string | null => {
+    const normalized = normalizePath(filePath);
+    const lastSlash = normalized.lastIndexOf('/');
+    if (lastSlash <= 0) return null;
+    return normalized.substring(0, lastSlash);
+  }, [normalizePath]);
+
+  // Helper function to get name from path
+  const getNameFromPath = useCallback((filePath: string): string => {
+    const normalized = normalizePath(filePath);
+    const lastSlash = normalized.lastIndexOf('/');
+    return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+  }, [normalizePath]);
+
   // Load root level entries
   const loadRootEntries = useCallback(async () => {
     try {
       const entries = await invoke<FileEntry[]>('get_children', { parentPath: null });
 
-      // Filter out paths that are nested inside other root directory entries
-      // This prevents showing files at root level when their parent directory is also indexed
-      const filteredEntries = entries.filter(entry => {
-        // Check if this entry's path is a subpath of any directory entry
-        const isNested = entries.some(other =>
-          other.is_dir &&
-          other.path !== entry.path &&
-          (entry.path.startsWith(other.path + '\\') || entry.path.startsWith(other.path + '/'))
-        );
-        return !isNested;
-      });
+      // Normalize all entry paths for consistent processing
+      const normalizedEntries = entries.map(entry => ({
+        ...entry,
+        path: normalizePath(entry.path),
+        parent_path: entry.parent_path ? normalizePath(entry.parent_path) : null,
+      }));
 
       setNodesMap(prevNodesMap => {
         const newNodesMap: Record<string, TreeNode> = {};
 
-        // First, copy over all existing nodes to preserve state for nodes not in the new entries
-        // This preserves expanded children that were loaded previously
+        // First, copy over all existing nodes to preserve their state
         Object.entries(prevNodesMap).forEach(([path, node]) => {
-          newNodesMap[path] = node;
+          newNodesMap[path] = { ...node };
         });
 
-        // Populate/update map with entries, preserving existing state where applicable
-        entries.forEach(entry => {
+        // Populate/update map with new entries, preserving existing state where applicable
+        normalizedEntries.forEach(entry => {
           const existingNode = prevNodesMap[entry.path];
           if (existingNode) {
-            // Preserve existing state (checked, expanded, indeterminate, childPaths)
             newNodesMap[entry.path] = {
               ...entry,
               expanded: existingNode.expanded,
@@ -124,7 +137,6 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
               childPaths: existingNode.childPaths || [],
             };
           } else {
-            // New entry - initialize with default state
             newNodesMap[entry.path] = {
               ...entry,
               expanded: false,
@@ -136,53 +148,127 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
           }
         });
 
-        // Now handle parent-child relationships for nodes that were previously orphaned
-        // Find selected/expanded nodes that should now be children of newly added directories
-        filteredEntries.forEach(rootEntry => {
-          if (rootEntry.is_dir) {
-            const parentPath = rootEntry.path;
-            const existingChildPaths = newNodesMap[parentPath]?.childPaths || [];
-            const adoptedChildPaths: string[] = [];
+        // Group orphaned files by their parent directory
+        // An orphaned file is one whose parent_path is not in our index
+        const orphanedFilesByParent = new Map<string, TreeNode[]>();
 
-            // Find nodes that should be children of this directory
-            Object.values(newNodesMap).forEach(node => {
-              if (node.path !== parentPath && node.parent_path === parentPath) {
-                // This node is a direct child of the root entry
-                if (!existingChildPaths.includes(node.path)) {
-                  adoptedChildPaths.push(node.path);
-                }
+        Object.values(newNodesMap).forEach(node => {
+          // Only process files (not directories) that have a parent_path
+          if (!node.is_dir && node.parent_path) {
+            // Check if the parent directory is in our index
+            const parentExists = newNodesMap[node.parent_path]?.is_dir;
+
+            if (!parentExists) {
+              // This is an orphaned file - group it by its parent directory
+              const parentPath = node.parent_path;
+              if (!orphanedFilesByParent.has(parentPath)) {
+                orphanedFilesByParent.set(parentPath, []);
               }
-            });
-
-            // If we found children to adopt, update the parent's childPaths and expand it
-            if (adoptedChildPaths.length > 0) {
-              const allChildPaths = [...new Set([...existingChildPaths, ...adoptedChildPaths])];
-              const hasSelectedChildren = allChildPaths.some(cp => {
-                const child = newNodesMap[cp];
-                return child && (child.checked || child.indeterminate);
-              });
-
-              newNodesMap[parentPath] = {
-                ...newNodesMap[parentPath],
-                childPaths: allChildPaths,
-                // Auto-expand if there are selected children inside
-                expanded: newNodesMap[parentPath].expanded || hasSelectedChildren,
-              };
-
-              // Update parent's checked/indeterminate state based on children
-              updateParentSelectionInMap(newNodesMap, parentPath);
+              orphanedFilesByParent.get(parentPath)!.push(node);
             }
           }
         });
 
-        return newNodesMap;
-      });
+        // Create synthetic folder nodes for directories containing orphaned files
+        // Auto-expand these folders so individually selected files are immediately visible
+        orphanedFilesByParent.forEach((files, parentPath) => {
+          if (!newNodesMap[parentPath]) {
+            // Create a synthetic folder node - auto-expanded for visibility
+            const folderName = getNameFromPath(parentPath);
+            newNodesMap[parentPath] = {
+              path: parentPath,
+              parent_path: getParentDirectoryPath(parentPath),
+              name: folderName,
+              size: null,
+              mtime: null,
+              is_dir: true,
+              token_count: null,
+              fingerprint: null,
+              child_count: files.length,
+              expanded: true, // Auto-expand so files are visible
+              checked: false,
+              indeterminate: false,
+              hasChildren: true,
+              childPaths: files.map(f => f.path),
+            };
 
-      setRootPaths(filteredEntries.map(entry => entry.path));
+            // Update parent_path of orphaned files to point to this new folder
+            files.forEach(file => {
+              newNodesMap[file.path] = {
+                ...file,
+                parent_path: parentPath,
+              };
+            });
+          }
+        });
+
+        // Now handle parent-child relationships for nodes that were previously orphaned
+        // and for newly created synthetic folders
+        Object.values(newNodesMap).forEach(node => {
+          if (node.is_dir && node.childPaths && node.childPaths.length > 0) {
+            const parentPath = node.path;
+
+            // Find any additional nodes that should be children of this directory
+            Object.values(newNodesMap).forEach(childNode => {
+              if (childNode.path !== parentPath && childNode.parent_path === parentPath) {
+                if (!node.childPaths!.includes(childNode.path)) {
+                  node.childPaths!.push(childNode.path);
+                }
+              }
+            });
+
+            // Update child_count
+            node.child_count = node.childPaths.length;
+
+            // Update selection state based on children
+            updateParentSelectionInMap(newNodesMap, parentPath);
+          }
+        });
+
+        // Set the new nodes map
+        setNodesMap(newNodesMap);
+
+      // Build root paths - directories at root level + synthetic folders for orphaned files
+      setRootPaths(() => {
+        const newRootPaths: string[] = [];
+        const processedPaths = new Set<string>();
+
+        // Helper to add a path as root (and avoid duplicates)
+        const addRootPath = (path: string) => {
+          const normalizedPath = normalizePath(path);
+          if (!processedPaths.has(normalizedPath)) {
+            processedPaths.add(normalizedPath);
+            newRootPaths.push(normalizedPath);
+          }
+        };
+
+        // First, identify all true root-level entries
+        // A true root entry has no parent_path or its parent is not in the index
+        normalizedEntries.forEach(entry => {
+          if (!entry.parent_path) {
+            // Entry with no parent - true root
+            addRootPath(entry.path);
+          }
+        });
+
+        // Add synthetic folders for any parent directories of orphaned files
+        normalizedEntries.forEach(entry => {
+          if (entry.parent_path) {
+            const parentExists = normalizedEntries.some(e => e.path === entry.parent_path);
+            if (!parentExists) {
+              // The parent directory is not indexed, but we may have created a synthetic folder
+              // Add the synthetic folder as a root if it exists
+              addRootPath(entry.parent_path);
+            }
+          }
+        });
+
+        return newRootPaths;
+      });
     } catch (error) {
       console.error('Failed to load root entries:', error);
     }
-  }, []);
+  }, [getParentDirectoryPath, getNameFromPath, normalizePath]);
 
   // Load children for a node, preserving existing state
   const loadChildren = useCallback(async (nodePath: string, existingMap: Record<string, TreeNode>): Promise<TreeNode[]> => {
@@ -218,7 +304,8 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
 
   // Toggle node expansion
   const toggleExpand = useCallback(async (nodePath: string) => {
-    const node = nodesMap[nodePath];
+    const normalizedNodePath = normalizePath(nodePath);
+    const node = nodesMap[normalizedNodePath];
     if (!node || !node.is_dir) return;
 
     // Load children if:
@@ -231,29 +318,41 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     );
 
     if (needsChildrenLoad) {
-      const children = await loadChildren(nodePath, nodesMap);
-      const newNodesMap = { ...nodesMap };
-      const childPaths = children.map(c => c.path);
+      const children = await loadChildren(normalizedNodePath, nodesMap);
+      // Normalize child paths
+      const normalizedChildren = children.map(child => ({
+        ...child,
+        path: normalizePath(child.path),
+        parent_path: child.parent_path ? normalizePath(child.parent_path) : null,
+      }));
+      const newNodesMap: Record<string, TreeNode> = {};
+
+      // Copy existing nodes with normalized paths
+      Object.entries(nodesMap).forEach(([path, n]) => {
+        newNodesMap[normalizePath(path)] = n;
+      });
+
+      const childPaths = normalizedChildren.map(c => c.path);
 
       // Also find orphaned entries that should belong to this directory
       // These are files indexed before their parent directory was added
-      const parentPath = node.path;
+      const parentPath = normalizedNodePath;
       const orphanedChildren: TreeNode[] = [];
 
-      Object.values(nodesMap).forEach(existingNode => {
+      Object.values(newNodesMap).forEach(existingNode => {
         // Check if this node should be a direct child of current node
-        if (existingNode.path !== nodePath) {
+        if (existingNode.path !== normalizedNodePath) {
           const existingPath = existingNode.path;
-          // Check if path starts with parent path + separator
-          if (existingPath.startsWith(parentPath + '\\') || existingPath.startsWith(parentPath + '/')) {
+          // Check if path starts with parent path + separator (using normalized paths)
+          if (existingPath.startsWith(parentPath + '/')) {
             // Check if it's a direct child (no additional separators after parent path)
             const relativePath = existingPath.substring(parentPath.length + 1);
-            if (!relativePath.includes('\\') && !relativePath.includes('/')) {
+            if (!relativePath.includes('/')) {
               // This is a direct child - only adopt if not already in children
               if (!childPaths.includes(existingPath)) {
                 orphanedChildren.push({
                   ...existingNode,
-                  parent_path: nodePath, // Update parent reference
+                  parent_path: normalizedNodePath, // Update parent reference
                 });
               }
             }
@@ -265,7 +364,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
       const allChildPaths = [...new Set([...childPaths, ...orphanedChildren.map(c => c.path)])];
 
       // Add ALL children to map - loadChildren already preserves existing state
-      children.forEach(child => {
+      normalizedChildren.forEach(child => {
         newNodesMap[child.path] = child;
       });
 
@@ -282,7 +381,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
       const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
 
       // Update parent with correct selection state
-      newNodesMap[nodePath] = {
+      newNodesMap[normalizedNodePath] = {
         ...node,
         expanded: true,
         childPaths: allChildPaths,
@@ -294,10 +393,10 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     } else {
       setNodesMap({
         ...nodesMap,
-        [nodePath]: { ...node, expanded: !node.expanded }
+        [normalizedNodePath]: { ...node, expanded: !node.expanded }
       });
     }
-  }, [nodesMap, loadChildren]);
+  }, [nodesMap, loadChildren, normalizePath]);
 
   // Recursively update children selection
   const updateChildrenSelection = (

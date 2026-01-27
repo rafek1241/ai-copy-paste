@@ -141,24 +141,144 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     dispatch({ type: "SET_FLAT_TREE", payload: flatTree });
   }, [state.nodesMap, state.rootPaths, buildFlatTree]);
 
+  // Normalize path separators for cross-platform consistency
+  const normalizePath = useCallback((filePath: string): string => {
+    return filePath.replace(/\\/g, '/');
+  }, []);
+
+  // Helper function to get parent directory path
+  const getParentDirectoryPath = useCallback((filePath: string): string | null => {
+    const normalized = normalizePath(filePath);
+    const lastSlash = normalized.lastIndexOf('/');
+    if (lastSlash <= 0) return null;
+    return normalized.substring(0, lastSlash);
+  }, [normalizePath]);
+
+  // Helper function to get name from path
+  const getNameFromPath = useCallback((filePath: string): string => {
+    const normalized = normalizePath(filePath);
+    const lastSlash = normalized.lastIndexOf('/');
+    return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
+  }, [normalizePath]);
+
   // Load root entries
   const loadRootEntries = useCallback(async () => {
     dispatch({ type: "SET_LOADING", payload: true });
     try {
       const entries = await invoke<FileEntry[]>("get_children", { parentPath: null });
+
+      // Normalize all entry paths for consistent processing
+      const normalizedEntries = entries.map(entry => ({
+        ...entry,
+        path: normalizePath(entry.path),
+        parent_path: entry.parent_path ? normalizePath(entry.parent_path) : null,
+      }));
+
+      // Group orphaned files by their parent directory
+      // An orphaned file is one whose parent directory is not in the entries list
+      const orphanedFilesByParent = new Map<string, FileEntry[]>();
+      const directoryPaths = new Set(normalizedEntries.filter(e => e.is_dir).map(e => e.path));
+
+      normalizedEntries.forEach((entry) => {
+        if (!entry.is_dir && entry.parent_path) {
+          // Check if the parent directory is in our entries
+          if (!directoryPaths.has(entry.parent_path)) {
+            // This is an orphaned file - group it by its parent directory
+            if (!orphanedFilesByParent.has(entry.parent_path)) {
+              orphanedFilesByParent.set(entry.parent_path, []);
+            }
+            orphanedFilesByParent.get(entry.parent_path)!.push(entry);
+          }
+        }
+      });
+
+      // Start with fresh maps - don't preserve old state to avoid stale data
       const newNodesMap: Record<string, TreeNode> = {};
       const newRootPaths: string[] = [];
+      const processedPaths = new Set<string>();
 
-      entries.forEach((entry) => {
-        newNodesMap[entry.path] = {
-          ...entry,
-          expanded: false,
-          checked: false,
-          indeterminate: false,
-          hasChildren: entry.is_dir,
-          childPaths: [],
-        };
-        newRootPaths.push(entry.path);
+      // Helper to add a path as root (and avoid duplicates)
+      const addRootPath = (path: string) => {
+        if (!processedPaths.has(path)) {
+          processedPaths.add(path);
+          newRootPaths.push(path);
+        }
+      };
+
+      // First, add all directory entries
+      normalizedEntries.forEach((entry) => {
+        if (entry.is_dir) {
+          newNodesMap[entry.path] = {
+            ...entry,
+            expanded: false,
+            checked: false,
+            indeterminate: false,
+            hasChildren: true,
+            childPaths: [],
+          };
+          addRootPath(entry.path);
+        }
+      });
+
+      // Create synthetic folder nodes for directories containing orphaned files
+      // Auto-expand these folders so individually selected files are immediately visible
+      orphanedFilesByParent.forEach((files, parentPath) => {
+        if (!newNodesMap[parentPath]) {
+          const folderName = getNameFromPath(parentPath);
+          newNodesMap[parentPath] = {
+            path: parentPath,
+            parent_path: getParentDirectoryPath(parentPath),
+            name: folderName,
+            size: null,
+            mtime: null,
+            is_dir: true,
+            token_count: null,
+            fingerprint: null,
+            child_count: files.length,
+            expanded: true, // Auto-expand so files are visible
+            checked: false,
+            indeterminate: false,
+            hasChildren: true,
+            childPaths: files.map(f => f.path),
+          };
+          addRootPath(parentPath);
+        }
+      });
+
+      // Now add all file entries, updating parent_path for orphaned files
+      normalizedEntries.forEach((entry) => {
+        if (!entry.is_dir) {
+          // If this file's parent is not a directory in our index, it's under a synthetic folder
+          const parentPath = entry.parent_path;
+          const isOrphaned = parentPath && !directoryPaths.has(parentPath);
+
+          newNodesMap[entry.path] = {
+            ...entry,
+            parent_path: isOrphaned && parentPath ? parentPath : entry.parent_path,
+            expanded: false,
+            checked: false,
+            indeterminate: false,
+            hasChildren: false,
+            childPaths: [],
+          };
+        }
+      });
+
+      // Update childPaths for all directories (real and synthetic)
+      Object.values(newNodesMap).forEach((node) => {
+        if (node.is_dir) {
+          // Collect all files that have this node as parent
+          const childPaths: string[] = node.childPaths || [];
+          normalizedEntries.forEach((entry) => {
+            if (!entry.is_dir && entry.parent_path === node.path) {
+              if (!childPaths.includes(entry.path)) {
+                childPaths.push(entry.path);
+              }
+            }
+          });
+          node.childPaths = childPaths;
+          node.child_count = childPaths.length;
+        }
       });
 
       dispatch({ type: "SET_NODES", payload: { map: newNodesMap, rootPaths: newRootPaths } });
@@ -167,7 +287,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
-  }, []);
+  }, [getParentDirectoryPath, getNameFromPath, normalizePath]);
 
   // Load children for a node
   const loadChildren = useCallback(async (nodePath: string): Promise<TreeNode[]> => {
@@ -190,17 +310,30 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   // Toggle node expansion
   const toggleExpand = useCallback(
     async (nodePath: string) => {
-      const node = state.nodesMap[nodePath];
+      const normalizedNodePath = normalizePath(nodePath);
+      const node = state.nodesMap[normalizedNodePath];
       if (!node || !node.is_dir) return;
 
       if (!node.expanded && (!node.childPaths || node.childPaths.length === 0)) {
-        const children = await loadChildren(nodePath);
-        const newNodesMap = { ...state.nodesMap };
-        const childPaths = children.map((c) => c.path);
+        const children = await loadChildren(normalizedNodePath);
+        // Normalize child paths
+        const normalizedChildren = children.map(child => ({
+          ...child,
+          path: normalizePath(child.path),
+          parent_path: child.parent_path ? normalizePath(child.parent_path) : null,
+        }));
 
-        newNodesMap[nodePath] = { ...node, expanded: true, childPaths };
+        const newNodesMap: Record<string, TreeNode> = {};
+        // Copy existing nodes with normalized paths
+        Object.entries(state.nodesMap).forEach(([path, n]) => {
+          newNodesMap[normalizePath(path)] = n;
+        });
 
-        children.forEach((child) => {
+        const childPaths = normalizedChildren.map((c) => c.path);
+
+        newNodesMap[normalizedNodePath] = { ...node, expanded: true, childPaths };
+
+        normalizedChildren.forEach((child) => {
           if (!newNodesMap[child.path]) {
             newNodesMap[child.path] = child;
           }
@@ -211,7 +344,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         dispatch({ type: "UPDATE_NODE", payload: { ...node, expanded: !node.expanded } });
       }
     },
-    [state.nodesMap, loadChildren]
+    [state.nodesMap, loadChildren, normalizePath]
   );
 
   // Helper: Update children selection recursively

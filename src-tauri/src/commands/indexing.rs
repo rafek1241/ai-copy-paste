@@ -34,6 +34,11 @@ pub struct FileEntry {
     pub child_count: Option<i64>,
 }
 
+/// Normalize path separators to forward slashes for cross-platform consistency
+fn normalize_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 impl FileEntry {
     fn from_path(path: &Path, parent_path: Option<String>) -> AppResult<Self> {
         let metadata = fs::metadata(path)?;
@@ -43,10 +48,14 @@ impl FileEntry {
             .ok_or_else(|| AppError::Path("Invalid file name".to_string()))?
             .to_string();
 
-        let path_str = path
-            .to_str()
-            .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
-            .to_string();
+        let path_str = normalize_path(
+            path
+                .to_str()
+                .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
+        );
+
+        // Normalize parent_path for consistency
+        let normalized_parent = parent_path.map(|p| normalize_path(&p));
 
         let size = if metadata.is_file() {
             Some(metadata.len() as i64)
@@ -64,7 +73,7 @@ impl FileEntry {
 
         Ok(FileEntry {
             path: path_str,
-            parent_path,
+            parent_path: normalized_parent,
             name,
             size,
             mtime,
@@ -86,16 +95,17 @@ impl FileEntry {
             .ok_or_else(|| AppError::Path("Invalid file name".to_string()))?
             .to_string();
 
-        let path_str = path
-            .to_str()
-            .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
-            .to_string();
+        let path_str = normalize_path(
+            path
+                .to_str()
+                .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
+        );
 
-        // Compute parent path from the file path
+        // Compute parent path from the file path and normalize it
         let parent_path = path
             .parent()
             .and_then(|p| p.to_str())
-            .map(|s| s.to_string());
+            .map(|s| normalize_path(s));
 
         let size = if metadata.is_file() {
             Some(metadata.len() as i64)
@@ -578,15 +588,16 @@ mod tests {
 
         // Verify parent_path relationships work correctly
         let child_path = temp_dir.path().join("folder1").join("file2.txt");
+        let normalized_child_path = normalize_path(child_path.to_str().unwrap());
         let parent_path: Option<String> = conn
             .query_row(
                 "SELECT parent_path FROM files WHERE path = ?",
-                params![child_path.to_str().unwrap()],
+                params![&normalized_child_path],
                 |row| row.get(0),
             )
             .unwrap();
 
-        let expected_parent = temp_dir.path().join("folder1").to_str().unwrap().to_string();
+        let expected_parent = normalize_path(temp_dir.path().join("folder1").to_str().unwrap());
         assert_eq!(parent_path, Some(expected_parent));
     }
 
@@ -668,7 +679,7 @@ mod tests {
         let temp_dir = create_test_directory();
         let conn = create_test_db();
         let file_path = temp_dir.path().join("file1.txt");
-        let path_str = file_path.to_str().unwrap();
+        let path_str = normalize_path(file_path.to_str().unwrap());
 
         // Insert the file
         traverse_and_insert(&conn, &file_path, None).unwrap();
@@ -677,7 +688,7 @@ mod tests {
         let name: String = conn
             .query_row(
                 "SELECT name FROM files WHERE path = ?",
-                params![path_str],
+                params![&path_str],
                 |row| row.get(0),
             )
             .unwrap();
@@ -690,10 +701,80 @@ mod tests {
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM files WHERE path = ?",
-                params![path_str],
+                params![&path_str],
                 |row| row.get(0),
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_hierarchical_indexing_with_same_filenames() {
+        // Test scenario: files with identical names in different parent directories
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+
+        // Create structure: folder1/plan.md, folder2/plan.md, folder3/spec.md
+        fs::create_dir_all(path.join("folder1")).unwrap();
+        fs::create_dir_all(path.join("folder2")).unwrap();
+        fs::create_dir_all(path.join("folder3")).unwrap();
+        fs::write(path.join("folder1/plan.md"), "plan from folder1").unwrap();
+        fs::write(path.join("folder2/plan.md"), "plan from folder2").unwrap();
+        fs::write(path.join("folder3/spec.md"), "spec from folder3").unwrap();
+
+        let conn = create_test_db();
+
+        // Index all three folders (simulating drag-and-drop of individual folders)
+        traverse_and_insert(&conn, &path.join("folder1"), None).unwrap();
+        traverse_and_insert(&conn, &path.join("folder2"), None).unwrap();
+        traverse_and_insert(&conn, &path.join("folder3"), None).unwrap();
+
+        // Query for all entries
+        let mut stmt = conn.prepare("SELECT path, parent_path, name FROM files ORDER BY path").unwrap();
+        let entries: Vec<(String, Option<String>, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        // Should have: folder1, folder1/plan.md, folder2, folder2/plan.md, folder3, folder3/spec.md = 6 entries
+        assert_eq!(entries.len(), 6, "Expected 6 entries (3 folders + 3 files)");
+
+        // Find all plan.md files
+        let plan_files: Vec<_> = entries.iter().filter(|(_, _, name)| name == "plan.md").collect();
+        assert_eq!(plan_files.len(), 2, "Should have 2 plan.md files");
+
+        // Verify each plan.md has different parent path
+        let parent_paths: Vec<_> = plan_files.iter().map(|(_, parent, _)| parent.clone()).collect();
+        assert_ne!(parent_paths[0], parent_paths[1], "plan.md files should have different parents");
+
+        // Verify normalized paths use forward slashes
+        for (path, _, _) in &entries {
+            assert!(!path.contains('\\'), "Path should not contain backslashes: {}", path);
+        }
+
+        // Verify we can query children of each folder
+        let folder1_path = normalize_path(path.join("folder1").to_str().unwrap());
+        let folder2_path = normalize_path(path.join("folder2").to_str().unwrap());
+
+        let folder1_children: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE parent_path = ?",
+                params![&folder1_path],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(folder1_children, 1, "folder1 should have 1 child");
+
+        let folder2_children: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE parent_path = ?",
+                params![&folder2_path],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(folder2_children, 1, "folder2 should have 1 child");
     }
 }
