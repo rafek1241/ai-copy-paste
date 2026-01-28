@@ -15,8 +15,7 @@ interface AppState {
   currentView: View;
   activeTab: ActiveTab;
 
-  // Selection
-  selectedFileIds: number[];
+  // Selection 
   selectedPaths: string[];
 
   // Custom instructions for prompt building
@@ -34,7 +33,7 @@ interface AppState {
 type AppAction =
   | { type: "SET_VIEW"; payload: View }
   | { type: "SET_TAB"; payload: ActiveTab }
-  | { type: "SET_SELECTION"; payload: { ids: number[]; paths: string[] } }
+  | { type: "SET_SELECTION"; payload: string[] }
   | { type: "CLEAR_SELECTION" }
   | { type: "SET_CUSTOM_INSTRUCTIONS"; payload: string }
   | { type: "SET_SEARCH"; payload: string }
@@ -46,7 +45,6 @@ type AppAction =
 const initialState: AppState = {
   currentView: "main",
   activeTab: "files",
-  selectedFileIds: [],
   selectedPaths: [],
   customInstructions: "",
   searchQuery: "",
@@ -68,11 +66,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case "SET_SELECTION":
       return {
         ...state,
-        selectedFileIds: action.payload.ids,
-        selectedPaths: action.payload.paths,
+        selectedPaths: action.payload,
       };
     case "CLEAR_SELECTION":
-      return { ...state, selectedFileIds: [], selectedPaths: [] };
+      return { ...state, selectedPaths: [] };
     case "SET_CUSTOM_INSTRUCTIONS":
       return { ...state, customInstructions: action.payload };
     case "SET_SEARCH":
@@ -125,8 +122,8 @@ export function AppProvider({ children }: AppProviderProps) {
     dispatch({ type: "SET_TAB", payload: tab });
   }, []);
 
-  const setSelection = useCallback((ids: number[], paths: string[]) => {
-    dispatch({ type: "SET_SELECTION", payload: { ids, paths } });
+  const setSelection = useCallback((paths: string[]) => {
+    dispatch({ type: "SET_SELECTION", payload: paths });
   }, []);
 
   const clearSelection = useCallback(() => {
@@ -190,7 +187,6 @@ export function useAppView() {
 export function useAppSelection() {
   const { state, setSelection, clearSelection } = useApp();
   return {
-    selectedFileIds: state.selectedFileIds,
     selectedPaths: state.selectedPaths,
     setSelection,
     clearSelection,
