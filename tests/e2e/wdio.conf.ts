@@ -21,8 +21,8 @@ function getTauriAppPath(): string {
   console.log(`Platform: ${platform}, Extension: ${ext || "(none)"}`);
 
   // Check all combinations of binary names and build types
-  // Prioritize release (has embedded frontend) over debug (needs devUrl)
-  const buildTypes = ["release", "debug"];
+  // Prioritize debug (easier for testing with devtools) over release
+  const buildTypes = ["debug", "release"];
 
   for (const buildType of buildTypes) {
     for (const binaryName of BINARY_NAMES) {
