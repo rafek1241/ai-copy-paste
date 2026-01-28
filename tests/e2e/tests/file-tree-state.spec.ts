@@ -16,7 +16,7 @@ describe("File Tree - State Preservation", () => {
   const fileTreePage = new FileTreePage();
 
   // Test fixture paths
-  const fixturesBase = path.join(process.cwd(), "e2e", "fixtures", "test-data");
+  const fixturesBase = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
   const hierarchicalBase = path.join(fixturesBase, "hierarchical-test");
   const track1Path = path.join(hierarchicalBase, "track1");
   const subfolderPath = path.join(fixturesBase, "subfolder");
@@ -25,6 +25,7 @@ describe("File Tree - State Preservation", () => {
     await appPage.waitForLoad();
     await appPage.navigateToMain();
     await fileTreePage.waitForReady();
+    await fileTreePage.ensureTestFixturesIndexed();
   });
 
   beforeEach(async () => {

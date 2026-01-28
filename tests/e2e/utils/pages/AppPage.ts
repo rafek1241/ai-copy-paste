@@ -8,7 +8,7 @@ export class AppPage extends BasePage {
   /**
    * Wait for application to fully load
    */
-  async waitForLoad(timeout: number = 60000): Promise<void> {
+  async waitForLoad(timeout: number = 5000): Promise<void> {
     console.log("AppPage: Waiting for app to load...");
 
     // Wait for the base app to be ready
@@ -49,9 +49,9 @@ export class AppPage extends BasePage {
         }
       },
       {
-        timeout: 30000,
+        timeout,
         interval: 1000,
-        timeoutMsg: "App container did not appear within 30 seconds",
+        timeoutMsg: `App container did not appear within ${timeout / 1000} seconds`,
       }
     );
 
@@ -188,7 +188,24 @@ export class AppPage extends BasePage {
     } catch {
       await this.safeClick(FallbackSelectors.clearContextBtn);
     }
-    await browser.pause(500); // Wait for clear to take effect
+    try {
+      await browser.waitUntil(
+        async () => {
+          const buttons = await $$("button");
+          for (const button of buttons) {
+            const text = await button.getText();
+            if (text.trim().toLowerCase() === "clear all") {
+              await button.click();
+              return true;
+            }
+          }
+          return false;
+        },
+        { timeout: 2000, interval: 200 }
+      );
+    } catch {
+    }
+    await browser.pause(500);
   }
 
   /**

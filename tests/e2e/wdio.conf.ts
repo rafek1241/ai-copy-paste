@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { AppPage, FileTreePage } from "./utils/pages/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,7 +80,6 @@ export const config: Options.Testrunner = {
     autoCompile: true,
     tsNodeOpts: {
       transpileOnly: true,
-      esm: true,
       project: path.join(__dirname, "tsconfig.json"),
     },
   },
@@ -126,10 +126,11 @@ export const config: Options.Testrunner = {
   // Hooks
   beforeSession: async function () {
     // Create test fixtures directory
-    const fixturesDir = path.join(__dirname, "fixtures", "test-data");
-    if (!fs.existsSync(fixturesDir)) {
-      fs.mkdirSync(fixturesDir, { recursive: true });
+    const fixturesDir = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
+    if (fs.existsSync(fixturesDir)) {
+      fs.rmSync(fixturesDir, { recursive: true, force: true });
     }
+    fs.mkdirSync(fixturesDir, { recursive: true });
 
     // Create sample test files
     const sampleFiles = [
@@ -163,6 +164,92 @@ export const config: Options.Testrunner = {
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, file.content);
       }
+    }
+
+    const hierarchicalDir = path.join(fixturesDir, "hierarchical-test");
+    const trackData = [
+      {
+        name: "track1",
+        files: [
+          { name: "plan.ts", content: 'export const plan = "track1 plan";' },
+          { name: "spec.ts", content: 'export const spec = "track1 spec";' },
+        ],
+      },
+      {
+        name: "track2",
+        files: [{ name: "notes.md", content: "# Track 2 Notes\n\nNotes for track2." }],
+      },
+      {
+        name: "track3",
+        files: [{ name: "todo.txt", content: "track3 todo item" }],
+      },
+    ];
+
+    for (const track of trackData) {
+      const trackDir = path.join(hierarchicalDir, track.name);
+      if (!fs.existsSync(trackDir)) {
+        fs.mkdirSync(trackDir, { recursive: true });
+      }
+      for (const file of track.files) {
+        const filePath = path.join(trackDir, file.name);
+        if (!fs.existsSync(filePath)) {
+          fs.writeFileSync(filePath, file.content);
+        }
+      }
+    }
+
+    const extraFiles = [
+      { name: "clipboard-test.ts", content: 'export const test = "clipboard test";' },
+      { name: "persistence-test.ts", content: 'export const persist = "test";' },
+      { name: "sample-code.ts", content: 'export function hello() {\n  return "world";\n}' },
+      { name: "sample-util.js", content: "const util = (x) => x * 2;\nmodule.exports = { util };" },
+      {
+        name: "component.tsx",
+        content: "import React from 'react';\nexport const Component = () => <div>Hello World</div>;",
+      },
+      {
+        name: "utils.ts",
+        content: "export const sum = (a: number, b: number) => a + b;\nexport const multiply = (a: number, b: number) => a * b;",
+      },
+      { name: "config.json", content: '{"name": "test", "version": "1.0.0"}' },
+      { name: "README.md", content: "# Test Project\n\nThis is a test project for E2E testing." },
+    ];
+
+    for (const file of extraFiles) {
+      const filePath = path.join(fixturesDir, file.name);
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, file.content);
+      }
+    }
+  },
+
+  before: async function () {
+    const appPage = new AppPage();
+    const fileTreePage = new FileTreePage();
+    
+    // Initial wait for app load
+    await appPage.waitForLoad(10000);
+    await appPage.navigateToMain();
+    await appPage.waitForTauriReady(10000);
+
+    // Try to clear previous state
+    try {
+      await appPage.clearContext();
+      await browser.execute(() => {
+        const tauri = (window as any).__TAURI__;
+        if (tauri) {
+          tauri.core.invoke("clear_index");
+        }
+      });
+    } catch (e) {
+      console.warn("Failed to clear context/index:", e);
+    }
+
+    // Wait for empty state
+    try {
+      await fileTreePage.waitForReady();
+    } catch (e) {
+      console.warn("File tree not ready:", e);
     }
   },
 
@@ -201,11 +288,6 @@ export const config: Options.Testrunner = {
         );
         fs.writeFileSync(sourcePath, pageSource);
         console.log(`Page source saved: ${sourcePath}`);
-
-        // Also log a snippet of the page source to console
-        console.log("=== Page Source Snippet ===");
-        console.log(pageSource.substring(0, 2000));
-        console.log("=== End Snippet ===");
       } catch (sourceError) {
         console.error("Failed to capture page source:", sourceError);
       }

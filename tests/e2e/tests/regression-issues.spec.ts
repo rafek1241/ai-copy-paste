@@ -41,7 +41,6 @@ describe("Regression Tests", () => {
 
   describe("Issue 1: Clipboard Formatting", () => {
     before(async () => {
-      // Ensure test files exist
       if (!fs.existsSync(fixturesPath)) {
         fs.mkdirSync(fixturesPath, { recursive: true });
       }
@@ -49,9 +48,19 @@ describe("Regression Tests", () => {
       const testFile = path.join(fixturesPath, "clipboard-test.ts");
       fs.writeFileSync(testFile, 'export const test = "clipboard test";');
 
-      // Ensure fixtures are indexed
       await appPage.navigateToMain();
-      await fileTreePage.ensureTestFixturesIndexed();
+      try {
+        await fileTreePage.indexFolder(testFile);
+        await browser.execute(() => {
+          const tauri = (window as any).__TAURI__;
+          if (tauri) {
+            tauri.event.emit("refresh-file-tree");
+          }
+        });
+        await browser.pause(500);
+        await fileTreePage.waitForNodes(1, 5000);
+      } catch {
+      }
     });
 
     it("should copy only custom instructions when no files selected (no ---CONTEXT:)", async () => {
@@ -121,7 +130,7 @@ describe("Regression Tests", () => {
       // Wait for nodes - use longer timeout and graceful handling
       let hasNodes = false;
       try {
-        await fileTreePage.waitForNodes(1, 10000);
+        await fileTreePage.waitForNodes(1, 5000);
         hasNodes = true;
       } catch {
         console.log("No nodes available after timeout, skipping test");

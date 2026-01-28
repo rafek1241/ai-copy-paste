@@ -20,8 +20,8 @@ export class FileTreePage extends BasePage {
         }
       },
       {
-        timeout: 15000,
-        timeoutMsg: "File tree did not load within 15 seconds",
+        timeout: 5000,
+        timeoutMsg: "File tree did not load within 5 seconds",
       }
     );
   }
@@ -315,14 +315,42 @@ export class FileTreePage extends BasePage {
    * Ensure that test fixtures are indexed and visible
    */
   async ensureTestFixturesIndexed(): Promise<void> {
+    await this.waitForReady();
+    await this.waitForTauriReady();
     const nodeCount = await this.getVisibleNodeCount();
     if (nodeCount === 0) {
       console.log("FileTreePage: Tree is empty, indexing test fixtures...");
       const fixturesPath = this.getTestFixturesPath();
+      try {
+        await browser.waitUntil(
+          async () => await this.isEmptyStateDisplayed(),
+          { timeout: 2000, interval: 200 }
+        );
+      } catch {
+      }
       await this.indexFolder(fixturesPath);
-      await this.waitForNodes(1, 20000);
+      try {
+        await browser.execute(() => {
+          const tauri = (window as any).__TAURI__;
+          if (tauri) {
+            tauri.event.emit("refresh-file-tree");
+          }
+        });
+      } catch {
+      }
+      await this.waitForNodes(1, 5000);
     } else {
       console.log(`FileTreePage: Tree already has ${nodeCount} nodes`);
+    }
+
+    // Ensure the root folder is expanded so tests can access files
+    const folders = await this.getFolderNodes();
+    if (folders.length > 0) {
+      const label = await folders[0].$(Selectors.treeLabel);
+      if (await label.isExisting()) {
+        const name = await label.getText();
+        await this.expandFolder(name);
+      }
     }
   }
 
@@ -330,33 +358,38 @@ export class FileTreePage extends BasePage {
    * Get the test fixtures directory path
    */
   getTestFixturesPath(): string {
-    return path.join(process.cwd(), "e2e", "fixtures", "test-data");
+    return path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
   }
 
   /**
-   * Index a folder via Tauri command (simulated through UI)
-   * Note: In real E2E tests, you'd use the Add Folder button
-   * which opens a native file dialog. This is for testing
-   * scenarios where we need to index specific paths.
+   * Index a folder via Tauri command (simulated through UI drag-drop)
    */
   async indexFolder(folderPath: string): Promise<void> {
-    // Execute JavaScript to invoke the Tauri command directly
+    await this.waitForTauriReady();
+    
+    // Normalize path for Windows to avoid escaping issues
+    const normalizedPath = folderPath.replace(/\\/g, '/');
+    
     await browser.execute((path) => {
-      // @ts-ignore - Tauri API available in browser context
-      if (window.__TAURI__) {
-        return window.__TAURI__.core.invoke("index_folder", { path });
+      const tauri = (window as any).__TAURI__;
+      if (tauri) {
+        tauri.event.emit("tauri://drag-drop", {
+          paths: [path],
+          position: { x: 0, y: 0 }
+        });
+      } else {
+        throw new Error("Tauri API not available");
       }
-      throw new Error("Tauri API not available");
-    }, folderPath);
+    }, normalizedPath);
 
     // Wait for indexing to complete
-    await browser.pause(1000);
+    await browser.pause(2000);
   }
 
   /**
    * Wait for tree to have nodes
    */
-  async waitForNodes(minCount: number = 1, timeout: number = 10000): Promise<void> {
+  async waitForNodes(minCount: number = 1, timeout: number = 5000): Promise<void> {
     await browser.waitUntil(
       async () => {
         const count = await this.getVisibleNodeCount();

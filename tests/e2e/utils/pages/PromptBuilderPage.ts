@@ -16,8 +16,8 @@ export class PromptBuilderPage extends BasePage {
         return text.includes("Prompt Builder");
       },
       {
-        timeout: 10000,
-        timeoutMsg: "Prompt Builder did not load within 10 seconds",
+        timeout: 5000,
+        timeoutMsg: "Prompt Builder did not load within 5 seconds",
       }
     );
   }

@@ -27,9 +27,16 @@ describe("Prompt Builder", () => {
       fs.writeFileSync(filePath, file.content);
     }
 
-    // Ensure fixtures are indexed
-    await appPage.navigateToMain();
-    await fileTreePage.ensureTestFixturesIndexed();
+    await appPage.navigateToPrompt();
+    await promptBuilderPage.waitForReady();
+  });
+
+  beforeEach(async () => {
+    const isPromptVisible = await appPage.isPromptBuilderDisplayed();
+    if (!isPromptVisible) {
+      await appPage.navigateToPrompt();
+      await promptBuilderPage.waitForReady();
+    }
   });
 
   describe("Initial State", () => {
@@ -218,13 +225,12 @@ describe("Prompt Builder", () => {
     before(async () => {
       // Navigate to main and select files
       await appPage.navigateToMain();
-      await browser.pause(500);
+      await browser.pause(300);
 
       // Try to index and select files
       try {
         await fileTreePage.indexFolder(fixturesPath);
-        await browser.pause(2000);
-        await fileTreePage.waitForNodes(1, 10000);
+        await fileTreePage.waitForNodes(1, 2000);
 
         // Select some files
         const nodes = await fileTreePage.getVisibleNodes();
@@ -254,7 +260,14 @@ describe("Prompt Builder", () => {
       }
 
       await promptBuilderPage.clickBuildPrompt();
-      await browser.pause(2000);
+      await browser.waitUntil(
+        async () => {
+          const isPreviewDisplayed = await promptBuilderPage.isPromptPreviewDisplayed();
+          const isError = await promptBuilderPage.isErrorDisplayed();
+          return isPreviewDisplayed || isError;
+        },
+        { timeout: 3000, interval: 200 }
+      );
 
       // Check if prompt was built (preview should appear)
       const isPreviewDisplayed = await promptBuilderPage.isPromptPreviewDisplayed();
@@ -288,7 +301,14 @@ describe("Prompt Builder", () => {
 
       // Build prompt
       await promptBuilderPage.clickBuildPrompt();
-      await browser.pause(1000);
+      await browser.waitUntil(
+        async () => {
+          const isPreviewDisplayed = await promptBuilderPage.isPromptPreviewDisplayed();
+          const isError = await promptBuilderPage.isErrorDisplayed();
+          return isPreviewDisplayed || isError;
+        },
+        { timeout: 2000, interval: 200 }
+      );
 
       // Clipboard API should have been called
       // Can't directly verify clipboard in E2E, but we can check for success

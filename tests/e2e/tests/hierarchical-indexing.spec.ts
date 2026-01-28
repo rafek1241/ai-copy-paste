@@ -87,7 +87,7 @@ describe("Hierarchical Indexing", () => {
 
       // Verify files are visible (they should appear at root level as orphans)
       try {
-        await fileTreePage.waitForNodes(1, 10000);
+        await fileTreePage.waitForNodes(1, 5000);
         const nodeCount = await fileTreePage.getVisibleNodeCount();
         console.log(`After indexing files: ${nodeCount} nodes visible`);
         expect(nodeCount).toBeGreaterThanOrEqual(1);

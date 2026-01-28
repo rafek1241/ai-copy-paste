@@ -4,9 +4,16 @@
 
 describe("Application Launch", () => {
   before(async () => {
-    // Give app time to initialize
     console.log("Waiting for app to initialize...");
-    await browser.pause(5000);
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          const root = document.getElementById("root");
+          return root !== null && root.children.length > 0;
+        });
+      },
+      { timeout: 4000, interval: 200 }
+    );
   });
 
   it("should have a window with content", async () => {
@@ -22,7 +29,15 @@ describe("Application Launch", () => {
   });
 
   it("should render the React app", async () => {
-    await browser.pause(2000);
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          const root = document.getElementById("root");
+          return root !== null && root.children.length > 0;
+        });
+      },
+      { timeout: 3000, interval: 200 }
+    );
 
     const hasContent = await browser.execute(() => {
       const root = document.getElementById("root");
@@ -81,7 +96,14 @@ describe("Application Launch", () => {
 
 describe("Navigation", () => {
   before(async () => {
-    await browser.pause(2000);
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          return document.querySelector('[data-testid="app-container"]') !== null;
+        });
+      },
+      { timeout: 2000, interval: 200 }
+    );
   });
 
   it("should navigate to Settings view", async () => {

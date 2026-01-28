@@ -6,7 +6,7 @@ export class BasePage {
    * Wait for the application to be ready
    * Checks for the root React element instead of title (more reliable in CI)
    */
-  async waitForAppReady(timeout: number = 60000): Promise<void> {
+  async waitForAppReady(timeout: number = 5000): Promise<void> {
     console.log("Waiting for application to be ready...");
 
     // First wait for any content to load
@@ -55,12 +55,32 @@ export class BasePage {
     console.log("Application is ready");
   }
 
+  async waitForTauriReady(timeout: number = 10000): Promise<void> {
+    await browser.waitUntil(
+      async () => {
+        try {
+          return await browser.execute(() => {
+            const tauri = (window as any).__TAURI__;
+            return !!tauri && !!tauri.core?.invoke && !!tauri.event?.emit;
+          });
+        } catch {
+          return false;
+        }
+      },
+      {
+        timeout,
+        interval: 200,
+        timeoutMsg: `Tauri API was not available within ${timeout / 1000} seconds`,
+      }
+    );
+  }
+
   /**
    * Wait for an element to be displayed
    */
   async waitForElement(
     selector: string,
-    timeout: number = 10000
+    timeout: number = 5000
   ): Promise<WebdriverIO.Element> {
     const element = await $(selector);
     await element.waitForDisplayed({ timeout });
@@ -72,7 +92,7 @@ export class BasePage {
    */
   async waitForClickable(
     selector: string,
-    timeout: number = 10000
+    timeout: number = 5000
   ): Promise<WebdriverIO.Element> {
     const element = await $(selector);
     await element.waitForClickable({ timeout });
@@ -134,7 +154,7 @@ export class BasePage {
   async waitForTextContains(
     selector: string,
     text: string,
-    timeout: number = 10000
+    timeout: number = 5000
   ): Promise<void> {
     await browser.waitUntil(
       async () => {

@@ -4,9 +4,15 @@
 
 describe("App Loading Diagnostic", () => {
   it("should load the application and find basic elements", async () => {
-    // Wait for initial load
-    console.log("Step 1: Waiting 10 seconds for app to fully initialize...");
-    await browser.pause(10000);
+    console.log("Step 1: Waiting for app to fully initialize...");
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          return document.querySelector('[data-testid="app-container"]') !== null;
+        });
+      },
+      { timeout: 4000, interval: 200 }
+    );
 
     // Log basic info
     const title = await browser.getTitle();
