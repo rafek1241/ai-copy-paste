@@ -84,6 +84,34 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     setFlatTree(buildFlatTree(rootPaths, nodesMap));
   }, [nodesMap, rootPaths, buildFlatTree]);
 
+  // Find the common ancestor path for a set of entries
+  // This groups related paths under their common parent/grandparent
+  const findCommonAncestor = (paths: string[]): string | null => {
+    if (paths.length === 0) return null;
+    if (paths.length === 1) {
+      // For single path, return its parent directory
+      const path = paths[0];
+      const lastSep = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+      return lastSep > 0 ? path.substring(0, lastSep) : null;
+    }
+
+    // Sort paths to find common prefix
+    const sorted = [...paths].sort();
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+
+    // Find common prefix
+    let i = 0;
+    while (i < first.length && i < last.length && first[i] === last[i]) {
+      i++;
+    }
+
+    const commonPrefix = first.substring(0, i);
+    // Trim to last separator to get the common directory
+    const lastSep = Math.max(commonPrefix.lastIndexOf('\\'), commonPrefix.lastIndexOf('/'));
+    return lastSep > 0 ? commonPrefix.substring(0, lastSep) : null;
+  };
+
   // Load root level entries
   const loadRootEntries = useCallback(async () => {
     try {
@@ -100,6 +128,22 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
         );
         return !isNested;
       });
+
+      // Check if we need to aggregate under a common ancestor
+      // This happens when files from different folders share a common grandparent
+      const allPaths = filteredEntries.map(e => e.path);
+      const commonAncestor = findCommonAncestor(allPaths);
+
+      // Determine effective root entries
+      let effectiveRootEntries = filteredEntries;
+      if (commonAncestor && commonAncestor.length > 0) {
+        // Check if common ancestor exists in entries
+        const ancestorEntry = entries.find(e => e.path === commonAncestor && e.is_dir);
+        if (ancestorEntry) {
+          // Use the common ancestor as the single root
+          effectiveRootEntries = [ancestorEntry];
+        }
+      }
 
       setNodesMap(prevNodesMap => {
         const newNodesMap: Record<string, TreeNode> = {};
@@ -138,47 +182,75 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
 
         // Now handle parent-child relationships for nodes that were previously orphaned
         // Find selected/expanded nodes that should now be children of newly added directories
-        filteredEntries.forEach(rootEntry => {
-          if (rootEntry.is_dir) {
-            const parentPath = rootEntry.path;
-            const existingChildPaths = newNodesMap[parentPath]?.childPaths || [];
-            const adoptedChildPaths: string[] = [];
+        // Process directories in order of depth (deepest first) to handle grandparent scenarios
+        const dirEntries = entries.filter(e => e.is_dir).sort((a, b) => {
+          const depthA = (a.path.match(/[\/\\]/g) || []).length;
+          const depthB = (b.path.match(/[\/\\]/g) || []).length;
+          return depthB - depthA; // Deepest first
+        });
 
-            // Find nodes that should be children of this directory
-            Object.values(newNodesMap).forEach(node => {
-              if (node.path !== parentPath && node.parent_path === parentPath) {
-                // This node is a direct child of the root entry
-                if (!existingChildPaths.includes(node.path)) {
-                  adoptedChildPaths.push(node.path);
-                }
+        dirEntries.forEach(dirEntry => {
+          const parentPath = dirEntry.path;
+          const existingChildPaths = newNodesMap[parentPath]?.childPaths || [];
+          const adoptedChildPaths: string[] = [];
+
+          // Find nodes that should be direct children of this directory
+          // This includes both:
+          // 1. Nodes with matching parent_path in the database
+          // 2. Nodes whose path indicates they are direct children (for orphaned files)
+          Object.values(newNodesMap).forEach(node => {
+            if (node.path !== parentPath) {
+              // Check if this node should be a direct child of parentPath
+              const isDirectChild =
+                // Case 1: Database says it's a child
+                node.parent_path === parentPath ||
+                // Case 2: Path analysis shows it's a direct child (orphaned files)
+                (node.path.startsWith(parentPath + '\\') || node.path.startsWith(parentPath + '/')) &&
+                !node.path.substring(parentPath.length + 1).includes('\\') &&
+                !node.path.substring(parentPath.length + 1).includes('/');
+
+              if (isDirectChild && !existingChildPaths.includes(node.path)) {
+                adoptedChildPaths.push(node.path);
+              }
+            }
+          });
+
+          // If we found children to adopt, update the parent's childPaths and expand it
+          if (adoptedChildPaths.length > 0 || existingChildPaths.length > 0) {
+            const allChildPaths = [...new Set([...existingChildPaths, ...adoptedChildPaths])];
+            const hasSelectedChildren = allChildPaths.some(cp => {
+              const child = newNodesMap[cp];
+              return child && (child.checked || child.indeterminate);
+            });
+
+            // Preserve expanded state if already expanded, otherwise auto-expand if selected children
+            const shouldExpand = newNodesMap[parentPath]?.expanded || hasSelectedChildren;
+
+            newNodesMap[parentPath] = {
+              ...newNodesMap[parentPath],
+              childPaths: allChildPaths,
+              expanded: shouldExpand,
+            };
+
+            // Update adopted children's parent_path reference
+            adoptedChildPaths.forEach(childPath => {
+              if (newNodesMap[childPath]) {
+                newNodesMap[childPath] = {
+                  ...newNodesMap[childPath],
+                  parent_path: parentPath,
+                };
               }
             });
 
-            // If we found children to adopt, update the parent's childPaths and expand it
-            if (adoptedChildPaths.length > 0) {
-              const allChildPaths = [...new Set([...existingChildPaths, ...adoptedChildPaths])];
-              const hasSelectedChildren = allChildPaths.some(cp => {
-                const child = newNodesMap[cp];
-                return child && (child.checked || child.indeterminate);
-              });
-
-              newNodesMap[parentPath] = {
-                ...newNodesMap[parentPath],
-                childPaths: allChildPaths,
-                // Auto-expand if there are selected children inside
-                expanded: newNodesMap[parentPath].expanded || hasSelectedChildren,
-              };
-
-              // Update parent's checked/indeterminate state based on children
-              updateParentSelectionInMap(newNodesMap, parentPath);
-            }
+            // Update parent's checked/indeterminate state based on children
+            updateParentSelectionInMap(newNodesMap, parentPath);
           }
         });
 
         return newNodesMap;
       });
 
-      setRootPaths(filteredEntries.map(entry => entry.path));
+      setRootPaths(effectiveRootEntries.map(entry => entry.path));
     } catch (error) {
       console.error('Failed to load root entries:', error);
     }
