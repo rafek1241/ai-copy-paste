@@ -93,7 +93,7 @@ export const config: Options.Testrunner = {
   framework: "mocha",
   mochaOpts: {
     ui: "bdd",
-    timeout: 120000, // 2 minutes per test
+    timeout: 5000, // 5 seconds per test
     retries: 1, // Retry failed tests once
   },
 
@@ -116,8 +116,8 @@ export const config: Options.Testrunner = {
   outputDir: "./logs",
 
   // Timeouts
-  waitforTimeout: 30000,
-  connectionRetryTimeout: 120000,
+  waitforTimeout: 5000,
+  connectionRetryTimeout: 5000,
   connectionRetryCount: 3,
 
   // No services needed - tauri-driver is started externally
