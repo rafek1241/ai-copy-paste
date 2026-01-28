@@ -17,6 +17,7 @@
     "test:e2e:headless": "CI=true wdio run tests/e2e/wdio.conf.ts",
     "test:e2e:run": "wait-on http://localhost:1420 tcp:4444 && npm run test:e2e",
     "e2e-session": "concurrently --kill-others \"npm run dev\" \"npm run driver\" \"npm run test:e2e:run\"",
+    "test:all": "concurrently \"npm run test\" \"npm run test:rust\" \"npm run e2e-session\"",
     "build:tauri": "cd src-tauri && cargo build",
     "build:tauri:release": "cd src-tauri && cargo build --release"
   },
