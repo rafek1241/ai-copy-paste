@@ -37,7 +37,7 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
     };
 
     return (
-        <header className="h-10 flex items-center px-3 border-b border-border-dark bg-[#0d1117]" data-testid="app-header">
+        <div className="flex-1 flex items-center h-full" data-testid="app-header-content">
             <button
                 onClick={onAddFolder}
                 className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 transition-colors group"
@@ -94,7 +94,7 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
                     </button>
                 )}
             </div>
-        </header>
+        </div>
     );
 };
 
