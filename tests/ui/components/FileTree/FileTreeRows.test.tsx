@@ -22,7 +22,7 @@ describe("FileTree Rows", () => {
         vi.clearAllMocks();
     });
 
-    it("renders rows with Material Symbols icons", async () => {
+    it("renders rows with Lucide icons", async () => {
         // Mock get_tree_roots to return a file and a folder
         mockInvoke.mockImplementation((cmd, args) => {
             if (cmd === 'get_children' && args?.parentPath === null) {
@@ -43,15 +43,20 @@ describe("FileTree Rows", () => {
         expect(srcFolder).toBeInTheDocument();
         expect(mainFile).toBeInTheDocument();
 
-        // Check for Material Symbols icons
-        // Folders use "folder" icon
-        expect(screen.getByText("folder")).toHaveClass("material-symbols-outlined");
+        // Check for Lucide icons (folders)
+        // Folders use "lucide-folder" class on the SVG
+        const folderIcon = document.querySelector('.lucide-folder');
+        expect(folderIcon).toBeInTheDocument();
 
-        // .ts files use "terminal" icon (my implementation choice)
-        expect(screen.getByText("terminal")).toHaveClass("material-symbols-outlined");
+        // Check for Lucide icons (files)
+        // We can look for the file row and check its icon
+        const fileRow = mainFile.closest('[role="treeitem"]');
+        const fileIcon = fileRow?.querySelector('[data-testid="tree-icon"] svg');
+        expect(fileIcon).toBeInTheDocument();
+        expect(fileIcon?.getAttribute("class") || "").toContain("lucide-");
 
-        // Check for chevron icon (there are multiple - one visible for folder, one invisible for file alignment)
-        const chevrons = screen.getAllByText("chevron_right");
-        expect(chevrons[0]).toHaveClass("material-symbols-outlined");
+        // Check for chevron icon
+        const chevron = document.querySelector('.lucide-chevron-right');
+        expect(chevron).toBeInTheDocument();
     });
 });

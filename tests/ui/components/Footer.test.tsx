@@ -5,13 +5,14 @@ import Footer from "@/components/Footer";
 describe("Footer", () => {
     it("renders Copy Context button and token info", () => {
         const onCopy = vi.fn();
-        render(<Footer onCopy={onCopy} tokenCount={1000} tokenLimit={10000} version="0.1.0" />);
+        const { container } = render(<Footer onCopy={onCopy} tokenCount={1000} tokenLimit={10000} version="0.1.0" />);
 
         const copyButton = screen.getByText("Copy Context");
         expect(copyButton).toBeInTheDocument();
 
         // Check for icon
-        expect(screen.getByText("content_copy")).toBeInTheDocument();
+        const icon = container.querySelector("svg.lucide-copy");
+        expect(icon).toBeInTheDocument();
 
         // Check for token count display
         expect(screen.getByText("1,000 / 10,000 tokens")).toBeInTheDocument();

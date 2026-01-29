@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { FileTree } from "@/components/FileTree/FileTree";
 import { invoke } from "@tauri-apps/api/core";
@@ -22,16 +22,22 @@ describe("FileTree Filters", () => {
         });
     });
 
-    it("renders ALL, SRC, DOCS filter buttons", () => {
+    it("renders ALL, SRC, DOCS filter buttons", async () => {
         render(<FileTree />);
+        
+        // Wait for initial load to prevent act() warnings
+        await waitFor(() => expect(invoke).toHaveBeenCalled());
 
         expect(screen.getByText("ALL")).toBeInTheDocument();
         expect(screen.getByText("SRC")).toBeInTheDocument();
         expect(screen.getByText("DOCS")).toBeInTheDocument();
     });
 
-    it("toggles filter buttons when clicked", () => {
+    it("toggles filter buttons when clicked", async () => {
         render(<FileTree />);
+
+        // Wait for initial load
+        await waitFor(() => expect(invoke).toHaveBeenCalled());
 
         const srcButton = screen.getByText("SRC");
         const allButton = screen.getByText("ALL");

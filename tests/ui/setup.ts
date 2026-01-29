@@ -41,3 +41,30 @@ beforeEach(() => {
 });
 
 export { mockInvoke, mockListen, mockEmit };
+
+// Mock the toast hook
+const mockToast = {
+  toast: vi.fn(),
+  dismiss: vi.fn(),
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+};
+
+vi.mock('@/components/ui/toast', () => ({
+  useToast: () => mockToast,
+  ToastProvider: ({ children }: { children: React.ReactNode }) => children,
+  ToastViewport: () => null,
+  Toast: () => null,
+  ToastTitle: () => null,
+  ToastDescription: () => null,
+  ToastClose: () => null,
+  ToastAction: () => null,
+}));
+
+// Mock clipboard
+Object.assign(navigator, {
+  clipboard: {
+    writeText: vi.fn().mockResolvedValue(undefined),
+  },
+});

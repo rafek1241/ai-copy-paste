@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PromptBuilder } from '@/components/PromptBuilder';
 import * as promptsService from '@/services/prompts';
@@ -66,11 +66,13 @@ describe('PromptBuilder', () => {
       { wrapper: TestWrapper }
     );
 
-    // Wait for templates to load
-    await waitFor(() => expect(promptsService.getTemplates).toHaveBeenCalled());
+    // Wait for templates to load to avoid act() warnings
+    await screen.findByText('Agent');
 
     // Trigger build
-    await builderRef?.buildAndCopy();
+    await act(async () => {
+      await builderRef?.buildAndCopy();
+    });
 
     expect(assemblyService.assemblePrompt).toHaveBeenCalledWith({
       templateId: 'custom',
@@ -90,7 +92,12 @@ describe('PromptBuilder', () => {
       { wrapper: TestWrapper }
     );
 
-    await builderRef?.buildAndCopy();
+    // Wait for templates to load to avoid act() warnings
+    await screen.findByText('Agent');
+
+    await act(async () => {
+      await builderRef?.buildAndCopy();
+    });
 
     await waitFor(() => {
       expect(screen.getByText(/Please select files or enter custom instructions/i)).toBeDefined();
@@ -98,7 +105,10 @@ describe('PromptBuilder', () => {
   });
 
   it('should show error if building fails', async () => {
-    vi.mocked(assemblyService.assemblePrompt).mockRejectedValue(new Error('Build failed'));
+    const error = new Error('Build failed');
+    vi.mocked(assemblyService.assemblePrompt).mockImplementation(async () => {
+      throw error;
+    });
 
     let builderRef: any = null;
     render(
@@ -109,14 +119,19 @@ describe('PromptBuilder', () => {
       { wrapper: TestWrapper }
     );
 
-    // Wait for templates to load
-    await waitFor(() => expect(promptsService.getTemplates).toHaveBeenCalled());
+    // Wait for templates to load to avoid act() warnings
+    await screen.findByText('Agent');
 
     try {
-      await builderRef?.buildAndCopy();
+      await act(async () => {
+        await builderRef?.buildAndCopy();
+      });
     } catch (e) {
       // Expected
     }
+    
+    expect(assemblyService.assemblePrompt).toHaveBeenCalled();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.getByText(/Failed to build prompt: Error: Build failed/i)).toBeDefined();

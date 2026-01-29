@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 import { FilterType, useFileTree } from "./FileTreeContext";
+import { ChevronDown, ChevronsUpDown } from "lucide-react";
 
 const FILTER_OPTIONS: { id: FilterType; label: string }[] = [
   { id: "ALL", label: "ALL" },
@@ -53,9 +54,7 @@ export const FileTreeFilters = memo(function FileTreeFilters({ className }: File
           aria-label="Sort by name"
         >
           <span>Name</span>
-          <span className="material-symbols-outlined text-[12px]" aria-hidden="true">
-            arrow_drop_down
-          </span>
+          <ChevronDown size={12} aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -63,9 +62,7 @@ export const FileTreeFilters = memo(function FileTreeFilters({ className }: File
           aria-label="Sort by size"
         >
           <span>Size</span>
-          <span className="material-symbols-outlined text-[12px]" aria-hidden="true">
-            unfold_more
-          </span>
+          <ChevronsUpDown size={12} aria-hidden="true" />
         </button>
       </div>
     </div>

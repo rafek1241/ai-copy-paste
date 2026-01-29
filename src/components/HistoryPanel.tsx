@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
+import { useHistory } from '../contexts/HistoryContext';
+import { useFileTree } from './FileTree/FileTreeContext';
+import { Trash2, History, CheckCircle, AlertTriangle, ChevronDown, RotateCcw, Loader2 } from "lucide-react";
 
 interface HistoryEntry {
   id: number;
@@ -22,34 +25,15 @@ interface HistoryPanelProps {
   onRestore?: (entry: HistoryEntry) => void;
 }
 
-const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [validationResults, setValidationResults] = useState<Map<number, ValidationResult>>(new Map());
+export const HistoryPanel = memo(function HistoryPanel({ onRestore }: HistoryPanelProps) {
+  const { history, loadHistory } = useHistory();
+  const { loadRootEntries: _loadRootEntries } = useFileTree();
+  const [loading, _setLoading] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set());
+  const [validationResults, setValidationResults] = useState<Map<number, ValidationResult>>(new Map());
 
   const { success, error: showError } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
-
-  const loadHistory = useCallback(async () => {
-    setLoading(true);
-    try {
-      const entries = await invoke<HistoryEntry[]>('load_history');
-      setHistory(entries);
-
-      // Validate all entries
-      for (const entry of entries) {
-        if (entry.id) {
-          await validateEntry(entry.id, entry.selected_paths);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load history:', error);
-      showError('Failed to load history');
-    } finally {
-      setLoading(false);
-    }
-  }, [showError]);
 
   useEffect(() => {
     loadHistory();
@@ -148,7 +132,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
   if (loading && history.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#0d1117] text-white/40" role="status">
-        <span className="material-symbols-outlined animate-spin mr-2" aria-hidden="true">progress_activity</span>
+        <Loader2 className="animate-spin mr-2" size={24} aria-hidden="true" />
         <span className="text-[11px] font-medium uppercase tracking-widest">Loading History...</span>
       </div>
     );
@@ -165,7 +149,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between border-b border-white/5 pb-4 mb-2">
             <h2 className="text-[14px] font-bold text-white flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary" aria-hidden="true">history</span>
+              <History size={18} className="text-primary" aria-hidden="true" />
               Session History
             </h2>
             {history.length > 0 && (
@@ -174,7 +158,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
                 className="px-3 h-7 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded text-[10px] font-bold text-red-500 transition-all flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-red-500/50"
                 aria-label="Clear all history"
               >
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">delete_sweep</span>
+                <Trash2 size={14} aria-hidden="true" />
                 CLEAR ALL
               </button>
             )}
@@ -183,7 +167,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
           {history.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
               <div className="size-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-                <span className="material-symbols-outlined text-white/20 text-[24px]" aria-hidden="true">history_toggle_off</span>
+                <History className="text-white/20" size={24} aria-hidden="true" />
               </div>
               <div className="space-y-1">
                 <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest">No entries found</p>
@@ -215,9 +199,11 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
                         "size-8 rounded flex items-center justify-center flex-shrink-0",
                         validation?.valid ? "bg-green-500/10 text-green-500" : "bg-yellow-500/10 text-yellow-500"
                       )}>
-                        <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
-                          {validation?.valid ? 'check_circle' : 'warning'}
-                        </span>
+                        {validation?.valid ? (
+                          <CheckCircle size={18} aria-hidden="true" />
+                        ) : (
+                          <AlertTriangle size={18} aria-hidden="true" />
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -234,15 +220,14 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
                         </div>
                       </div>
 
-                      <span
+                      <ChevronDown
+                        size={18}
                         className={cn(
-                          "material-symbols-outlined text-[18px] text-white/20 transition-transform duration-300 flex-shrink-0",
+                          "text-white/20 transition-transform duration-300 flex-shrink-0",
                           isExpanded && "rotate-180"
                         )}
                         aria-hidden="true"
-                      >
-                        expand_more
-                      </span>
+                      />
                     </button>
 
                     {isExpanded && (
@@ -291,7 +276,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
                                 }}
                                 className="flex-1 h-8 bg-primary hover:bg-primary/90 text-white text-[10px] font-bold rounded shadow-lg shadow-primary/10 transition-all active:scale-[0.98] flex items-center justify-center gap-2 focus:outline-none focus:ring-1 focus:ring-primary/50"
                               >
-                                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">history_edu</span>
+                                <RotateCcw size={14} aria-hidden="true" />
                                 RESTORE SESSION
                               </button>
                               <button
@@ -302,7 +287,7 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
                                 className="px-3 h-8 bg-white/5 hover:bg-white/10 border border-white/10 text-white/40 hover:text-red-400 transition-colors rounded focus:outline-none focus:ring-1 focus:ring-red-400/50"
                                 aria-label="Delete this entry"
                               >
-                                <span className="material-symbols-outlined text-[16px]" aria-hidden="true">delete</span>
+                                <Trash2 size={16} aria-hidden="true" />
                               </button>
                             </div>
                           </div>
@@ -319,6 +304,6 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ onRestore }) => {
       <ConfirmDialog />
     </>
   );
-};
+});
 
 export default HistoryPanel;

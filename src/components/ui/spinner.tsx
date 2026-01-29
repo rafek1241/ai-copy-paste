@@ -1,5 +1,6 @@
 // spinner component
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 interface SpinnerProps {
   size?: "sm" | "md" | "lg";
@@ -14,17 +15,15 @@ const sizeClasses = {
 
 export function Spinner({ size = "md", className }: SpinnerProps) {
   return (
-    <span
+    <Loader2
       className={cn(
-        "material-symbols-outlined animate-spin",
+        "animate-spin",
         sizeClasses[size],
         className
       )}
       role="status"
       aria-label="Loading"
-    >
-      progress_activity
-    </span>
+    />
   );
 }
 

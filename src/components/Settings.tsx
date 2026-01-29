@@ -6,6 +6,17 @@ import { cn } from '@/lib/utils';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
 import { useAppSettings } from '@/contexts/AppContext';
+import { 
+  Settings as SettingsIcon, 
+  Upload, 
+  Download, 
+  RotateCcw, 
+  X, 
+  ChevronDown, 
+  Check, 
+  Save, 
+  Loader2 
+} from 'lucide-react';
 
 interface AppSettings {
   excluded_extensions: string[];
@@ -182,7 +193,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#0d1117] text-white/40" role="status">
-        <span className="material-symbols-outlined animate-spin mr-2" aria-hidden="true">progress_activity</span>
+        <Loader2 className="animate-spin mr-2" aria-hidden="true" />
         <span className="text-[11px] font-medium uppercase tracking-widest">Loading Settings...</span>
       </div>
     );
@@ -199,7 +210,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
         <div className="p-4 space-y-6">
           <div className="flex items-center justify-between border-b border-white/5 pb-4">
             <h2 className="text-[14px] font-bold text-white flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary" aria-hidden="true">settings</span>
+              <SettingsIcon size={18} className="text-primary" aria-hidden="true" />
               Application Settings
             </h2>
             <div className="flex gap-2">
@@ -208,7 +219,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                 className="px-3 h-7 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[10px] font-bold text-white transition-all flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-white/30"
                 aria-label="Export settings"
               >
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">upload</span>
+                <Upload size={14} aria-hidden="true" />
                 EXPORT
               </button>
               <button
@@ -216,7 +227,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                 className="px-3 h-7 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[10px] font-bold text-white transition-all flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-white/30"
                 aria-label="Import settings"
               >
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">download</span>
+                <Download size={14} aria-hidden="true" />
                 IMPORT
               </button>
               <button
@@ -224,7 +235,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                 className="px-3 h-7 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded text-[10px] font-bold text-red-500 transition-all flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-red-500/50"
                 aria-label="Reset settings to defaults"
               >
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">restart_alt</span>
+                <RotateCcw size={14} aria-hidden="true" />
                 RESET
               </button>
             </div>
@@ -279,7 +290,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                         className="size-4 flex items-center justify-center text-white/30 hover:text-red-400 transition-colors focus:outline-none focus:text-red-400"
                         aria-label={`Remove ${ext}`}
                       >
-                        <span className="material-symbols-outlined text-[12px]" aria-hidden="true">close</span>
+                        <X size={12} aria-hidden="true" />
                       </button>
                     </div>
                   ))}
@@ -348,7 +359,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                       <option value="debugging">Debugging</option>
                       <option value="review">Review</option>
                     </select>
-                    <span className="absolute right-1 top-1/2 -translate-y-1/2 material-symbols-outlined text-[14px] text-white/20 pointer-events-none" aria-hidden="true">expand_more</span>
+                    <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" aria-hidden="true" />
                   </div>
                 </div>
               </div>
@@ -363,7 +374,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                       className="sr-only peer"
                     />
                     <div className="size-4 border border-white/20 rounded bg-black/40 peer-checked:bg-primary peer-checked:border-primary transition-all flex items-center justify-center peer-focus:ring-1 peer-focus:ring-primary/50">
-                      <span className="material-symbols-outlined text-[12px] text-white scale-0 peer-checked:scale-100 transition-transform" aria-hidden="true">check</span>
+                      <Check size={12} className="text-white scale-0 peer-checked:scale-100 transition-transform" aria-hidden="true" />
                     </div>
                   </div>
                   <div className="space-y-0.5">
@@ -385,9 +396,9 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
               )}
             >
               {saving ? (
-                <span className="material-symbols-outlined animate-spin text-[16px]" aria-hidden="true">progress_activity</span>
+                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
               ) : (
-                <span className="material-symbols-outlined text-[16px]" aria-hidden="true">save</span>
+                <Save size={16} aria-hidden="true" />
               )}
               {saving ? 'SAVING...' : 'SAVE CONFIGURATION'}
             </button>

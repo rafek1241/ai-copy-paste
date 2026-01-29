@@ -1,4 +1,5 @@
 import * as React from "react";
+import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AlertDialogContextValue {
@@ -299,7 +300,7 @@ export function useConfirmDialog() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {state.options.variant === "destructive" && (
-                <span className="material-symbols-outlined text-red-500 text-base">warning</span>
+                <AlertTriangle size={16} className="text-red-500" aria-hidden="true" />
               )}
               {state.options.title}
             </AlertDialogTitle>

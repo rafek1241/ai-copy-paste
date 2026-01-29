@@ -14,6 +14,8 @@ export interface TreeNode extends FileEntry {
   expanded: boolean;
   checked: boolean;
   indeterminate: boolean;
+  raw_path?: string;
+  raw_parent_path?: string | null;
   children?: TreeNode[];
   childPaths?: string[];  // Child paths instead of IDs
   hasChildren?: boolean;

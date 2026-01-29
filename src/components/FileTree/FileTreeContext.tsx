@@ -74,6 +74,7 @@ interface FileTreeContextValue {
   loadChildren: (nodePath: string) => Promise<TreeNode[]>;
   toggleExpand: (nodePath: string) => Promise<void>;
   toggleCheck: (nodePath: string, checked: boolean) => Promise<void>;
+  clearSelection: () => void;
   setFilter: (filter: FilterType) => void;
   clearAll: () => void;
   // Selection helpers
@@ -168,8 +169,10 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       const entries = await invoke<FileEntry[]>("get_children", { parentPath: null });
 
       // Normalize all entry paths for consistent processing
-      const normalizedEntries = entries.map(entry => ({
+      const normalizedEntries = entries.map((entry) => ({
         ...entry,
+        raw_path: entry.path,
+        raw_parent_path: entry.parent_path,
         path: normalizePath(entry.path),
         parent_path: entry.parent_path ? normalizePath(entry.parent_path) : null,
       }));
@@ -216,7 +219,9 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             hasChildren: true,
             childPaths: [],
           };
-          addRootPath(entry.path);
+          if (!entry.parent_path || !directoryPaths.has(entry.parent_path)) {
+            addRootPath(entry.path);
+          }
         }
       });
 
@@ -228,6 +233,8 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
           newNodesMap[parentPath] = {
             path: parentPath,
             parent_path: getParentDirectoryPath(parentPath),
+            raw_path: parentPath,
+            raw_parent_path: getParentDirectoryPath(parentPath),
             name: folderName,
             size: null,
             mtime: null,
@@ -261,6 +268,11 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             hasChildren: false,
             childPaths: [],
           };
+
+          // Add files at the root level to rootPaths
+          if (!entry.parent_path) {
+            addRootPath(entry.path);
+          }
         }
       });
 
@@ -277,7 +289,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             }
           });
           node.childPaths = childPaths;
-          node.child_count = childPaths.length;
+          // node.child_count = childPaths.length; // Don't overwrite child_count from backend
         }
       });
 
@@ -295,6 +307,10 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       const entries = await invoke<FileEntry[]>("get_children", { parentPath: nodePath });
       return entries.map((entry) => ({
         ...entry,
+        raw_path: entry.path,
+        raw_parent_path: entry.parent_path,
+        path: normalizePath(entry.path),
+        parent_path: entry.parent_path ? normalizePath(entry.parent_path) : null,
         expanded: false,
         checked: false,
         indeterminate: false,
@@ -305,7 +321,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       console.error("Failed to load children:", error);
       return [];
     }
-  }, []);
+  }, [normalizePath]);
 
   // Toggle node expansion
   const toggleExpand = useCallback(
@@ -315,7 +331,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       if (!node || !node.is_dir) return;
 
       if (!node.expanded && (!node.childPaths || node.childPaths.length === 0)) {
-        const children = await loadChildren(normalizedNodePath);
+        const children = await loadChildren(node.raw_path ?? normalizedNodePath);
         // Normalize child paths
         const normalizedChildren = children.map(child => ({
           ...child,
@@ -390,17 +406,24 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   // Helper: Load all children recursively
   const loadAllChildrenRecursively = useCallback(
     async (nodePath: string, currentMap: Record<string, TreeNode>): Promise<string[]> => {
-      const entries = await invoke<FileEntry[]>("get_children", { parentPath: nodePath });
+      const invokePath = currentMap[nodePath]?.raw_path ?? nodePath;
+      const entries = await invoke<FileEntry[]>("get_children", { parentPath: invokePath });
       const childPaths: string[] = [];
 
       for (const entry of entries) {
-        childPaths.push(entry.path);
+        const normalizedPath = normalizePath(entry.path);
+        const normalizedParent = entry.parent_path ? normalizePath(entry.parent_path) : null;
+        childPaths.push(normalizedPath);
         let entryChildPaths: string[] = [];
         if (entry.is_dir) {
-          entryChildPaths = await loadAllChildrenRecursively(entry.path, currentMap);
+          entryChildPaths = await loadAllChildrenRecursively(normalizedPath, currentMap);
         }
-        currentMap[entry.path] = {
+        currentMap[normalizedPath] = {
           ...entry,
+          raw_path: entry.path,
+          raw_parent_path: entry.parent_path,
+          path: normalizedPath,
+          parent_path: normalizedParent,
           expanded: false,
           checked: true,
           indeterminate: false,
@@ -410,7 +433,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       }
       return childPaths;
     },
-    []
+    [normalizePath]
   );
 
   // Toggle checkbox
@@ -438,6 +461,26 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     },
     [state.nodesMap, state.rootPaths, onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection]
   );
+
+  const clearSelection = useCallback(() => {
+    const newMap = { ...state.nodesMap };
+    let hasChanges = false;
+
+    Object.keys(newMap).forEach((path) => {
+      const node = newMap[path];
+      if (node && (node.checked || node.indeterminate)) {
+        newMap[path] = { ...node, checked: false, indeterminate: false };
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
+      if (onSelectionChange) {
+        onSelectionChange([]);
+      }
+    }
+  }, [state.nodesMap, onSelectionChange]);
 
   // Helper: Collect selected files
   const collectSelected = useCallback(
@@ -483,11 +526,12 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       loadChildren,
       toggleExpand,
       toggleCheck,
+      clearSelection,
       setFilter,
       clearAll,
       getSelectedPaths,
     }),
-    [state, loadRootEntries, loadChildren, toggleExpand, toggleCheck, setFilter, clearAll, getSelectedPaths]
+    [state, loadRootEntries, loadChildren, toggleExpand, toggleCheck, clearSelection, setFilter, clearAll, getSelectedPaths]
   );
 
   return <FileTreeContext.Provider value={value}>{children}</FileTreeContext.Provider>;

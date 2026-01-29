@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { FolderOpen } from "lucide-react";
 import { FileTree } from "./components/FileTree";
 import { PromptBuilder, PromptBuilderHandle } from "./components/PromptBuilder";
 import HistoryPanel from "./components/HistoryPanel";
@@ -269,7 +270,7 @@ function App() {
             aria-label="Drop zone active"
           >
             <div className="border-2 border-dashed border-primary/50 bg-primary/5 w-80 h-80 flex flex-col items-center justify-center rounded-xl gap-4">
-              <span className="material-symbols-outlined text-primary text-5xl">folder_open</span>
+              <FolderOpen size={48} className="text-primary" aria-hidden="true" />
               <span className="text-white/80 text-lg font-medium">Drop folder here</span>
               <span className="text-white/40 text-xs">to add to context</span>
             </div>

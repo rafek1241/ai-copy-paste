@@ -2,6 +2,22 @@ import React, { memo, useCallback } from "react";
 import { TreeNode } from "../../types";
 import { cn } from "@/lib/utils";
 import { useFileTree } from "./FileTreeContext";
+import {
+  ChevronRight,
+  FileArchive,
+  FileCode2,
+  FileImage,
+  FileJson,
+  FileMusic,
+  FileSpreadsheet,
+  FileTerminal,
+  FileText,
+  FileType2,
+  FileVideo,
+  Folder,
+  FolderOpen,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface FileTreeRowProps {
   node: TreeNode & { level: number };
@@ -9,42 +25,66 @@ interface FileTreeRowProps {
   onCopyPath?: (path: string) => void;
 }
 
-// File icon mapping
-function getFileIconName(path: string): string {
-  const ext = path.substring(path.lastIndexOf(".")).toLowerCase();
-  switch (ext) {
-    case ".ts":
-    case ".tsx":
-      return "terminal";
-    case ".js":
-    case ".jsx":
-      return "javascript";
-    case ".py":
-      return "code";
-    case ".go":
-      return "description";
-    case ".css":
-      return "css";
-    case ".json":
-      return "data_object";
-    case ".md":
-      return "article";
-    case ".html":
-      return "html";
-    default:
-      return "description";
-  }
-}
+const fileIconMap: Record<string, { Icon: LucideIcon; className: string }> = {
+  js: { Icon: FileCode2, className: "text-yellow-300" },
+  jsx: { Icon: FileCode2, className: "text-cyan-300" },
+  ts: { Icon: FileCode2, className: "text-blue-400" },
+  tsx: { Icon: FileCode2, className: "text-blue-300" },
+  mjs: { Icon: FileCode2, className: "text-yellow-300" },
+  cjs: { Icon: FileCode2, className: "text-yellow-300" },
+  json: { Icon: FileJson, className: "text-amber-300" },
+  md: { Icon: FileText, className: "text-purple-300" },
+  txt: { Icon: FileText, className: "text-white/60" },
+  log: { Icon: FileText, className: "text-white/50" },
+  html: { Icon: FileCode2, className: "text-orange-300" },
+  htm: { Icon: FileCode2, className: "text-orange-300" },
+  css: { Icon: FileType2, className: "text-sky-300" },
+  scss: { Icon: FileType2, className: "text-pink-300" },
+  less: { Icon: FileType2, className: "text-indigo-300" },
+  yml: { Icon: FileJson, className: "text-amber-300" },
+  yaml: { Icon: FileJson, className: "text-amber-300" },
+  png: { Icon: FileImage, className: "text-emerald-300" },
+  jpg: { Icon: FileImage, className: "text-emerald-300" },
+  jpeg: { Icon: FileImage, className: "text-emerald-300" },
+  gif: { Icon: FileImage, className: "text-emerald-300" },
+  webp: { Icon: FileImage, className: "text-emerald-300" },
+  svg: { Icon: FileImage, className: "text-emerald-300" },
+  ico: { Icon: FileImage, className: "text-emerald-300" },
+  mp3: { Icon: FileMusic, className: "text-fuchsia-300" },
+  wav: { Icon: FileMusic, className: "text-fuchsia-300" },
+  flac: { Icon: FileMusic, className: "text-fuchsia-300" },
+  ogg: { Icon: FileMusic, className: "text-fuchsia-300" },
+  mp4: { Icon: FileVideo, className: "text-rose-300" },
+  mov: { Icon: FileVideo, className: "text-rose-300" },
+  mkv: { Icon: FileVideo, className: "text-rose-300" },
+  avi: { Icon: FileVideo, className: "text-rose-300" },
+  webm: { Icon: FileVideo, className: "text-rose-300" },
+  zip: { Icon: FileArchive, className: "text-yellow-400" },
+  rar: { Icon: FileArchive, className: "text-yellow-400" },
+  "7z": { Icon: FileArchive, className: "text-yellow-400" },
+  tar: { Icon: FileArchive, className: "text-yellow-400" },
+  gz: { Icon: FileArchive, className: "text-yellow-400" },
+  bz2: { Icon: FileArchive, className: "text-yellow-400" },
+  csv: { Icon: FileSpreadsheet, className: "text-green-400" },
+  xls: { Icon: FileSpreadsheet, className: "text-green-400" },
+  xlsx: { Icon: FileSpreadsheet, className: "text-green-400" },
+  sh: { Icon: FileTerminal, className: "text-emerald-200" },
+  bash: { Icon: FileTerminal, className: "text-emerald-200" },
+  zsh: { Icon: FileTerminal, className: "text-emerald-200" },
+  ps1: { Icon: FileTerminal, className: "text-emerald-200" },
+  bat: { Icon: FileTerminal, className: "text-emerald-200" },
+  cmd: { Icon: FileTerminal, className: "text-emerald-200" },
+};
 
-// File icon color mapping
-function getFileIconColor(name: string): string {
-  if (name.endsWith(".go")) return "text-blue-400";
-  if (name.endsWith(".py")) return "text-yellow-500";
-  if (name.endsWith(".json")) return "text-green-400";
-  if (name.endsWith(".css")) return "text-blue-400";
-  if (name.endsWith(".ts") || name.endsWith(".tsx")) return "text-blue-500";
-  if (name.endsWith(".md")) return "text-white/60";
-  return "text-white/40";
+const defaultFileIcon = { Icon: FileText, className: "text-white/60" };
+
+function getFileIconMeta(name: string) {
+  const parts = name.toLowerCase().split(".");
+  if (parts.length < 2) {
+    return defaultFileIcon;
+  }
+  const extension = parts.pop() || "";
+  return fileIconMap[extension] || defaultFileIcon;
 }
 
 // Format file size
@@ -144,14 +184,13 @@ export const FileTreeRow = memo(function FileTreeRow({
           data-testid="expand-icon"
           data-expanded={node.expanded}
         >
-          <span
+          <ChevronRight
+            size={14}
             className={cn(
-              "material-symbols-outlined text-[14px] text-white/40 transition-transform select-none",
+              "text-white/40 transition-transform select-none",
               node.expanded && "rotate-90"
             )}
-          >
-            chevron_right
-          </span>
+          />
         </button>
 
         {/* Checkbox */}
@@ -168,13 +207,13 @@ export const FileTreeRow = memo(function FileTreeRow({
         </div>
 
         {/* Folder icon */}
-        <span
-          className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2 select-none"
+        <div
+          className="mr-2 select-none text-yellow-600/70"
           aria-hidden="true"
           data-testid="tree-icon"
         >
-          folder
-        </span>
+          {node.expanded ? <FolderOpen size={14} /> : <Folder size={14} />}
+        </div>
 
         {/* Folder name */}
         <span className="text-[10px] font-medium text-white/70 flex-shrink-0" data-testid="tree-label">
@@ -200,6 +239,8 @@ export const FileTreeRow = memo(function FileTreeRow({
   }
 
   // File row
+  const { Icon, className } = getFileIconMeta(node.name);
+
   return (
     <div
       className="flex items-center px-2 py-0.5 min-h-[22px] border-b border-border-dark/30 hover:bg-white/[0.02] transition-colors"
@@ -218,9 +259,9 @@ export const FileTreeRow = memo(function FileTreeRow({
       }}
     >
       {/* Invisible spacer to align with folders */}
-      <span className="material-symbols-outlined text-[14px] mr-1 invisible select-none" aria-hidden="true">
-        chevron_right
-      </span>
+      <div className="mr-1 invisible select-none w-[14px] h-[14px]">
+        <ChevronRight size={14} />
+      </div>
 
       {/* Checkbox */}
       <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
@@ -238,11 +279,11 @@ export const FileTreeRow = memo(function FileTreeRow({
       <div className="flex-1 min-w-0 flex items-center gap-2">
         {/* File icon */}
         <span
-          className={cn("material-symbols-outlined text-[13px] select-none flex-shrink-0", getFileIconColor(node.name))}
+          className="select-none flex-shrink-0"
           aria-hidden="true"
           data-testid="tree-icon"
         >
-          {getFileIconName(node.path)}
+          <Icon size={13} className={cn("text-white/70", className)} />
         </span>
 
         {/* File name */}

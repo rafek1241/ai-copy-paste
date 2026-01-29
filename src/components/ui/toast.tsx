@@ -1,4 +1,11 @@
 import * as React from "react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type ToastVariant = "default" | "success" | "error" | "warning" | "info";
@@ -149,12 +156,12 @@ function ToastItem({ toast }: ToastItemProps) {
     info: "bg-blue-600/90 border-blue-500/50 text-white",
   };
 
-  const icons: Record<ToastVariant, string> = {
-    default: "info",
-    success: "check_circle",
-    error: "error",
-    warning: "warning",
-    info: "info",
+  const icons: Record<ToastVariant, React.ReactNode> = {
+    default: <Info size={16} className="text-white/90" aria-hidden="true" />,
+    success: <CheckCircle2 size={16} className="text-white/90" aria-hidden="true" />,
+    error: <AlertCircle size={16} className="text-white/90" aria-hidden="true" />,
+    warning: <AlertTriangle size={16} className="text-white/90" aria-hidden="true" />,
+    info: <Info size={16} className="text-white/90" aria-hidden="true" />,
   };
 
   return (
@@ -169,7 +176,7 @@ function ToastItem({ toast }: ToastItemProps) {
       )}
       role="alert"
     >
-      <span className="material-symbols-outlined text-base flex-shrink-0">
+      <span className="flex-shrink-0">
         {icons[toast.variant]}
       </span>
       <span className="text-xs font-medium flex-1">{toast.message}</span>
@@ -178,9 +185,7 @@ function ToastItem({ toast }: ToastItemProps) {
         className="flex-shrink-0 p-0.5 hover:bg-white/10 rounded transition-colors"
         aria-label="Dismiss notification"
       >
-        <span className="material-symbols-outlined text-sm opacity-70 hover:opacity-100">
-          close
-        </span>
+        <X size={14} className="opacity-70 hover:opacity-100" aria-hidden="true" />
       </button>
     </div>
   );

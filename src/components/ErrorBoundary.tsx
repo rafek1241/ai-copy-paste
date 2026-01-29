@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -43,7 +44,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         >
           <div className="max-w-md text-center space-y-4">
             <div className="size-16 mx-auto rounded-full bg-red-500/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-red-500 text-3xl">error</span>
+              <AlertCircle size={32} className="text-red-500" aria-hidden="true" />
             </div>
 
             <div className="space-y-2">
@@ -117,7 +118,7 @@ function DefaultLoadingFallback() {
   return (
     <div className="flex items-center justify-center h-full bg-background-dark">
       <div className="flex items-center gap-2 text-white/40">
-        <span className="material-symbols-outlined animate-spin">progress_activity</span>
+        <Loader2 size={16} className="animate-spin" aria-hidden="true" />
         <span className="text-xs font-medium uppercase tracking-wider">Loading...</span>
       </div>
     </div>

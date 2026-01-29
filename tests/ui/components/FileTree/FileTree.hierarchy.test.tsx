@@ -364,6 +364,11 @@ describe('FileTree Hierarchy', () => {
       // Clicking should not crash
       fireEvent.click(expandIcon);
 
+      // Wait for expansion to complete to avoid act() warning
+      await waitFor(() => {
+        expect(expandIcon).toHaveAttribute('data-expanded', 'true');
+      });
+
       // Folder should still be visible
       expect(screen.getByText('empty-folder')).toBeInTheDocument();
     });

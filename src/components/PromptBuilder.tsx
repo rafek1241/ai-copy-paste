@@ -6,6 +6,7 @@ import {
 import { assemblePrompt } from "../services/assembly";
 import { cn } from "@/lib/utils";
 import { useAppCustomInstructions } from "../contexts/AppContext";
+import { PlusCircle, Bot, PencilRuler, Bug, BookOpen, Shield, FileText } from "lucide-react";
 
 interface PromptBuilderProps {
   selectedFilePaths: string[];
@@ -24,6 +25,8 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const { customInstructions, setCustomInstructions } = useAppCustomInstructions();
   const [error, setError] = useState<string>("");
+
+  console.log('PromptBuilder render error:', error);
 
   useImperativeHandle(ref, () => ({
     buildAndCopy: handleBuildPrompt
@@ -87,6 +90,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
         onPromptBuilt(response.prompt);
       }
     } catch (err) {
+      console.log('PromptBuilder error caught:', err);
       setError(`Failed to build prompt: ${err}`);
       throw err;
     }
@@ -133,7 +137,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
                 "flex items-center gap-1.5 group-hover:text-blue-300",
                 getTemplateColor(template.id)
               )}>
-                <span className="material-symbols-outlined text-[16px]">{getTemplateIcon(template.id)}</span>
+                <span className="text-[16px]">{getTemplateIcon(template.id)}</span>
                 <span className="text-[10px] font-semibold text-white/90">{template.name}</span>
               </div>
               <p className="text-[9px] text-white/40 line-clamp-2">{template.description}</p>
@@ -142,7 +146,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
         </div>
 
         <div className="mt-2 p-2 rounded border border-dashed border-border-dark flex items-center justify-center gap-2 text-white/30 hover:text-white/50 hover:border-white/20 cursor-pointer transition-colors">
-          <span className="material-symbols-outlined text-[14px]">add_circle</span>
+          <PlusCircle size={14} />
           <span className="text-[10px]">Create New Template</span>
         </div>
       </div>
@@ -158,14 +162,14 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
   );
 });
 
-function getTemplateIcon(id: string): string {
+function getTemplateIcon(id: string): React.ReactNode {
   switch (id) {
-    case 'agent': return 'smart_toy';
-    case 'refactor': return 'architecture';
-    case 'fix': return 'bug_report'; // Assuming 'Find Bugs' maps to 'fix'
-    case 'explain': return 'menu_book';
-    case 'audit': return 'security'; // Security audit
-    default: return 'description';
+    case 'agent': return <Bot size={16} />;
+    case 'refactor': return <PencilRuler size={16} />;
+    case 'fix': return <Bug size={16} />; // Assuming 'Find Bugs' maps to 'fix'
+    case 'explain': return <BookOpen size={16} />;
+    case 'audit': return <Shield size={16} />; // Security audit
+    default: return <FileText size={16} />;
   }
 }
 
