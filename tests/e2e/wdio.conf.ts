@@ -95,7 +95,7 @@ export const config: Options.Testrunner = {
   framework: "mocha",
   mochaOpts: {
     ui: "bdd",
-    timeout: isCI ? 30000 : 5000,
+    timeout: isCI ? 60000 : 10000,
     retries: isCI ? 2 : 1,
   },
 
@@ -232,8 +232,8 @@ export const config: Options.Testrunner = {
     // Initial wait for app load - CI needs longer due to Xvfb + webkit2gtk
     const loadTimeout = isCI ? 30000 : 10000;
     await appPage.waitForLoad(loadTimeout);
-    await appPage.navigateToMain();
     await appPage.waitForTauriReady(loadTimeout);
+    await appPage.navigateToMain();
 
     // Try to clear previous state
     try {

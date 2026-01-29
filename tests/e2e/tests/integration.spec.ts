@@ -14,7 +14,7 @@ describe("End-to-End Integration Tests", () => {
   const promptBuilderPage = new PromptBuilderPage();
   const settingsPage = new SettingsPage();
   const historyPage = new HistoryPage();
-  const fixturesPath = path.join(process.cwd(), "e2e", "fixtures", "test-data");
+  const fixturesPath = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
 
   before(async () => {
     await appPage.waitForLoad();
@@ -76,8 +76,7 @@ export const multiply = (a: number, b: number) => a * b;`,
       // Step 2: Index the test fixtures folder
       try {
         await fileTreePage.indexFolder(fixturesPath);
-        await browser.pause(3000);
-        await fileTreePage.waitForNodes(1, 15000);
+        await fileTreePage.waitForNodes(1, 10000);
       } catch (error) {
         console.log("Indexing error:", error);
         // May already be indexed
@@ -92,11 +91,9 @@ export const multiply = (a: number, b: number) => a * b;`,
       let selectedCount = 0;
 
       for (const node of nodes) {
-        const icon = await node.$(".tree-icon");
-        const iconText = await icon.getText();
-
-        if (iconText === "📄" || true) { // simplified check, select any file
-          const checkbox = await node.$("input[type='checkbox']");
+        const isFile = await fileTreePage.isNodeFile(node);
+        if (isFile) {
+          const checkbox = await node.$('[data-testid="tree-checkbox"]');
           if ((await checkbox.isExisting()) && !(await checkbox.isSelected())) {
             await checkbox.click();
             await browser.pause(200);
@@ -124,7 +121,7 @@ export const multiply = (a: number, b: number) => a * b;`,
       // Step 8: Build prompt
       if (selectedCount > 0) {
         await promptBuilderPage.clickBuildPrompt();
-        await browser.pause(2000);
+        await browser.pause(1000);
 
         // Step 9: Verify prompt was built
         const isPreviewDisplayed = await promptBuilderPage.isPromptPreviewDisplayed();
@@ -243,7 +240,6 @@ export const multiply = (a: number, b: number) => a * b;`,
       // Index if needed
       try {
         await fileTreePage.indexFolder(fixturesPath);
-        await browser.pause(1000);
       } catch {
         // Already indexed
       }
@@ -279,7 +275,6 @@ export const multiply = (a: number, b: number) => a * b;`,
       // Index and select files
       try {
         await fileTreePage.indexFolder(fixturesPath);
-        await browser.pause(1000);
       } catch {
         // Already indexed
       }
@@ -287,11 +282,9 @@ export const multiply = (a: number, b: number) => a * b;`,
       // Select a file
       const nodes = await fileTreePage.getVisibleNodes();
       for (const node of nodes) {
-        const icon = await node.$(".tree-icon");
-        const iconText = await icon.getText();
-
-        if (iconText === "📄") {
-          const checkbox = await node.$("input[type='checkbox']");
+        const isFile = await fileTreePage.isNodeFile(node);
+        if (isFile) {
+          const checkbox = await node.$('[data-testid="tree-checkbox"]');
           if (await checkbox.isExisting()) {
             await checkbox.click();
             await browser.pause(200);
@@ -303,7 +296,7 @@ export const multiply = (a: number, b: number) => a * b;`,
       // Build prompt (this should create history entry)
       if ((await appPage.getSelectedFilesCount()) > 0) {
         await promptBuilderPage.clickBuildPrompt();
-        await browser.pause(2000);
+        await browser.pause(1000);
       }
 
       // Check history

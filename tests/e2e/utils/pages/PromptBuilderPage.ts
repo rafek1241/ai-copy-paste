@@ -11,9 +11,12 @@ export class PromptBuilderPage extends BasePage {
   async waitForReady(): Promise<void> {
     await browser.waitUntil(
       async () => {
-        const builderTitle = await $("h2");
-        const text = await builderTitle.getText();
-        return text.includes("Prompt Builder");
+        try {
+          const builder = await $(Selectors.promptBuilder);
+          return await builder.isDisplayed();
+        } catch {
+          return false;
+        }
       },
       {
         timeout: 5000,
@@ -118,7 +121,8 @@ export class PromptBuilderPage extends BasePage {
     try {
       await this.safeSetValue(Selectors.customInstructions, instructions);
     } catch {
-      const textarea = await $('textarea[placeholder*="specific instructions"]');
+      // Fallback: find any textarea in the prompt builder
+      const textarea = await $('[data-testid="prompt-builder"] textarea');
       await textarea.clearValue();
       await textarea.setValue(instructions);
     }
@@ -132,7 +136,7 @@ export class PromptBuilderPage extends BasePage {
       const textarea = await $(Selectors.customInstructions);
       return await textarea.getValue();
     } catch {
-      const textarea = await $('textarea[placeholder*="specific instructions"]');
+      const textarea = await $('[data-testid="prompt-builder"] textarea');
       return await textarea.getValue();
     }
   }

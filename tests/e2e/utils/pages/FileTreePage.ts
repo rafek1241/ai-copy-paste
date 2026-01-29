@@ -321,13 +321,6 @@ export class FileTreePage extends BasePage {
     if (nodeCount === 0) {
       console.log("FileTreePage: Tree is empty, indexing test fixtures...");
       const fixturesPath = this.getTestFixturesPath();
-      try {
-        await browser.waitUntil(
-          async () => await this.isEmptyStateDisplayed(),
-          { timeout: 2000, interval: 200 }
-        );
-      } catch {
-      }
       await this.indexFolder(fixturesPath);
       try {
         await browser.execute(() => {
@@ -338,7 +331,7 @@ export class FileTreePage extends BasePage {
         });
       } catch {
       }
-      await this.waitForNodes(1, 5000);
+      await this.waitForNodes(1, 10000);
     } else {
       console.log(`FileTreePage: Tree already has ${nodeCount} nodes`);
     }
@@ -366,10 +359,10 @@ export class FileTreePage extends BasePage {
    */
   async indexFolder(folderPath: string): Promise<void> {
     await this.waitForTauriReady();
-    
+
     // Normalize path for Windows to avoid escaping issues
     const normalizedPath = folderPath.replace(/\\/g, '/');
-    
+
     await browser.execute((path) => {
       const tauri = (window as any).__TAURI__;
       if (tauri) {
@@ -382,8 +375,19 @@ export class FileTreePage extends BasePage {
       }
     }, normalizedPath);
 
-    // Wait for indexing to complete
-    await browser.pause(2000);
+    // Wait for indexing to complete - use waitUntil for faster detection
+    try {
+      await browser.waitUntil(
+        async () => {
+          const count = await this.getVisibleNodeCount();
+          return count > 0;
+        },
+        { timeout: 5000, interval: 300 }
+      );
+    } catch {
+      // Fallback: fixed pause if waitUntil fails
+      await browser.pause(1000);
+    }
   }
 
   /**

@@ -13,7 +13,7 @@ describe("Regression Tests", () => {
   const appPage = new AppPage();
   const fileTreePage = new FileTreePage();
   const promptBuilderPage = new PromptBuilderPage();
-  const fixturesPath = path.join(process.cwd(), "e2e", "fixtures", "test-data");
+  const fixturesPath = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
 
   before(async () => {
     await appPage.waitForLoad();
@@ -231,7 +231,6 @@ describe("Regression Tests", () => {
       // First, index just the nested file
       try {
         await fileTreePage.indexFolder(nestedFile);
-        await browser.pause(1000);
       } catch (e) {
         console.log("Could not index nested file:", e);
         return;
@@ -250,7 +249,6 @@ describe("Regression Tests", () => {
       // Now index the parent folder
       try {
         await fileTreePage.indexFolder(fixturesPath);
-        await browser.pause(2000);
       } catch (e) {
         console.log("Could not index parent folder:", e);
         return;
@@ -264,7 +262,7 @@ describe("Regression Tests", () => {
           window.__TAURI__.event.emit("refresh-file-tree");
         }
       });
-      await browser.pause(1000);
+      await browser.pause(500);
 
       // Verify: nested.ts should NOT appear at root level anymore
       const rootNodes = await fileTreePage.getVisibleNodes();
@@ -357,7 +355,6 @@ describe("Regression Tests", () => {
 
       try {
         await fileTreePage.indexFolder(fixturesPath);
-        await browser.pause(2000);
       } catch {
         // May already be indexed
       }

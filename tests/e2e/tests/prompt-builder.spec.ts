@@ -6,7 +6,7 @@ describe("Prompt Builder", () => {
   const appPage = new AppPage();
   const fileTreePage = new FileTreePage();
   const promptBuilderPage = new PromptBuilderPage();
-  const fixturesPath = path.join(process.cwd(), "e2e", "fixtures", "test-data");
+  const fixturesPath = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
 
   before(async () => {
     await appPage.waitForLoad();
@@ -40,9 +40,9 @@ describe("Prompt Builder", () => {
   });
 
   describe("Initial State", () => {
-    it("should display the Prompt Builder title", async () => {
-      const heading = await $("h2*=Prompt Builder");
-      expect(await heading.isDisplayed()).toBe(true);
+    it("should display the Prompt Builder component", async () => {
+      const builder = await $('[data-testid="prompt-builder"]');
+      expect(await builder.isDisplayed()).toBe(true);
     });
 
     it("should display template selector", async () => {
@@ -84,7 +84,7 @@ describe("Prompt Builder", () => {
     });
 
     it("should display custom instructions textarea", async () => {
-      const textarea = await $('textarea[placeholder*="instructions"]');
+      const textarea = await $('[data-testid="custom-instructions"]');
       expect(await textarea.isDisplayed()).toBe(true);
     });
 
@@ -235,11 +235,9 @@ describe("Prompt Builder", () => {
         // Select some files
         const nodes = await fileTreePage.getVisibleNodes();
         for (const node of nodes) {
-          const icon = await node.$(".tree-icon");
-          const iconText = await icon.getText();
-
-          if (iconText === "📄") {
-            const checkbox = await node.$("input[type='checkbox']");
+          const isFile = await fileTreePage.isNodeFile(node);
+          if (isFile) {
+            const checkbox = await node.$('[data-testid="tree-checkbox"]');
             if (await checkbox.isExisting()) {
               await checkbox.click();
               await browser.pause(200);
@@ -365,7 +363,7 @@ describe("Prompt Builder", () => {
       // Deselect all files
       const nodes = await fileTreePage.getVisibleNodes();
       for (const node of nodes) {
-        const checkbox = await node.$("input[type='checkbox']");
+        const checkbox = await node.$('[data-testid="tree-checkbox"]');
         if ((await checkbox.isExisting()) && (await checkbox.isSelected())) {
           await checkbox.click();
           await browser.pause(100);

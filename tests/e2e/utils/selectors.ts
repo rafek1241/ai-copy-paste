@@ -112,7 +112,7 @@ export const FallbackSelectors = {
   // Prompt Builder
   templateSelect: 'select:near(label:has-text("Select Template"))',
   modelSelect: 'select:near(label:has-text("Target AI Model"))',
-  customInstructions: 'textarea[placeholder*="specific instructions"]',
+  customInstructions: '[data-testid="prompt-builder"] textarea',
   buildPromptBtn: 'button:has-text("Build")',
   copyToClipboardBtn: 'button:has-text("Copy to Clipboard")',
 };

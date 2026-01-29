@@ -19,7 +19,7 @@ describe("Hierarchical Indexing", () => {
   const fileTreePage = new FileTreePage();
 
   // Test fixture paths
-  const fixturesBase = path.join(process.cwd(), "e2e", "fixtures", "test-data", "hierarchical-test");
+  const fixturesBase = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data", "hierarchical-test");
   const track1Path = path.join(fixturesBase, "track1");
   const track1PlanPath = path.join(track1Path, "plan.ts");
   const track1SpecPath = path.join(track1Path, "spec.ts");
@@ -60,7 +60,6 @@ describe("Hierarchical Indexing", () => {
       // Index plan.ts
       try {
         await fileTreePage.indexFolder(track1PlanPath);
-        await browser.pause(1000);
       } catch (e) {
         console.log("Could not index plan.ts:", e);
         return;
@@ -69,7 +68,6 @@ describe("Hierarchical Indexing", () => {
       // Index spec.ts
       try {
         await fileTreePage.indexFolder(track1SpecPath);
-        await browser.pause(1000);
       } catch (e) {
         console.log("Could not index spec.ts:", e);
         return;
@@ -83,7 +81,7 @@ describe("Hierarchical Indexing", () => {
           window.__TAURI__.event.emit("refresh-file-tree");
         }
       });
-      await browser.pause(1000);
+      await browser.pause(500);
 
       // Verify files are visible (they should appear at root level as orphans)
       try {
@@ -116,7 +114,6 @@ describe("Hierarchical Indexing", () => {
       // Index the track1 directory
       try {
         await fileTreePage.indexFolder(track1Path);
-        await browser.pause(2000);
       } catch (e) {
         console.log("Could not index track1 directory:", e);
         return;
@@ -130,7 +127,7 @@ describe("Hierarchical Indexing", () => {
           window.__TAURI__.event.emit("refresh-file-tree");
         }
       });
-      await browser.pause(1000);
+      await browser.pause(500);
 
       // Find the track1 folder
       const track1Node = await fileTreePage.findNodeByName("track1");
@@ -159,7 +156,6 @@ describe("Hierarchical Indexing", () => {
       // Index the hierarchical-test directory (grandparent)
       try {
         await fileTreePage.indexFolder(fixturesBase);
-        await browser.pause(2000);
       } catch (e) {
         console.log("Could not index hierarchical-test directory:", e);
         return;
@@ -173,7 +169,7 @@ describe("Hierarchical Indexing", () => {
           window.__TAURI__.event.emit("refresh-file-tree");
         }
       });
-      await browser.pause(1000);
+      await browser.pause(500);
 
       // Find the hierarchical-test folder
       const hierarchicalNode = await fileTreePage.findNodeByName("hierarchical-test");
