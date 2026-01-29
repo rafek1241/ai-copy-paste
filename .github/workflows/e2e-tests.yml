@@ -211,35 +211,52 @@ jobs:
 
           # Quick test: Try to launch app directly to see if it starts
           echo "=== Quick app startup test ==="
-          timeout 10 "$BINARY_PATH" &
+          timeout 15 "$BINARY_PATH" &
           APP_TEST_PID=$!
-          sleep 5
+          sleep 8
           if ps -p $APP_TEST_PID > /dev/null 2>&1; then
             echo "App started successfully (PID: $APP_TEST_PID)"
             kill $APP_TEST_PID 2>/dev/null || true
+            wait $APP_TEST_PID 2>/dev/null || true
           else
             echo "WARNING: App may have crashed or exited quickly"
           fi
-          sleep 1
+          sleep 2
 
-          # Start tauri-driver with verbose logging
+          # Start tauri-driver
           echo "=== Starting tauri-driver ==="
           tauri-driver &
           TAURI_DRIVER_PID=$!
-          sleep 3
 
-          # Verify tauri-driver is running
-          if ! ps -p $TAURI_DRIVER_PID > /dev/null; then
-            echo "ERROR: tauri-driver failed to start"
-            exit 1
+          # Wait for tauri-driver to be ready (poll port 4444)
+          echo "Waiting for tauri-driver to accept connections on port 4444..."
+          DRIVER_READY=false
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4444/status > /dev/null 2>&1; then
+              echo "tauri-driver is ready (attempt $i)"
+              DRIVER_READY=true
+              break
+            fi
+            # Also check if tauri-driver process is still running
+            if ! ps -p $TAURI_DRIVER_PID > /dev/null 2>&1; then
+              echo "ERROR: tauri-driver exited unexpectedly"
+              exit 1
+            fi
+            echo "  Waiting... (attempt $i/20)"
+            sleep 2
+          done
+
+          if [ "$DRIVER_READY" = false ]; then
+            echo "WARNING: tauri-driver /status not responding, checking if process is alive..."
+            if ps -p $TAURI_DRIVER_PID > /dev/null 2>&1; then
+              echo "tauri-driver process is running (PID: $TAURI_DRIVER_PID), proceeding anyway"
+            else
+              echo "ERROR: tauri-driver is not running"
+              exit 1
+            fi
           fi
-          echo "tauri-driver started with PID $TAURI_DRIVER_PID"
 
-          # Check if tauri-driver is listening
-          sleep 2
-          curl -s http://localhost:4444/status || echo "tauri-driver status endpoint not responding (this may be normal)"
-
-          # Run E2E tests (diagnostic and app-launch only for now)
+          # Run E2E tests
           echo "=== Running E2E tests ==="
           npx wdio run tests/e2e/wdio.conf.ts --logLevel=info || E2E_EXIT_CODE=$?
 

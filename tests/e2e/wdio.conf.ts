@@ -55,6 +55,8 @@ function getTauriAppPath(): string {
   return defaultPath;
 }
 
+const isCI = !!process.env.CI;
+
 export const config: Options.Testrunner = {
   // Specify test files
   specs: [
@@ -93,8 +95,8 @@ export const config: Options.Testrunner = {
   framework: "mocha",
   mochaOpts: {
     ui: "bdd",
-    timeout: 5000, // 5 seconds per test
-    retries: 1, // Retry failed tests once
+    timeout: isCI ? 30000 : 5000,
+    retries: isCI ? 2 : 1,
   },
 
   // Reporters
@@ -115,10 +117,10 @@ export const config: Options.Testrunner = {
   logLevel: "info",
   outputDir: "./logs",
 
-  // Timeouts
-  waitforTimeout: 5000,
-  connectionRetryTimeout: 5000,
-  connectionRetryCount: 3,
+  // Timeouts - CI needs longer due to Xvfb + webkit2gtk startup
+  waitforTimeout: isCI ? 15000 : 5000,
+  connectionRetryTimeout: isCI ? 30000 : 5000,
+  connectionRetryCount: isCI ? 5 : 3,
 
   // No services needed - tauri-driver is started externally
   services: [],
@@ -226,11 +228,12 @@ export const config: Options.Testrunner = {
   before: async function () {
     const appPage = new AppPage();
     const fileTreePage = new FileTreePage();
-    
-    // Initial wait for app load
-    await appPage.waitForLoad(10000);
+
+    // Initial wait for app load - CI needs longer due to Xvfb + webkit2gtk
+    const loadTimeout = isCI ? 30000 : 10000;
+    await appPage.waitForLoad(loadTimeout);
     await appPage.navigateToMain();
-    await appPage.waitForTauriReady(10000);
+    await appPage.waitForTauriReady(loadTimeout);
 
     // Try to clear previous state
     try {
