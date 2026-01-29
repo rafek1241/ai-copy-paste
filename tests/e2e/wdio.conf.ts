@@ -96,7 +96,7 @@ export const config: Options.Testrunner = {
   mochaOpts: {
     ui: "bdd",
     timeout: isCI ? 60000 : 10000,
-    retries: isCI ? 2 : 1,
+    retries: isCI ? 1 : 0,
   },
 
   // Reporters

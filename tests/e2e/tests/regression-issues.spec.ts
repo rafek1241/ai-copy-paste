@@ -300,27 +300,13 @@ describe("Regression Tests", () => {
       const testDataNode = await fileTreePage.findNodeByName("test-data");
 
       if (testDataNode) {
-        // Expand the folder
-        const expandIcon = await testDataNode.$(Selectors.expandIcon);
-        if (await expandIcon.isExisting()) {
-          const isExpanded = await expandIcon.getAttribute("data-expanded");
-          if (isExpanded !== "true") {
-            await expandIcon.click();
-            await browser.pause(500);
-          }
-        }
+        // Expand the folder using the page object (waits for children)
+        await fileTreePage.expandFolder("test-data");
 
         // Now find and expand subfolder
         const subfolderNode = await fileTreePage.findNodeByName("subfolder");
         if (subfolderNode) {
-          const subExpandIcon = await subfolderNode.$(Selectors.expandIcon);
-          if (await subExpandIcon.isExisting()) {
-            const isSubExpanded = await subExpandIcon.getAttribute("data-expanded");
-            if (isSubExpanded !== "true") {
-              await subExpandIcon.click();
-              await browser.pause(500);
-            }
-          }
+          await fileTreePage.expandFolder("subfolder");
         }
 
         // Verify nested.ts appears inside the expanded folder

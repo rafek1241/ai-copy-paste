@@ -26,92 +26,52 @@ export class PromptBuilderPage extends BasePage {
   }
 
   /**
-   * Select a template by ID
+   * Select a template by clicking its button in the templates grid
    */
   async selectTemplate(templateId: string): Promise<void> {
-    try {
-      const select = await $(Selectors.templateSelect);
-      await select.selectByAttribute("value", templateId);
-    } catch {
-      // Fallback: find the select near the "Select Template" label
-      const selects = await $$("select");
-      for (const select of selects) {
-        const options = await select.$$("option");
-        for (const option of options) {
-          const value = await option.getAttribute("value");
-          if (value === templateId) {
-            await select.selectByAttribute("value", templateId);
-            return;
-          }
+    const grid = await $('[data-testid="templates-grid"]');
+    if (await grid.isExisting()) {
+      const buttons = await grid.$$("button");
+      for (const button of buttons) {
+        const text = (await button.getText()).toLowerCase();
+        if (text.includes(templateId)) {
+          await button.click();
+          return;
         }
       }
     }
   }
 
   /**
-   * Get available templates
+   * Get available template names from the templates grid
    */
   async getAvailableTemplates(): Promise<string[]> {
     const templates: string[] = [];
-    const selects = await $$("select");
-
-    for (const select of selects) {
-      const options = await select.$$("option");
-      // Check if this is the template select by looking at option values
-      const firstValue = await options[0]?.getAttribute("value");
-      if (firstValue && ["agent", "planning", "debugging", "review", "documentation", "testing"].includes(firstValue)) {
-        for (const option of options) {
-          templates.push(await option.getAttribute("value") || "");
+    const grid = await $('[data-testid="templates-grid"]');
+    if (await grid.isExisting()) {
+      const buttons = await grid.$$("button");
+      for (const button of buttons) {
+        const text = await button.getText();
+        if (text.trim()) {
+          templates.push(text.trim().split("\n")[0].toLowerCase());
         }
-        break;
       }
     }
-
     return templates;
   }
 
   /**
-   * Select a model by name
+   * Select a model (no-op: model selector not present in current component)
    */
-  async selectModel(modelName: string): Promise<void> {
-    try {
-      const select = await $(Selectors.modelSelect);
-      await select.selectByAttribute("value", modelName);
-    } catch {
-      // Fallback: find model select
-      const selects = await $$("select");
-      for (const select of selects) {
-        const options = await select.$$("option");
-        for (const option of options) {
-          const value = await option.getAttribute("value");
-          if (value === modelName) {
-            await select.selectByAttribute("value", modelName);
-            return;
-          }
-        }
-      }
-    }
+  async selectModel(_modelName: string): Promise<void> {
+    // Model selection is not available in the current PromptBuilder component
   }
 
   /**
-   * Get available models
+   * Get available models (empty: model selector not present)
    */
   async getAvailableModels(): Promise<string[]> {
-    const models: string[] = [];
-    const selects = await $$("select");
-
-    for (const select of selects) {
-      const options = await select.$$("option");
-      const firstValue = await options[0]?.getAttribute("value");
-      if (firstValue && firstValue.includes("gpt")) {
-        for (const option of options) {
-          models.push(await option.getAttribute("value") || "");
-        }
-        break;
-      }
-    }
-
-    return models;
+    return [];
   }
 
   /**
@@ -121,10 +81,17 @@ export class PromptBuilderPage extends BasePage {
     try {
       await this.safeSetValue(Selectors.customInstructions, instructions);
     } catch {
-      // Fallback: find any textarea in the prompt builder
-      const textarea = await $('[data-testid="prompt-builder"] textarea');
-      await textarea.clearValue();
-      await textarea.setValue(instructions);
+      // Fallback: set value directly via DOM for webkit2gtk
+      await browser.execute((val: string) => {
+        const el = document.querySelector('[data-testid="custom-instructions"]') as HTMLTextAreaElement;
+        if (el) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+          if (setter) setter.call(el, val);
+          else el.value = val;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, instructions);
     }
   }
 

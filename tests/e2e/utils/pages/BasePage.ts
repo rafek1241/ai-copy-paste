@@ -120,12 +120,35 @@ export class BasePage {
   }
 
   /**
-   * Safe setValue with clear
+   * Safe setValue with clear - handles webkit2gtk quirks
    */
   async safeSetValue(selector: string, value: string): Promise<void> {
     const element = await this.waitForElement(selector);
-    await element.clearValue();
-    await element.setValue(value);
+    try {
+      await element.clearValue();
+      if (value) {
+        await element.setValue(value);
+      }
+    } catch {
+      // Fallback for webkit2gtk "Missing text parameter" error
+      await browser.execute((sel: string, val: string) => {
+        const el = document.querySelector(sel) as HTMLTextAreaElement | HTMLInputElement;
+        if (el) {
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype, 'value'
+          )?.set || Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value'
+          )?.set;
+          if (nativeInputValueSetter) {
+            nativeInputValueSetter.call(el, val);
+          } else {
+            el.value = val;
+          }
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, selector, value);
+    }
   }
 
   /**

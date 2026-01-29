@@ -252,24 +252,29 @@ describe("File Tree - Comprehensive Tests", () => {
     it("should maintain expansion state independently for multiple folders", async () => {
       await fileTreePage.ensureTestFixturesIndexed();
 
+      // We need two SIBLING folders (not parent-child) to test independence.
+      // After ensureTestFixturesIndexed, root is expanded showing child folders.
+      // Skip the root (folders[0]) and use two sibling child folders.
       const folders = await fileTreePage.getFolderNodes();
-      if (folders.length < 2) {
-        console.log("Not enough folders for this test");
+      if (folders.length < 3) {
+        console.log(`Only ${folders.length} folders found, need at least 3 (root + 2 children)`);
         return;
       }
 
-      // Get names of first two folders
-      const label1 = await folders[0].$(Selectors.treeLabel);
+      // folders[0] is the root (already expanded), folders[1] and folders[2] are siblings
+      const label1 = await folders[1].$(Selectors.treeLabel);
       const folder1Name = await label1.getText();
 
-      const label2 = await folders[1].$(Selectors.treeLabel);
+      const label2 = await folders[2].$(Selectors.treeLabel);
       const folder2Name = await label2.getText();
 
-      // Expand both folders
+      console.log(`Testing expansion independence: "${folder1Name}" and "${folder2Name}"`);
+
+      // Expand both sibling folders
       await fileTreePage.expandFolder(folder1Name);
-      await browser.pause(300);
+      await browser.pause(500);
       await fileTreePage.expandFolder(folder2Name);
-      await browser.pause(300);
+      await browser.pause(500);
 
       // Both should be expanded
       expect(await fileTreePage.isFolderExpanded(folder1Name)).toBe(true);
@@ -277,7 +282,7 @@ describe("File Tree - Comprehensive Tests", () => {
 
       // Collapse first folder only
       await fileTreePage.collapseFolder(folder1Name);
-      await browser.pause(300);
+      await browser.pause(500);
 
       // First should be collapsed, second still expanded
       expect(await fileTreePage.isFolderExpanded(folder1Name)).toBe(false);

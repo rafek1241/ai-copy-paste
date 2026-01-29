@@ -161,8 +161,18 @@ export class FileTreePage extends BasePage {
     if (await expandIcon.isExisting()) {
       const isExpanded = await expandIcon.getAttribute("data-expanded");
       if (isExpanded !== "true") {
+        const beforeCount = await this.getVisibleNodeCount();
         await expandIcon.click();
-        await browser.pause(300); // Wait for children to load
+        // Wait for children to load (node count should increase)
+        try {
+          await browser.waitUntil(
+            async () => (await this.getVisibleNodeCount()) > beforeCount,
+            { timeout: 5000, interval: 200 }
+          );
+        } catch {
+          // Fallback to fixed pause if children didn't appear
+          await browser.pause(500);
+        }
       }
     }
   }
