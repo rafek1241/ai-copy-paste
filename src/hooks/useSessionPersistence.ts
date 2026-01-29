@@ -8,8 +8,8 @@ import { invoke } from '@tauri-apps/api/core';
 export function useSessionPersistence(
   selectedPaths: string[],
   customInstructions: string,
-  setSelectedPaths?: (paths: string[]) => void,
-  setCustomInstructions?: (instructions: string) => void
+  _setSelectedPaths?: (paths: string[]) => void,
+  _setCustomInstructions?: (instructions: string) => void
 ) {
   // Save current session to history database
   // This should be called when user clicks "Clear" button to save current context

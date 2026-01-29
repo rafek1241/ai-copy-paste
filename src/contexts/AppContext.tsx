@@ -96,7 +96,7 @@ interface AppContextValue {
   // Convenience actions
   setView: (view: View) => void;
   setTab: (tab: ActiveTab) => void;
-  setSelection: (ids: number[], paths: string[]) => void;
+  setSelection: (paths: string[]) => void;
   clearSelection: () => void;
   setCustomInstructions: (instructions: string) => void;
   setSearch: (query: string) => void;
