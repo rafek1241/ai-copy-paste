@@ -1,9 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useReducer } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TreeNode, FileEntry } from '../../types';
 import { cn } from '@/lib/utils';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface FileTreeProps {
   onSelectionChange?: (selectedPaths: string[]) => void;
@@ -12,15 +14,404 @@ interface FileTreeProps {
   shouldClearSelection?: boolean;
 }
 
-export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQuery = "", initialSelectedPaths, shouldClearSelection }) => {
-  const [nodesMap, setNodesMap] = useState<Record<string, TreeNode>>({});
-  const [rootPaths, setRootPaths] = useState<string[]>([]);
-  const [flatTree, setFlatTree] = useState<TreeNode[]>([]);
-  const [filterType, setFilterType] = useState<'ALL' | 'SRC' | 'DOCS'>('ALL');
+type FilterType = 'ALL' | 'SRC' | 'DOCS';
+
+interface TreeState {
+  nodesMap: Record<string, TreeNode>;
+  rootPaths: string[];
+  filterType: FilterType;
+}
+
+type TreeAction =
+  | { type: 'MERGE_ROOTS'; entries: FileEntry[] }
+  | { type: 'SET_CHILDREN'; parentPath: string; children: FileEntry[] }
+  | { type: 'TOGGLE_EXPAND'; nodePath: string }
+  | { type: 'SET_EXPANDED'; nodePath: string; expanded: boolean }
+  | { type: 'BATCH_UPDATE'; nodesMap: Record<string, TreeNode> }
+  | { type: 'SET_FILTER'; filter: FilterType }
+  | { type: 'CLEAR_SELECTIONS' };
+
+// ─── Extension lists (module-level, created once) ───────────────────────────
+
+const SRC_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.c', '.cpp', '.h',
+  '.java', '.rb', '.php', '.css', '.html', '.sh', '.yaml', '.json',
+]);
+
+const DOCS_EXTENSIONS = new Set([
+  '.md', '.txt', '.pdf', '.docx', '.doc', '.odt', '.rtf',
+]);
+
+// ─── Pure helpers ───────────────────────────────────────────────────────────
+
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+function getExtension(path: string): string {
+  const dot = path.lastIndexOf('.');
+  return dot >= 0 ? path.substring(dot).toLowerCase() : '';
+}
+
+function getParentPath(path: string): string {
+  const last = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+  return last > 0 ? path.substring(0, last) : '';
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
+function getFileIconName(path: string): string {
+  switch (getExtension(path)) {
+    case '.ts': case '.tsx': return 'terminal';
+    case '.js': case '.jsx': return 'javascript';
+    case '.py': return 'code';
+    case '.go': return 'description';
+    case '.css': return 'css';
+    case '.json': return 'data_object';
+    default: return 'description';
+  }
+}
+
+function getFileIconColor(name: string): string {
+  if (name.endsWith('.go')) return 'text-blue-400';
+  if (name.endsWith('.py')) return 'text-yellow-500';
+  if (name.endsWith('.json')) return 'text-green-400';
+  if (name.endsWith('.css')) return 'text-blue-400';
+  if (name.endsWith('.ts') || name.endsWith('.tsx')) return 'text-blue-500';
+  return 'text-white/40';
+}
+
+/** Check if childPath is a direct child of parentPath. */
+function isDirectChildOf(childPath: string, parentPath: string): boolean {
+  const cp = normalizePath(childPath);
+  const pp = normalizePath(parentPath);
+  const prefix = pp.endsWith('/') ? pp : pp + '/';
+  if (!cp.startsWith(prefix)) return false;
+  const remainder = cp.substring(prefix.length);
+  return remainder.length > 0 && !remainder.includes('/');
+}
+
+/** Merge a backend FileEntry into a TreeNode, preserving existing UI state. */
+function mergeEntry(entry: FileEntry, existing: TreeNode | undefined): TreeNode {
+  return {
+    ...entry,
+    expanded: existing?.expanded ?? false,
+    checked: existing?.checked ?? false,
+    indeterminate: existing?.indeterminate ?? false,
+    hasChildren: entry.is_dir,
+    childPaths: existing?.childPaths?.length ? existing.childPaths : [],
+    child_count: entry.child_count ?? existing?.child_count ?? null,
+  };
+}
+
+/**
+ * Remove root entries whose path falls inside another root directory.
+ * E.g. if "plan.ts" is at root and then "track1/" is indexed,
+ * plan.ts should no longer appear at root level.
+ */
+function deduplicateRoots(entries: FileEntry[]): FileEntry[] {
+  const dirPrefixes: string[] = [];
+  for (const e of entries) {
+    if (e.is_dir) {
+      const p = normalizePath(e.path);
+      dirPrefixes.push(p.endsWith('/') ? p : p + '/');
+    }
+  }
+  return entries.filter(entry => {
+    const ep = normalizePath(entry.path);
+    for (const prefix of dirPrefixes) {
+      if (ep !== prefix.slice(0, -1) && ep.startsWith(prefix)) return false;
+    }
+    return true;
+  });
+}
+
+// ─── Selection helpers (operate on a mutable snapshot) ──────────────────────
+
+function setSubtreeChecked(map: Record<string, TreeNode>, nodePath: string, checked: boolean) {
+  const node = map[nodePath];
+  if (!node) return;
+  map[nodePath] = { ...node, checked, indeterminate: false };
+  if (node.childPaths) {
+    for (const cp of node.childPaths) {
+      setSubtreeChecked(map, cp, checked);
+    }
+  }
+}
+
+function recomputeParentChain(map: Record<string, TreeNode>, parentPath: string | null) {
+  if (parentPath === null) return;
+  const parent = map[parentPath];
+  if (!parent?.childPaths?.length) return;
+
+  let allChecked = true;
+  let anyChecked = false;
+  let anyIndeterminate = false;
+
+  for (const cp of parent.childPaths) {
+    const child = map[cp];
+    if (!child) continue;
+    if (child.checked) anyChecked = true; else allChecked = false;
+    if (child.indeterminate) anyIndeterminate = true;
+  }
+
+  const newChecked = allChecked && parent.childPaths.length > 0;
+  const newIndet = !newChecked && (anyChecked || anyIndeterminate);
+
+  if (parent.checked !== newChecked || parent.indeterminate !== newIndet) {
+    map[parentPath] = { ...parent, checked: newChecked, indeterminate: newIndet };
+    recomputeParentChain(map, parent.parent_path);
+  }
+}
+
+function collectSelectedPaths(map: Record<string, TreeNode>, rootPaths: string[]): string[] {
+  const result: string[] = [];
+  const visit = (paths: string[]) => {
+    for (const p of paths) {
+      const n = map[p];
+      if (!n) continue;
+      if (n.checked && !n.is_dir) result.push(n.path);
+      if (n.childPaths?.length) visit(n.childPaths);
+    }
+  };
+  visit(rootPaths);
+  return result;
+}
+
+// ─── Orphan adoption: find existing nodes that should be children of a dir ──
+
+function adoptOrphans(map: Record<string, TreeNode>, dirPath: string) {
+  const node = map[dirPath];
+  if (!node) return;
+
+  const existingChildPaths = new Set(node.childPaths || []);
+  const adopted: string[] = [];
+
+  for (const key of Object.keys(map)) {
+    if (key === dirPath) continue;
+    if (existingChildPaths.has(key)) continue;
+    if (isDirectChildOf(key, dirPath)) {
+      adopted.push(key);
+      // Update child's parent_path reference
+      map[key] = { ...map[key], parent_path: dirPath };
+    }
+  }
+
+  if (adopted.length > 0) {
+    const allChildPaths = [...(node.childPaths || []), ...adopted];
+    const hasSelectedChildren = allChildPaths.some(cp => {
+      const child = map[cp];
+      return child && (child.checked || child.indeterminate);
+    });
+
+    map[dirPath] = {
+      ...node,
+      childPaths: allChildPaths,
+      expanded: node.expanded || hasSelectedChildren,
+    };
+
+    recomputeParentChain(map, dirPath);
+  }
+}
+
+// ─── Reducer ────────────────────────────────────────────────────────────────
+
+function treeReducer(state: TreeState, action: TreeAction): TreeState {
+  switch (action.type) {
+
+    case 'MERGE_ROOTS': {
+      const deduped = deduplicateRoots(action.entries);
+      const newMap = { ...state.nodesMap };
+
+      // Update/add all entries (not just deduped - we want children in the map too)
+      for (const entry of action.entries) {
+        newMap[entry.path] = mergeEntry(entry, newMap[entry.path]);
+      }
+
+      // Build new root list from deduped entries
+      const incomingRootPaths = deduped.map(e => e.path);
+      const incomingSet = new Set(incomingRootPaths);
+
+      // Keep old roots that are still independent
+      for (const oldPath of state.rootPaths) {
+        if (incomingSet.has(oldPath)) continue;
+        const node = newMap[oldPath];
+        if (!node) continue;
+        const np = normalizePath(node.path);
+        let isDescendant = false;
+        for (const rp of incomingRootPaths) {
+          const root = newMap[rp];
+          if (root?.is_dir) {
+            const rootNorm = normalizePath(root.path);
+            const prefix = rootNorm.endsWith('/') ? rootNorm : rootNorm + '/';
+            if (np.startsWith(prefix)) {
+              isDescendant = true;
+              break;
+            }
+          }
+        }
+        if (!isDescendant) incomingRootPaths.push(oldPath);
+      }
+
+      // Adopt orphans into newly added directories
+      const dirEntries = action.entries
+        .filter(e => e.is_dir)
+        .sort((a, b) => {
+          // Process deepest first
+          const da = (normalizePath(a.path).match(/\//g) || []).length;
+          const db = (normalizePath(b.path).match(/\//g) || []).length;
+          return db - da;
+        });
+
+      for (const dir of dirEntries) {
+        adoptOrphans(newMap, dir.path);
+      }
+
+      return { ...state, nodesMap: newMap, rootPaths: incomingRootPaths };
+    }
+
+    case 'SET_CHILDREN': {
+      const newMap = { ...state.nodesMap };
+      const parent = newMap[action.parentPath];
+      if (!parent) return state;
+
+      const childPaths: string[] = [];
+      for (const entry of action.children) {
+        childPaths.push(entry.path);
+        newMap[entry.path] = mergeEntry(entry, newMap[entry.path]);
+      }
+
+      // Also adopt orphans (existing nodes that should be direct children)
+      const adoptedSet = new Set(childPaths);
+      for (const key of Object.keys(newMap)) {
+        if (key === action.parentPath) continue;
+        if (adoptedSet.has(key)) continue;
+        if (isDirectChildOf(key, action.parentPath)) {
+          childPaths.push(key);
+          newMap[key] = { ...newMap[key], parent_path: action.parentPath };
+        }
+      }
+
+      newMap[action.parentPath] = { ...parent, childPaths };
+
+      // Update parent's check state based on children
+      recomputeParentChain(newMap, action.parentPath);
+
+      return { ...state, nodesMap: newMap };
+    }
+
+    case 'TOGGLE_EXPAND': {
+      const node = state.nodesMap[action.nodePath];
+      if (!node?.is_dir) return state;
+      return {
+        ...state,
+        nodesMap: {
+          ...state.nodesMap,
+          [action.nodePath]: { ...node, expanded: !node.expanded },
+        },
+      };
+    }
+
+    case 'SET_EXPANDED': {
+      const node = state.nodesMap[action.nodePath];
+      if (!node) return state;
+      return {
+        ...state,
+        nodesMap: {
+          ...state.nodesMap,
+          [action.nodePath]: { ...node, expanded: action.expanded },
+        },
+      };
+    }
+
+    case 'BATCH_UPDATE':
+      return { ...state, nodesMap: action.nodesMap };
+
+    case 'SET_FILTER':
+      return { ...state, filterType: action.filter };
+
+    case 'CLEAR_SELECTIONS': {
+      const newMap: Record<string, TreeNode> = {};
+      for (const [path, node] of Object.entries(state.nodesMap)) {
+        newMap[path] = { ...node, checked: false, indeterminate: false };
+      }
+      return { ...state, nodesMap: newMap };
+    }
+
+    default:
+      return state;
+  }
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
+export const FileTree: React.FC<FileTreeProps> = ({
+  onSelectionChange,
+  searchQuery = '',
+  initialSelectedPaths,
+  shouldClearSelection,
+}) => {
+  const [state, dispatch] = useReducer(treeReducer, {
+    nodesMap: {},
+    rootPaths: [],
+    filterType: 'ALL',
+  });
+
   const [toast, setToast] = useState<string | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
+  const initialPathsApplied = useRef(false);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
 
-  // Virtual scrolling setup
+  // ── Filter logic ────────────────────────────────────────────────────────
+
+  const matchesFilter = useCallback(
+    (node: TreeNode): boolean => {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (!node.name.toLowerCase().includes(q) && !node.path?.toLowerCase().includes(q)) {
+          return false;
+        }
+      }
+      if (state.filterType === 'ALL') return true;
+      if (node.is_dir) return true;
+      const ext = getExtension(node.path);
+      if (state.filterType === 'SRC') return SRC_EXTENSIONS.has(ext);
+      if (state.filterType === 'DOCS') return DOCS_EXTENSIONS.has(ext);
+      return true;
+    },
+    [state.filterType, searchQuery],
+  );
+
+  // ── Flat tree (computed directly, not stored in state) ────────────────
+
+  const buildFlatTree = useCallback(
+    (paths: string[], map: Record<string, TreeNode>, level = 0): (TreeNode & { level: number })[] => {
+      const result: (TreeNode & { level: number })[] = [];
+      for (const p of paths) {
+        const node = map[p];
+        if (!node) continue;
+        if (!node.is_dir && !matchesFilter(node)) continue;
+        result.push({ ...node, level });
+        if (node.is_dir && node.expanded && node.childPaths?.length) {
+          result.push(...buildFlatTree(node.childPaths, map, level + 1));
+        }
+      }
+      return result;
+    },
+    [matchesFilter],
+  );
+
+  const flatTree = buildFlatTree(state.rootPaths, state.nodesMap);
+
+  // ── Virtual scrolling ─────────────────────────────────────────────────
+
   const rowVirtualizer = useVirtualizer({
     count: flatTree.length,
     getScrollElement: () => parentRef.current,
@@ -28,616 +419,201 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     overscan: 10,
   });
 
-  // Extensions for filters
-  const SRC_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.c', '.cpp', '.h', '.java', '.rb', '.php', '.css', '.html', '.sh', '.yaml', '.json'];
-  const DOCS_EXTENSIONS = ['.md', '.txt', '.pdf', '.docx', '.doc', '.odt', '.rtf'];
+  // ── Data loading ──────────────────────────────────────────────────────
 
-  const matchesFilter = useCallback((node: TreeNode): boolean => {
-    // Search query matching
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      // Match filename or full path
-      const matchesSearch = node.name.toLowerCase().includes(query) ||
-        (node.path && node.path.toLowerCase().includes(query));
-      if (!matchesSearch) return false;
-    }
-
-    if (filterType === 'ALL') return true;
-
-    // For directories in filtered mode, we might want to keep them if they contain matching children
-    // But for simple filtering:
-    if (node.is_dir) return true;
-
-    const ext = node.path.substring(node.path.lastIndexOf('.')).toLowerCase();
-    if (filterType === 'SRC') return SRC_EXTENSIONS.includes(ext);
-    if (filterType === 'DOCS') return DOCS_EXTENSIONS.includes(ext);
-    return true;
-  }, [filterType, searchQuery]);
-
-  // Convert tree to flat list for virtual scrolling
-  const buildFlatTree = useCallback((paths: string[], map: Record<string, TreeNode>, level = 0): TreeNode[] => {
-    const result: TreeNode[] = [];
-    for (const path of paths) {
-      const node = map[path];
-      if (!node) continue;
-
-      const isMatch = matchesFilter(node);
-
-      // Skip non-matching files (but always process directories to maintain tree structure)
-      if (!node.is_dir && !isMatch) continue;
-
-      // Always add directories to maintain tree hierarchy
-      // Add files only if they match the filter
-      const nodeWithLevel = { ...node, level } as any;
-      result.push(nodeWithLevel);
-
-      // If expanded and has children, recursively add them
-      if (node.expanded && node.childPaths) {
-        result.push(...buildFlatTree(node.childPaths, map, level + 1));
-      }
-    }
-    return result;
-  }, [matchesFilter, searchQuery]);
-
-  // Update flat tree when nodes map or root paths change
-  useEffect(() => {
-    setFlatTree(buildFlatTree(rootPaths, nodesMap));
-  }, [nodesMap, rootPaths, buildFlatTree]);
-
-  // Find the common ancestor path for a set of entries
-  // This groups related paths under their common parent/grandparent
-  const findCommonAncestor = (paths: string[]): string | null => {
-    if (paths.length === 0) return null;
-    if (paths.length === 1) {
-      // For single path, return its parent directory
-      const path = paths[0];
-      const lastSep = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
-      return lastSep > 0 ? path.substring(0, lastSep) : null;
-    }
-
-    // Sort paths to find common prefix
-    const sorted = [...paths].sort();
-    const first = sorted[0];
-    const last = sorted[sorted.length - 1];
-
-    // Find common prefix
-    let i = 0;
-    while (i < first.length && i < last.length && first[i] === last[i]) {
-      i++;
-    }
-
-    const commonPrefix = first.substring(0, i);
-    // Trim to last separator to get the common directory
-    const lastSep = Math.max(commonPrefix.lastIndexOf('\\'), commonPrefix.lastIndexOf('/'));
-    return lastSep > 0 ? commonPrefix.substring(0, lastSep) : null;
-  };
-
-  // Load root level entries
   const loadRootEntries = useCallback(async () => {
     try {
       const entries = await invoke<FileEntry[]>('get_children', { parentPath: null });
-
-      // Filter out paths that are nested inside other root directory entries
-      // This prevents showing files at root level when their parent directory is also indexed
-      const filteredEntries = entries.filter(entry => {
-        // Check if this entry's path is a subpath of any directory entry
-        const isNested = entries.some(other =>
-          other.is_dir &&
-          other.path !== entry.path &&
-          (entry.path.startsWith(other.path + '\\') || entry.path.startsWith(other.path + '/'))
-        );
-        return !isNested;
-      });
-
-      // Check if we need to aggregate under a common ancestor
-      // This happens when files from different folders share a common grandparent
-      const allPaths = filteredEntries.map(e => e.path);
-      const commonAncestor = findCommonAncestor(allPaths);
-
-      // Determine effective root entries
-      let effectiveRootEntries = filteredEntries;
-      if (commonAncestor && commonAncestor.length > 0) {
-        // Check if common ancestor exists in entries
-        const ancestorEntry = entries.find(e => e.path === commonAncestor && e.is_dir);
-        if (ancestorEntry) {
-          // Use the common ancestor as the single root
-          effectiveRootEntries = [ancestorEntry];
-        }
-      }
-
-      setNodesMap(prevNodesMap => {
-        const newNodesMap: Record<string, TreeNode> = {};
-
-        // First, copy over all existing nodes to preserve state for nodes not in the new entries
-        // This preserves expanded children that were loaded previously
-        Object.entries(prevNodesMap).forEach(([path, node]) => {
-          newNodesMap[path] = node;
-        });
-
-        // Populate/update map with entries, preserving existing state where applicable
-        entries.forEach(entry => {
-          const existingNode = prevNodesMap[entry.path];
-          if (existingNode) {
-            // Preserve existing state (checked, expanded, indeterminate, childPaths)
-            newNodesMap[entry.path] = {
-              ...entry,
-              expanded: existingNode.expanded,
-              checked: existingNode.checked,
-              indeterminate: existingNode.indeterminate,
-              hasChildren: entry.is_dir,
-              childPaths: existingNode.childPaths || [],
-            };
-          } else {
-            // New entry - initialize with default state
-            newNodesMap[entry.path] = {
-              ...entry,
-              expanded: false,
-              checked: false,
-              indeterminate: false,
-              hasChildren: entry.is_dir,
-              childPaths: [],
-            };
-          }
-        });
-
-        // Now handle parent-child relationships for nodes that were previously orphaned
-        // Find selected/expanded nodes that should now be children of newly added directories
-        // Process directories in order of depth (deepest first) to handle grandparent scenarios
-        const dirEntries = entries.filter(e => e.is_dir).sort((a, b) => {
-          const depthA = (a.path.match(/[\/\\]/g) || []).length;
-          const depthB = (b.path.match(/[\/\\]/g) || []).length;
-          return depthB - depthA; // Deepest first
-        });
-
-        dirEntries.forEach(dirEntry => {
-          const parentPath = dirEntry.path;
-          const existingChildPaths = newNodesMap[parentPath]?.childPaths || [];
-          const adoptedChildPaths: string[] = [];
-
-          // Find nodes that should be direct children of this directory
-          // This includes both:
-          // 1. Nodes with matching parent_path in the database
-          // 2. Nodes whose path indicates they are direct children (for orphaned files)
-          Object.values(newNodesMap).forEach(node => {
-            if (node.path !== parentPath) {
-              // Check if this node should be a direct child of parentPath
-              const isDirectChild =
-                // Case 1: Database says it's a child
-                node.parent_path === parentPath ||
-                // Case 2: Path analysis shows it's a direct child (orphaned files)
-                (node.path.startsWith(parentPath + '\\') || node.path.startsWith(parentPath + '/')) &&
-                !node.path.substring(parentPath.length + 1).includes('\\') &&
-                !node.path.substring(parentPath.length + 1).includes('/');
-
-              if (isDirectChild && !existingChildPaths.includes(node.path)) {
-                adoptedChildPaths.push(node.path);
-              }
-            }
-          });
-
-          // If we found children to adopt, update the parent's childPaths and expand it
-          if (adoptedChildPaths.length > 0 || existingChildPaths.length > 0) {
-            const allChildPaths = [...new Set([...existingChildPaths, ...adoptedChildPaths])];
-            const hasSelectedChildren = allChildPaths.some(cp => {
-              const child = newNodesMap[cp];
-              return child && (child.checked || child.indeterminate);
-            });
-
-            // Preserve expanded state if already expanded, otherwise auto-expand if selected children
-            const shouldExpand = newNodesMap[parentPath]?.expanded || hasSelectedChildren;
-
-            newNodesMap[parentPath] = {
-              ...newNodesMap[parentPath],
-              childPaths: allChildPaths,
-              expanded: shouldExpand,
-            };
-
-            // Update adopted children's parent_path reference
-            adoptedChildPaths.forEach(childPath => {
-              if (newNodesMap[childPath]) {
-                newNodesMap[childPath] = {
-                  ...newNodesMap[childPath],
-                  parent_path: parentPath,
-                };
-              }
-            });
-
-            // Update parent's checked/indeterminate state based on children
-            updateParentSelectionInMap(newNodesMap, parentPath);
-          }
-        });
-
-        return newNodesMap;
-      });
-
-      setRootPaths(effectiveRootEntries.map(entry => entry.path));
+      dispatch({ type: 'MERGE_ROOTS', entries });
     } catch (error) {
       console.error('Failed to load root entries:', error);
     }
   }, []);
 
-  // Load children for a node, preserving existing state
-  const loadChildren = useCallback(async (nodePath: string, existingMap: Record<string, TreeNode>): Promise<TreeNode[]> => {
+  const loadChildrenFromBackend = useCallback(async (parentPath: string): Promise<FileEntry[]> => {
     try {
-      const entries = await invoke<FileEntry[]>('get_children', { parentPath: nodePath });
-      return entries.map(entry => {
-        const existingNode = existingMap[entry.path];
-        if (existingNode) {
-          // Preserve existing state
-          return {
-            ...entry,
-            expanded: existingNode.expanded,
-            checked: existingNode.checked,
-            indeterminate: existingNode.indeterminate,
-            hasChildren: entry.is_dir,
-            childPaths: existingNode.childPaths || [],
-          };
-        }
-        return {
-          ...entry,
-          expanded: false,
-          checked: false,
-          indeterminate: false,
-          hasChildren: entry.is_dir,
-          childPaths: [],
-        };
-      });
+      return await invoke<FileEntry[]>('get_children', { parentPath });
     } catch (error) {
       console.error('Failed to load children:', error);
       return [];
     }
   }, []);
 
-  // Toggle node expansion
-  const toggleExpand = useCallback(async (nodePath: string) => {
-    const node = nodesMap[nodePath];
-    if (!node || !node.is_dir) return;
+  // ── Toggle expansion ─────────────────────────────────────────────────
 
-    // Load children if:
-    // 1. Not expanded yet AND no children loaded, OR
-    // 2. Not expanded yet AND database has more children than we've loaded (child_count > childPaths.length)
-    const needsChildrenLoad = !node.expanded && (
-      !node.childPaths ||
-      node.childPaths.length === 0 ||
-      (node.child_count && node.child_count > node.childPaths.length)
-    );
+  const toggleExpand = useCallback(
+    async (nodePath: string) => {
+      const node = state.nodesMap[nodePath];
+      if (!node?.is_dir) return;
 
-    if (needsChildrenLoad) {
-      const children = await loadChildren(nodePath, nodesMap);
-      const newNodesMap = { ...nodesMap };
-      const childPaths = children.map(c => c.path);
+      const needsLoad = !node.expanded && (
+        !node.childPaths ||
+        node.childPaths.length === 0 ||
+        (node.child_count !== null && node.child_count > (node.childPaths?.length || 0))
+      );
 
-      // Also find orphaned entries that should belong to this directory
-      // These are files indexed before their parent directory was added
-      const parentPath = node.path;
-      const orphanedChildren: TreeNode[] = [];
-
-      Object.values(nodesMap).forEach(existingNode => {
-        // Check if this node should be a direct child of current node
-        if (existingNode.path !== nodePath) {
-          const existingPath = existingNode.path;
-          // Check if path starts with parent path + separator
-          if (existingPath.startsWith(parentPath + '\\') || existingPath.startsWith(parentPath + '/')) {
-            // Check if it's a direct child (no additional separators after parent path)
-            const relativePath = existingPath.substring(parentPath.length + 1);
-            if (!relativePath.includes('\\') && !relativePath.includes('/')) {
-              // This is a direct child - only adopt if not already in children
-              if (!childPaths.includes(existingPath)) {
-                orphanedChildren.push({
-                  ...existingNode,
-                  parent_path: nodePath, // Update parent reference
-                });
-              }
-            }
-          }
-        }
-      });
-
-      // Merge children from backend with orphaned children (avoid duplicates)
-      const allChildPaths = [...new Set([...childPaths, ...orphanedChildren.map(c => c.path)])];
-
-      // Add ALL children to map - loadChildren already preserves existing state
-      children.forEach(child => {
-        newNodesMap[child.path] = child;
-      });
-
-      // Update orphaned children with new parent_path
-      orphanedChildren.forEach(child => {
-        newNodesMap[child.path] = child;
-      });
-
-      // Check if any children are selected - update parent's indeterminate state
-      const childNodes = allChildPaths.map(p => newNodesMap[p]).filter(Boolean);
-      const checkedCount = childNodes.filter(c => c.checked).length;
-      const indeterminateCount = childNodes.filter(c => c.indeterminate).length;
-      const isAllChecked = checkedCount === childNodes.length && childNodes.length > 0;
-      const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
-
-      // Update parent with correct selection state
-      newNodesMap[nodePath] = {
-        ...node,
-        expanded: true,
-        childPaths: allChildPaths,
-        checked: isAllChecked,
-        indeterminate: isIndeterminate,
-      };
-
-      setNodesMap(newNodesMap);
-    } else {
-      setNodesMap({
-        ...nodesMap,
-        [nodePath]: { ...node, expanded: !node.expanded }
-      });
-    }
-  }, [nodesMap, loadChildren]);
-
-  // Recursively update children selection
-  const updateChildrenSelection = (
-    map: Record<string, TreeNode>,
-    nodePath: string,
-    checked: boolean
-  ) => {
-    const node = map[nodePath];
-    if (!node) return;
-
-    map[nodePath] = {
-      ...node,
-      checked,
-      indeterminate: false,
-    };
-
-    if (node.childPaths) {
-      node.childPaths.forEach(childPath => {
-        updateChildrenSelection(map, childPath, checked);
-      });
-    }
-  };
-
-  // Update parent selection states up the tree
-  const updateParentSelection = (map: Record<string, TreeNode>, parentPath: string | null) => {
-    if (parentPath === null) return;
-
-    const parent = map[parentPath];
-    if (!parent || !parent.childPaths) return;
-
-    const children = parent.childPaths.map(path => map[path]).filter(Boolean);
-    const checkedCount = children.filter(c => c.checked).length;
-    const indeterminateCount = children.filter(c => c.indeterminate).length;
-
-    const isAllChecked = checkedCount === children.length && children.length > 0;
-    const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
-
-    const nextChecked = isAllChecked;
-    const nextIndeterminate = isIndeterminate;
-
-    if (parent.checked !== nextChecked || parent.indeterminate !== nextIndeterminate) {
-      map[parentPath] = {
-        ...parent,
-        checked: nextChecked,
-        indeterminate: nextIndeterminate,
-      };
-      updateParentSelection(map, parent.parent_path);
-    }
-  };
-
-  // Recursively load and index all children for a folder
-  // When setChecked is true, all new entries are marked as checked
-  // When setChecked is false, we preserve existing state or default to unchecked
-  const loadAllChildrenRecursively = async (
-    nodePath: string,
-    currentMap: Record<string, TreeNode>,
-    setChecked: boolean = true
-  ): Promise<string[]> => {
-    const entries = await invoke<FileEntry[]>('get_children', { parentPath: nodePath });
-    const childPaths: string[] = [];
-
-    for (const entry of entries) {
-      childPaths.push(entry.path);
-      let entryChildPaths: string[] = [];
-      if (entry.is_dir) {
-        entryChildPaths = await loadAllChildrenRecursively(entry.path, currentMap, setChecked);
-      }
-
-      const existingNode = currentMap[entry.path];
-      if (existingNode) {
-        // Preserve existing state, but merge childPaths
-        currentMap[entry.path] = {
-          ...entry,
-          expanded: existingNode.expanded,
-          checked: setChecked ? true : existingNode.checked,
-          indeterminate: setChecked ? false : existingNode.indeterminate,
-          hasChildren: entry.is_dir,
-          childPaths: entryChildPaths.length > 0 ? entryChildPaths : existingNode.childPaths || [],
-        };
+      if (needsLoad) {
+        const children = await loadChildrenFromBackend(nodePath);
+        dispatch({ type: 'SET_CHILDREN', parentPath: nodePath, children });
+        dispatch({ type: 'SET_EXPANDED', nodePath, expanded: true });
       } else {
-        currentMap[entry.path] = {
-          ...entry,
-          expanded: false,
-          checked: setChecked,
-          indeterminate: false,
-          hasChildren: entry.is_dir,
-          childPaths: entryChildPaths,
-        };
+        dispatch({ type: 'TOGGLE_EXPAND', nodePath });
       }
-    }
-    return childPaths;
-  };
+    },
+    [state.nodesMap, loadChildrenFromBackend],
+  );
 
-  // Toggle checkbox
-  const toggleCheck = useCallback(async (nodePath: string, checked: boolean) => {
-    const newMap = { ...nodesMap };
-    const node = newMap[nodePath];
-    if (!node) return;
+  // ── Recursive child loader (for selecting an unloaded folder) ─────────
 
-    // If it's a directory and we're checking it, load all children first if not loaded
-    if (node.is_dir && checked && (!node.childPaths || node.childPaths.length === 0)) {
-      const childPaths = await loadAllChildrenRecursively(nodePath, newMap);
-      newMap[nodePath] = { ...node, checked, indeterminate: false, childPaths, expanded: true };
-    } else {
-      updateAllChildrenInMap(newMap, nodePath, checked);
-    }
-
-    updateParentSelection(newMap, node.parent_path);
-    setNodesMap(newMap);
-
-    // Notify parent of selection change
-    if (onSelectionChange) {
-      const selected = collectSelectedInMap(newMap, rootPaths);
-      onSelectionChange(selected);
-    }
-  }, [nodesMap, rootPaths, onSelectionChange]);
-
-  const updateAllChildrenInMap = (map: Record<string, TreeNode>, nodePath: string, checked: boolean) => {
-    const node = map[nodePath];
-    if (!node) return;
-
-    map[nodePath] = { ...node, checked, indeterminate: false };
-    if (node.childPaths) {
-      node.childPaths.forEach(path => updateAllChildrenInMap(map, path, checked));
-    }
-  };
-
-  const collectSelectedInMap = (map: Record<string, TreeNode>, paths: string[]): string[] => {
-    const selectedPaths: string[] = [];
-
-    const traverse = (currentPaths: string[]) => {
-      for (const path of currentPaths) {
-        const node = map[path];
-        if (!node) continue;
-        if (node.checked && !node.is_dir) {
-          selectedPaths.push(node.path);
-        }
-        if (node.childPaths) {
-          traverse(node.childPaths);
+  const loadSubtreeRecursively = useCallback(
+    async (nodePath: string, targetMap: Record<string, TreeNode>) => {
+      const entries = await loadChildrenFromBackend(nodePath);
+      const childPaths: string[] = [];
+      for (const entry of entries) {
+        childPaths.push(entry.path);
+        const childNode = mergeEntry(entry, targetMap[entry.path]);
+        childNode.checked = true;
+        childNode.indeterminate = false;
+        targetMap[entry.path] = childNode;
+        if (entry.is_dir) {
+          await loadSubtreeRecursively(entry.path, targetMap);
         }
       }
-    };
+      const parent = targetMap[nodePath];
+      if (parent) {
+        targetMap[nodePath] = { ...parent, childPaths };
+      }
+    },
+    [loadChildrenFromBackend],
+  );
 
-    traverse(paths);
-    return selectedPaths;
-  };
+  // ── Toggle checkbox ───────────────────────────────────────────────────
 
-  // Update a node's selection state based on its children (used in loadRootEntries)
-  const updateParentSelectionInMap = (map: Record<string, TreeNode>, nodePath: string) => {
-    const node = map[nodePath];
-    if (!node || !node.childPaths || node.childPaths.length === 0) return;
+  const toggleCheck = useCallback(
+    async (nodePath: string, checked: boolean) => {
+      // Take a deep snapshot to avoid stale closures
+      const snapshot: Record<string, TreeNode> = {};
+      for (const [key, val] of Object.entries(state.nodesMap)) {
+        snapshot[key] = { ...val };
+      }
 
-    const children = node.childPaths.map(path => map[path]).filter(Boolean);
-    if (children.length === 0) return;
+      const node = snapshot[nodePath];
+      if (!node) return;
 
-    const checkedCount = children.filter(c => c.checked).length;
-    const indeterminateCount = children.filter(c => c.indeterminate).length;
+      if (node.is_dir && checked && (!node.childPaths || node.childPaths.length === 0)) {
+        await loadSubtreeRecursively(nodePath, snapshot);
+        snapshot[nodePath] = { ...snapshot[nodePath], checked: true, indeterminate: false, expanded: true };
+      } else {
+        setSubtreeChecked(snapshot, nodePath, checked);
+      }
 
-    const isAllChecked = checkedCount === children.length;
-    const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
+      recomputeParentChain(snapshot, node.parent_path);
+      dispatch({ type: 'BATCH_UPDATE', nodesMap: snapshot });
 
-    map[nodePath] = {
-      ...node,
-      checked: isAllChecked,
-      indeterminate: isIndeterminate,
-    };
-  };
+      const cb = onSelectionChangeRef.current;
+      if (cb) {
+        cb(collectSelectedPaths(snapshot, state.rootPaths));
+      }
+    },
+    [state.nodesMap, state.rootPaths, loadSubtreeRecursively],
+  );
 
-  // Handle path copy to clipboard
-  const copyPathToClipboard = (path: string) => {
+  // ── Clipboard ─────────────────────────────────────────────────────────
+
+  const copyPathToClipboard = useCallback((path: string) => {
     navigator.clipboard.writeText(path).then(() => {
       setToast('Path copied!');
       setTimeout(() => setToast(null), 2000);
     });
-  };
+  }, []);
 
-  // Handle drag and drop (React events - just for visual feedback)
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
+  // ── Event listeners ───────────────────────────────────────────────────
 
-  // Listen to refresh events (from global drag-drop or other sources)
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
-
-    const setupRefreshListener = async () => {
-      unlisten = await listen('refresh-file-tree', () => {
-        console.log('Refreshing file tree...');
-        loadRootEntries();
-      });
+    const setup = async () => {
+      unlisten = await listen('refresh-file-tree', () => loadRootEntries());
     };
-
-    setupRefreshListener();
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
+    setup();
+    return () => { unlisten?.(); };
   }, [loadRootEntries]);
 
-  // Handle indexing-progress to refresh when complete
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
-
-    const setupProgressListener = async () => {
-      unlisten = await listen('indexing-progress', (event: any) => {
+    const setup = async () => {
+      unlisten = await listen('indexing-progress', (event: { payload: { current_path: string } }) => {
         if (event.payload.current_path === 'Complete') {
           loadRootEntries();
         }
       });
     };
-
-    setupProgressListener();
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
+    setup();
+    return () => { unlisten?.(); };
   }, [loadRootEntries]);
 
-  // Restore selected state from initialSelectedPaths
+  // ── Restore initial selection ─────────────────────────────────────────
+
   useEffect(() => {
-    if (initialSelectedPaths && initialSelectedPaths.length > 0 && rootPaths.length > 0) {
-      const newMap = { ...nodesMap };
+    if (
+      initialSelectedPaths?.length &&
+      state.rootPaths.length > 0 &&
+      !initialPathsApplied.current
+    ) {
       const pathsSet = new Set(initialSelectedPaths);
+      const snapshot: Record<string, TreeNode> = {};
+      let changed = false;
 
-      Object.values(newMap).forEach(node => {
-        if (!node.is_dir && pathsSet.has(node.path)) {
-          newMap[node.path] = { ...node, checked: true };
-          updateParentSelection(newMap, node.parent_path);
+      for (const [key, val] of Object.entries(state.nodesMap)) {
+        snapshot[key] = { ...val };
+      }
+
+      for (const node of Object.values(snapshot)) {
+        if (!node.is_dir && pathsSet.has(node.path) && !node.checked) {
+          snapshot[node.path] = { ...node, checked: true, indeterminate: false };
+          recomputeParentChain(snapshot, node.parent_path);
+          changed = true;
         }
-      });
+      }
 
-      setNodesMap(newMap);
-    }
-  }, [initialSelectedPaths, rootPaths.length]);
-
-  // Clear all selections when signaled
-  useEffect(() => {
-    if (shouldClearSelection) {
-      const newMap = { ...nodesMap };
-
-      Object.keys(newMap).forEach(path => {
-        const node = newMap[path];
-        if (node) {
-          newMap[path] = { ...node, checked: false, indeterminate: false };
-        }
-      });
-
-      setNodesMap(newMap);
-
-      if (onSelectionChange) {
-        onSelectionChange([]);
+      if (changed) {
+        dispatch({ type: 'BATCH_UPDATE', nodesMap: snapshot });
+        initialPathsApplied.current = true;
       }
     }
-  }, [shouldClearSelection, onSelectionChange]);
+  }, [initialSelectedPaths, state.rootPaths.length, state.nodesMap]);
 
-  // Load root entries on mount
+  // ── Clear selections ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (shouldClearSelection) {
+      dispatch({ type: 'CLEAR_SELECTIONS' });
+      onSelectionChangeRef.current?.([]);
+    }
+  }, [shouldClearSelection]);
+
+  // ── Load on mount ─────────────────────────────────────────────────────
+
   useEffect(() => {
     loadRootEntries();
   }, [loadRootEntries]);
 
+  // ── Drag over handler ─────────────────────────────────────────────────
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  // ── Render ────────────────────────────────────────────────────────────
+
   return (
-    <div className="flex flex-col h-full w-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden" data-testid="file-tree-container">
-      {/* Toast Notification */}
+    <div
+      className="flex flex-col h-full w-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden"
+      data-testid="file-tree-container"
+      role="tree"
+      aria-label="File tree"
+    >
+      {/* Toast */}
       {toast && (
         <div className="fixed top-4 right-4 bg-green-600/90 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg z-50 animate-in fade-in">
           {toast}
@@ -646,34 +622,38 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
 
       {/* Filter Bar */}
       <div className="h-8 flex items-center px-2 justify-between border-b border-border-dark bg-[#0d1117]">
-        <div className="flex items-center gap-1">
-          {(['ALL', 'SRC', 'DOCS'] as const).map((t) => (
+        <div className="flex items-center gap-1" role="group" aria-label="File type filter">
+          {(['ALL', 'SRC', 'DOCS'] as const).map(t => (
             <button
               key={t}
-              onClick={() => setFilterType(t)}
+              type="button"
+              onClick={() => dispatch({ type: 'SET_FILTER', filter: t })}
               className={cn(
-                "px-2 py-0.5 rounded text-[10px] font-bold transition-all",
-                filterType === t
-                  ? "bg-primary/20 text-primary"
-                  : "text-white/40 hover:bg-white/5"
+                'px-2 py-0.5 rounded text-[10px] font-bold transition-all',
+                'focus:outline-none focus:ring-1 focus:ring-primary/50',
+                state.filterType === t
+                  ? 'bg-primary/20 text-primary'
+                  : 'text-white/40 hover:bg-white/5',
               )}
+              aria-pressed={state.filterType === t}
             >
               {t}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-0.5 text-[9px] font-medium text-white/50 hover:text-white">
+          <button type="button" className="flex items-center gap-0.5 text-[9px] font-medium text-white/50 hover:text-white">
             <span>Name</span>
             <span className="material-symbols-outlined text-[12px]">arrow_drop_down</span>
           </button>
-          <button className="flex items-center gap-0.5 text-[9px] font-medium text-white/50 hover:text-white">
+          <button type="button" className="flex items-center gap-0.5 text-[9px] font-medium text-white/50 hover:text-white">
             <span>Size</span>
             <span className="material-symbols-outlined text-[12px]">unfold_more</span>
           </button>
         </div>
       </div>
 
+      {/* Tree content */}
       <div
         ref={parentRef}
         className="flex-1 overflow-auto relative custom-scrollbar"
@@ -681,8 +661,14 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
         onDragOver={handleDragOver}
       >
         {flatTree.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-5 text-center select-none" data-testid="empty-state">
-            {searchQuery ? 'No matching files found.' : 'No files indexed. Drag and drop a folder to start.'}
+          <div
+            className="flex items-center justify-center h-full text-muted-foreground text-sm p-5 text-center select-none"
+            data-testid="empty-state"
+            role="status"
+          >
+            {searchQuery
+              ? 'No matching files found.'
+              : 'No files indexed. Drag and drop a folder to start.'}
           </div>
         ) : (
           <div
@@ -692,11 +678,11 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
               position: 'relative',
             }}
           >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const node = flatTree[virtualRow.index] as TreeNode & { level: number };
+            {rowVirtualizer.getVirtualItems().map(virtualRow => {
+              const node = flatTree[virtualRow.index];
               const isFolder = node.is_dir;
+              const paddingLeft = node.level * 12 + 8;
 
-              // Folder Row Style
               if (isFolder) {
                 return (
                   <div
@@ -710,58 +696,71 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                       left: 0,
                       width: '100%',
                       transform: `translateY(${virtualRow.start}px)`,
-                      paddingLeft: `${node.level * 12 + 8}px`
+                      paddingLeft: `${paddingLeft}px`,
                     }}
                     onClick={() => toggleCheck(node.path, !node.checked)}
                     data-testid="tree-node"
                     data-node-type="folder"
+                    role="treeitem"
+                    aria-expanded={node.expanded}
+                    aria-selected={node.checked}
                   >
                     <span
                       className={cn(
-                        "material-symbols-outlined text-[14px] text-white/40 mr-1 cursor-pointer transition-transform select-none",
-                        node.expanded && "rotate-90"
+                        'material-symbols-outlined text-[14px] text-white/40 mr-1 cursor-pointer transition-transform select-none',
+                        node.expanded && 'rotate-90',
                       )}
                       data-testid="expand-icon"
                       data-expanded={node.expanded}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleExpand(node.path);
+                      onClick={e => { e.stopPropagation(); toggleExpand(node.path); }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={node.expanded ? 'Collapse folder' : 'Expand folder'}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault(); e.stopPropagation(); toggleExpand(node.path);
+                        }
                       }}
                     >
                       chevron_right
                     </span>
 
-                    <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
+                    <div className="w-5 flex justify-center mr-1" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-2.5 rounded-sm bg-transparent text-primary focus:ring-0 focus:ring-offset-0 select-none"
                         checked={node.checked}
                         onChange={() => toggleCheck(node.path, !node.checked)}
-                        ref={(el) => { if (el) el.indeterminate = node.indeterminate; }}
+                        ref={el => { if (el) el.indeterminate = node.indeterminate; }}
                         data-testid="tree-checkbox"
+                        aria-label={`Select ${node.name}`}
                       />
                     </div>
 
-                    <span className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2 select-none" data-testid="tree-icon">folder</span>
-                    <span className="text-[10px] font-medium text-white/70 flex-shrink-0" data-testid="tree-label">{node.name}</span>
-                    <span className="text-[9px] text-white/30 ml-2 flex-1 whitespace-nowrap">
-                      ({node.child_count ?? (node.childPaths?.length || 0)} items)
+                    <span className="material-symbols-outlined text-[14px] text-yellow-600/70 mr-2 select-none" data-testid="tree-icon" aria-hidden="true">
+                      folder
                     </span>
+
+                    <span className="text-[10px] font-medium text-white/70 flex-shrink-0" data-testid="tree-label">
+                      {node.name}
+                    </span>
+
+                    <span className="text-[9px] text-white/30 ml-2 flex-1 whitespace-nowrap">
+                      ({node.child_count ?? node.childPaths?.length ?? 0} items)
+                    </span>
+
                     <span
-                      className="text-white/20 text-[9px] pr-2 ml-2 cursor-pointer hover:text-white/40 transition-colors select-none  min-w-0 truncate"
+                      className="text-white/20 text-[9px] pr-2 ml-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
                       style={{ direction: 'rtl', textAlign: 'left' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyPathToClipboard(node.path);
-                      }}
+                      onClick={e => { e.stopPropagation(); copyPathToClipboard(node.path); }}
                     >
-                      {node.path.substring(0, node.path.lastIndexOf('\\') !== -1 ? node.path.lastIndexOf('\\') : node.path.lastIndexOf('/'))}
+                      {getParentPath(node.path)}
                     </span>
                   </div>
                 );
               }
 
-              // File Row Style
+              // ── File row ──
               return (
                 <div
                   key={node.path}
@@ -774,49 +773,47 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
                     left: 0,
                     width: '100%',
                     transform: `translateY(${virtualRow.start}px)`,
-                    paddingLeft: `${node.level * 12 + 8}px`
+                    paddingLeft: `${paddingLeft}px`,
                   }}
                   onClick={() => toggleCheck(node.path, !node.checked)}
                   data-testid="tree-node"
                   data-node-type="file"
+                  role="treeitem"
+                  aria-selected={node.checked}
                 >
-                  {/* Invisible spacer to align with folders that have expand arrow */}
-                  <span className="material-symbols-outlined text-[14px] mr-1 invisible select-none">
-                    chevron_right
-                  </span>
+                  <span className="material-symbols-outlined text-[14px] mr-1 invisible select-none">chevron_right</span>
 
-                  <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
+                  <div className="w-5 flex justify-center mr-1" onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-2.5 rounded-sm bg-transparent text-primary focus:ring-0 focus:ring-offset-0 select-none"
                       checked={node.checked}
                       onChange={() => toggleCheck(node.path, !node.checked)}
-                      ref={(el) => { if (el) el.indeterminate = node.indeterminate; }}
+                      ref={el => { if (el) el.indeterminate = node.indeterminate; }}
                       data-testid="tree-checkbox"
+                      aria-label={`Select ${node.name}`}
                     />
                   </div>
 
                   <div className="flex-1 min-w-0 flex items-center gap-2">
                     <span
-                      className={cn(
-                        "material-symbols-outlined text-[13px] select-none flex-shrink-0",
-                        getFileIconColor(node.name)
-                      )}
+                      className={cn('material-symbols-outlined text-[13px] select-none flex-shrink-0', getFileIconColor(node.name))}
                       data-testid="tree-icon"
+                      aria-hidden="true"
                     >
                       {getFileIconName(node.path)}
                     </span>
-                    <span className="text-white text-[11px] flex-1 shrink-0" data-testid="tree-label">{node.name}</span>
-                    {/* Parent path display in gray - truncates from left showing end of path */}
+
+                    <span className="text-white text-[11px] flex-1 shrink-0" data-testid="tree-label">
+                      {node.name}
+                    </span>
+
                     <span
                       className="text-white/20 text-[9px] pr-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
                       style={{ direction: 'rtl', textAlign: 'left' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyPathToClipboard(node.path);
-                      }}
+                      onClick={e => { e.stopPropagation(); copyPathToClipboard(node.path); }}
                     >
-                      {node.path.substring(0, node.path.lastIndexOf('\\') !== -1 ? node.path.lastIndexOf('\\') : node.path.lastIndexOf('/'))}
+                      {getParentPath(node.path)}
                     </span>
                   </div>
 
@@ -834,33 +831,3 @@ export const FileTree: React.FC<FileTreeProps> = ({ onSelectionChange, searchQue
     </div>
   );
 };
-
-function getFileIconName(path: string): string {
-  const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
-  switch (ext) {
-    case '.ts': case '.tsx': return 'terminal';
-    case '.js': case '.jsx': return 'javascript';
-    case '.py': return 'code';
-    case '.go': return 'description'; // or specific
-    case '.css': return 'css';
-    case '.json': return 'data_object';
-    default: return 'description';
-  }
-}
-
-function getFileIconColor(name: string): string {
-  if (name.endsWith('.go')) return 'text-blue-400';
-  if (name.endsWith('.py')) return 'text-yellow-500';
-  if (name.endsWith('.json')) return 'text-green-400';
-  if (name.endsWith('.css')) return 'text-blue-400';
-  if (name.endsWith('.ts') || name.endsWith('.tsx')) return 'text-blue-500';
-  return 'text-white/40';
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-}

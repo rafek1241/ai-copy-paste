@@ -84,8 +84,9 @@ describe('App Global Drop Zone', () => {
     fireEvent.click(settingsBtn);
 
     await waitFor(() => {
-      // Verify FileTree is NOT rendered (assuming it's only in main view)
-      expect(screen.queryByTestId('file-tree-container')).toBeNull();
+      // FileTree stays mounted but its wrapper is hidden when not in main/files view
+      const container = screen.getByTestId('file-tree-container');
+      expect(container.parentElement).toHaveClass('hidden');
     });
 
     // Simulate drop event

@@ -222,32 +222,33 @@ function App() {
           )}
 
           <main className="flex-1 flex flex-col overflow-hidden" role="main">
-            {currentView === "history" ? (
+            {currentView === "history" && (
               <HistoryPanel onRestore={handleHistoryRestore} />
-            ) : currentView === "settings" ? (
-              <Settings />
-            ) : (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Keep both components mounted but hide inactive one to preserve state */}
-                <div className={activeTab === "files" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
-                  <FileTree
-                    onSelectionChange={handleSelectionChange}
-                    searchQuery={searchQuery}
-                    initialSelectedPaths={selectedPaths}
-                    shouldClearSelection={shouldClearFileTree}
-                  />
-                </div>
-                <div className={activeTab === "prompt" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
-                  <PromptBuilder
-                    ref={promptBuilderRef}
-                    selectedFilePaths={selectedPaths}
-                    onPromptBuilt={(prompt) => {
-                      console.log("Built prompt:", prompt);
-                    }}
-                  />
-                </div>
-              </div>
             )}
+
+            {currentView === "settings" && (
+              <Settings />
+            )}
+
+            {/* FileTree stays mounted (hidden) to preserve expansion/selection state */}
+            <div className={currentView === "main" && activeTab === "files" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
+              <FileTree
+                onSelectionChange={handleSelectionChange}
+                searchQuery={searchQuery}
+                initialSelectedPaths={selectedPaths}
+                shouldClearSelection={shouldClearFileTree}
+              />
+            </div>
+
+            <div className={currentView === "main" && activeTab === "prompt" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
+              <PromptBuilder
+                ref={promptBuilderRef}
+                selectedFilePaths={selectedPaths}
+                onPromptBuilt={(prompt) => {
+                  console.log("Built prompt:", prompt);
+                }}
+              />
+            </div>
           </main>
 
           {currentView === "main" && (
