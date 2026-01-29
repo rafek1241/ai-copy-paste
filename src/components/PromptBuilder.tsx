@@ -5,9 +5,10 @@ import {
 } from "../services/prompts";
 import { assemblePrompt } from "../services/assembly";
 import { cn } from "@/lib/utils";
+import { useAppCustomInstructions } from "../contexts/AppContext";
 
 interface PromptBuilderProps {
-  selectedFileIds: number[];
+  selectedFilePaths: string[];
   onPromptBuilt?: (prompt: string) => void;
 }
 
@@ -16,12 +17,12 @@ export interface PromptBuilderHandle {
 }
 
 export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>(({
-  selectedFileIds,
+  selectedFilePaths,
   onPromptBuilt,
 }, ref) => {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [customInstructions, setCustomInstructions] = useState<string>("");
+  const { customInstructions, setCustomInstructions } = useAppCustomInstructions();
   const [error, setError] = useState<string>("");
 
   useImperativeHandle(ref, () => ({
@@ -42,7 +43,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
   };
 
   const handleBuildPrompt = async () => {
-    if (selectedFileIds.length === 0 && !customInstructions.trim()) {
+    if (selectedFilePaths.length === 0 && !customInstructions.trim()) {
       setError("Please select files or enter custom instructions");
       return;
     }
@@ -50,17 +51,33 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
     setError("");
 
     try {
-      // Use the "custom" template which is just a pass-through
-      // If the user's instructions don't include the files placeholder, append it
-      let finalInstructions = customInstructions || "";
-      if (!finalInstructions.includes("{{files}}")) {
-        finalInstructions += "\n\n---CONTEXT:\n\n{{files}}";
+      const trimmedInstructions = customInstructions.trim();
+
+      // If only custom instructions (no files), just copy directly without backend call
+      if (selectedFilePaths.length === 0 && trimmedInstructions) {
+        await navigator.clipboard.writeText(trimmedInstructions);
+        if (onPromptBuilt) {
+          onPromptBuilt(trimmedInstructions);
+        }
+        return;
+      }
+
+      // Build prompt with files
+      let finalInstructions = trimmedInstructions;
+
+      // Only add context section if files are selected
+      if (selectedFilePaths.length > 0) {
+        if (finalInstructions && !finalInstructions.includes("{{files}}")) {
+          finalInstructions += "\n\n---CONTEXT:\n\n{{files}}";
+        } else if (!finalInstructions) {
+          finalInstructions = "---CONTEXT:\n\n{{files}}";
+        }
       }
 
       const response = await assemblePrompt({
         templateId: "custom",
         customInstructions: finalInstructions,
-        fileIds: selectedFileIds,
+        filePaths: selectedFilePaths,
       });
 
       // Copy to clipboard automatically

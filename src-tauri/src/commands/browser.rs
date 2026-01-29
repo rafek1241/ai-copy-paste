@@ -178,4 +178,71 @@ mod tests {
         assert_eq!(AiInterface::Gemini.as_str(), "gemini");
         assert_eq!(AiInterface::AIStudio.as_str(), "aistudio");
     }
+
+    #[test]
+    fn test_interface_serialization() {
+        let chatgpt = AiInterface::ChatGPT;
+        let serialized = serde_json::to_string(&chatgpt).unwrap();
+        assert_eq!(serialized, "\"chatgpt\"");
+
+        let claude = AiInterface::Claude;
+        let serialized = serde_json::to_string(&claude).unwrap();
+        assert_eq!(serialized, "\"claude\"");
+
+        let gemini = AiInterface::Gemini;
+        let serialized = serde_json::to_string(&gemini).unwrap();
+        assert_eq!(serialized, "\"gemini\"");
+
+        let aistudio = AiInterface::AIStudio;
+        let serialized = serde_json::to_string(&aistudio).unwrap();
+        assert_eq!(serialized, "\"aistudio\"");
+    }
+
+    #[test]
+    fn test_interface_deserialization() {
+        let chatgpt: AiInterface = serde_json::from_str("\"chatgpt\"").unwrap();
+        assert!(matches!(chatgpt, AiInterface::ChatGPT));
+
+        let claude: AiInterface = serde_json::from_str("\"claude\"").unwrap();
+        assert!(matches!(claude, AiInterface::Claude));
+
+        let gemini: AiInterface = serde_json::from_str("\"gemini\"").unwrap();
+        assert!(matches!(gemini, AiInterface::Gemini));
+
+        let aistudio: AiInterface = serde_json::from_str("\"aistudio\"").unwrap();
+        assert!(matches!(aistudio, AiInterface::AIStudio));
+    }
+
+    #[test]
+    fn test_interface_deserialization_invalid() {
+        let result: Result<AiInterface, _> = serde_json::from_str("\"invalid\"");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_interface_clone() {
+        let original = AiInterface::Claude;
+        let cloned = original.clone();
+        assert_eq!(original.as_str(), cloned.as_str());
+    }
+
+    #[test]
+    fn test_interface_debug() {
+        let interface = AiInterface::ChatGPT;
+        let debug_str = format!("{:?}", interface);
+        assert!(debug_str.contains("ChatGPT"));
+    }
+
+    #[test]
+    fn test_get_available_interfaces() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let interfaces = get_available_interfaces().await.unwrap();
+            assert_eq!(interfaces.len(), 4);
+            assert!(interfaces.contains(&"chatgpt".to_string()));
+            assert!(interfaces.contains(&"claude".to_string()));
+            assert!(interfaces.contains(&"gemini".to_string()));
+            assert!(interfaces.contains(&"aistudio".to_string()));
+        });
+    }
 }

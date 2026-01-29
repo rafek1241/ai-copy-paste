@@ -12,8 +12,12 @@
     "test:ui": "vitest run --ui",
     "test:coverage": "vitest run --coverage",
     "test:rust": "cd src-tauri && cargo test",
-    "test:e2e": "wdio run e2e/wdio.conf.ts",
-    "test:e2e:headless": "CI=true wdio run e2e/wdio.conf.ts",
+    "driver": "tauri-driver --native-driver bin/msedgedriver.exe",
+    "test:e2e": "wdio run tests/e2e/wdio.conf.ts",
+    "test:e2e:headless": "CI=true wdio run tests/e2e/wdio.conf.ts",
+    "test:e2e:run": "wait-on http://localhost:1420 tcp:4444 && npm run test:e2e",
+    "e2e-session": "concurrently --kill-others \"npm run dev\" \"npm run driver\" \"npm run test:e2e:run\"",
+    "test:all": "concurrently \"npm run test\" \"npm run test:rust\" \"npm run e2e-session\"",
     "build:tauri": "cd src-tauri && cargo build",
     "build:tauri:release": "cd src-tauri && cargo build --release"
   },
@@ -57,6 +61,7 @@
     "@wdio/spec-reporter": "^8",
     "@wdio/types": "^8",
     "autoprefixer": "^10.4.23",
+    "concurrently": "^9.2.1",
     "edgedriver": "^6.3.0",
     "jsdom": "^23.0.1",
     "postcss": "^8.5.6",
@@ -64,6 +69,7 @@
     "ts-node": "^10.9.2",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
-    "vitest": "^1.1.0"
+    "vitest": "^1.1.0",
+    "wait-on": "^9.0.3"
   }
 }
