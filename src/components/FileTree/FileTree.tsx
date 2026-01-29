@@ -29,7 +29,7 @@ const FileTreeInner = memo(function FileTreeInner({
   const rowVirtualizer = useVirtualizer({
     count: state.flatTree.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 28,
+    estimateSize: () => 32,
     overscan: 10,
   });
 

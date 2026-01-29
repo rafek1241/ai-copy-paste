@@ -145,11 +145,12 @@ export const FileTreeRow = memo(function FileTreeRow({
     [node.indeterminate]
   );
 
+
   if (isFolder) {
     return (
       <div
-        className="flex items-center px-2 py-1 sticky z-10 w-full bg-[#161b22]/90 backdrop-blur-sm border-b border-border-dark"
-        style={{ ...style, paddingLeft }}
+        className="flex items-center pr-2 h-8 w-full bg-[#161b22]/90 backdrop-blur-sm border-b border-border-dark group hover:bg-white/[0.02] transition-colors cursor-pointer"
+        style={style}
         onClick={handleRowClick}
         data-testid="tree-node"
         data-node-type="folder"
@@ -172,6 +173,9 @@ export const FileTreeRow = memo(function FileTreeRow({
           }
         }}
       >
+        {/* Indentation Spacer */}
+        <div style={{ width: paddingLeft }} className="flex-shrink-0" />
+
         {/* Expand button */}
         <button
           type="button"
@@ -185,7 +189,7 @@ export const FileTreeRow = memo(function FileTreeRow({
           data-expanded={node.expanded}
         >
           <ChevronRight
-            size={14}
+            size={16}
             className={cn(
               "text-white/40 transition-transform select-none",
               node.expanded && "rotate-90"
@@ -198,7 +202,7 @@ export const FileTreeRow = memo(function FileTreeRow({
           <input
             ref={checkboxRef}
             type="checkbox"
-            className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-2.5 rounded-sm bg-transparent text-primary focus:ring-1 focus:ring-primary/50 focus:ring-offset-0 select-none"
+            className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-3 rounded-sm bg-transparent text-primary focus:ring-1 focus:ring-primary/50 focus:ring-offset-0 select-none"
             checked={node.checked}
             onChange={handleCheckboxChange}
             aria-label={`Select ${node.name}`}
@@ -212,22 +216,22 @@ export const FileTreeRow = memo(function FileTreeRow({
           aria-hidden="true"
           data-testid="tree-icon"
         >
-          {node.expanded ? <FolderOpen size={14} /> : <Folder size={14} />}
+          {node.expanded ? <FolderOpen size={16} /> : <Folder size={16} />}
         </div>
 
         {/* Folder name */}
-        <span className="text-[10px] font-medium text-white/70 flex-shrink-0" data-testid="tree-label">
+        <span className="text-xs font-medium text-white/70 flex-shrink-0" data-testid="tree-label">
           {node.name}
         </span>
 
         {/* Item count */}
-        <span className="text-[9px] text-white/30 ml-2 flex-1 whitespace-nowrap">
+        <span className="text-[10px] text-white/30 ml-2 flex-1 whitespace-nowrap">
           ({node.child_count ?? node.childPaths?.length ?? 0} items)
         </span>
 
         {/* Path (clickable to copy) */}
         <span
-          className="text-white/20 text-[9px] pr-2 ml-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
+          className="text-white/20 text-[10px] pr-2 ml-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
           style={{ direction: "rtl", textAlign: "left" }}
           onClick={handlePathClick}
           title="Click to copy path"
@@ -243,8 +247,8 @@ export const FileTreeRow = memo(function FileTreeRow({
 
   return (
     <div
-      className="flex items-center px-2 py-0.5 min-h-[22px] border-b border-border-dark/30 hover:bg-white/[0.02] transition-colors"
-      style={{ ...style, paddingLeft }}
+      className="flex items-center pr-2 h-8 w-full border-b border-border-dark/30 hover:bg-white/[0.04] transition-colors cursor-pointer"
+      style={style}
       onClick={handleRowClick}
       data-testid="tree-node"
       data-node-type="file"
@@ -258,9 +262,12 @@ export const FileTreeRow = memo(function FileTreeRow({
         }
       }}
     >
+      {/* Indentation Spacer */}
+      <div style={{ width: paddingLeft }} className="flex-shrink-0" />
+
       {/* Invisible spacer to align with folders */}
       <div className="mr-1 invisible select-none w-[14px] h-[14px]">
-        <ChevronRight size={14} />
+        <ChevronRight size={16} />
       </div>
 
       {/* Checkbox */}
@@ -268,7 +275,7 @@ export const FileTreeRow = memo(function FileTreeRow({
         <input
           ref={checkboxRef}
           type="checkbox"
-          className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-2.5 rounded-sm bg-transparent text-primary focus:ring-1 focus:ring-primary/50 focus:ring-offset-0 select-none"
+          className="custom-checkbox appearance-none border border-border-dark checked:bg-primary checked:border-transparent relative after:content-[''] after:absolute after:inset-0 after:m-auto after:block after:w-1.5 after:h-1.5 after:rounded-[1px] checked:after:bg-white cursor-pointer size-3 rounded-sm bg-transparent text-primary focus:ring-1 focus:ring-primary/50 focus:ring-offset-0 select-none"
           checked={node.checked}
           onChange={handleCheckboxChange}
           aria-label={`Select ${node.name}`}
@@ -283,17 +290,17 @@ export const FileTreeRow = memo(function FileTreeRow({
           aria-hidden="true"
           data-testid="tree-icon"
         >
-          <Icon size={13} className={cn("text-white/70", className)} />
+          <Icon size={16} className={cn("text-white/70", className)} />
         </span>
 
         {/* File name */}
-        <span className="text-white text-[11px] flex-1 shrink-0" data-testid="tree-label">
+        <span className="text-white text-xs flex-1 shrink-0" data-testid="tree-label">
           {node.name}
         </span>
 
         {/* Path (clickable to copy) */}
         <span
-          className="text-white/20 text-[9px] pr-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
+          className="text-white/20 text-[10px] pr-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
           style={{ direction: "rtl", textAlign: "left" }}
           onClick={handlePathClick}
           title="Click to copy path"
@@ -304,7 +311,7 @@ export const FileTreeRow = memo(function FileTreeRow({
 
       {/* File size */}
       <div className="px-2 select-none">
-        <span className="text-[9px] font-mono text-white/30">{formatFileSize(node.size || 0)}</span>
+        <span className="text-[10px] font-mono text-white/30">{formatFileSize(node.size || 0)}</span>
       </div>
     </div>
   );
