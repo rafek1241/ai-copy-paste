@@ -212,11 +212,20 @@ function App() {
         />
 
         <div className="flex-1 flex flex-col min-w-0 relative bg-background-dark">
-          <Header
-            onAddFolder={handleAddFolder}
-            onSearch={setSearchQuery}
-            onClear={handleClearContext}
-          />
+          {currentView === "main" && activeTab === "files" && (
+            <Header
+              onAddFolder={handleAddFolder}
+              onSearch={setSearchQuery}
+              onClear={handleClearContext}
+            />
+          )}
+          {
+            currentView === "main" && activeTab !== "files" && (
+              // empty header to maintain layout
+               <header className="h-10 flex items-center px-3 border-b border-border-dark bg-[#0d1117]" data-testid="app-header">
+       </header>
+            )
+          }
 
           {currentView === "main" && (
             <MainTabs activeTab={activeTab} onTabChange={setActiveTab} />
