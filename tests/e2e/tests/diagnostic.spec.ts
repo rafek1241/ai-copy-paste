@@ -4,7 +4,6 @@
 
 describe("App Loading Diagnostic", () => {
   it("should load the application and find basic elements", async () => {
-    console.log("Step 1: Waiting for app to fully initialize...");
     await browser.waitUntil(
       async () => {
         return await browser.execute(() => {
@@ -13,19 +12,6 @@ describe("App Loading Diagnostic", () => {
       },
       { timeout: 4000, interval: 200 }
     );
-
-    // Log basic info
-    const title = await browser.getTitle();
-    console.log(`Window title: "${title}"`);
-
-    const url = await browser.getUrl();
-    console.log(`URL: ${url}`);
-
-    // Get and log page source
-    const source = await browser.getPageSource();
-    console.log("=== PAGE SOURCE (first 3000 chars) ===");
-    console.log(source.substring(0, 3000));
-    console.log("=== END PAGE SOURCE ===");
 
     // Check document state via execute
     const docState = await browser.execute(() => {
@@ -40,16 +26,11 @@ describe("App Loading Diagnostic", () => {
       };
     });
 
-    console.log("=== DOCUMENT STATE ===");
-    console.log(JSON.stringify(docState, null, 2));
-    console.log("=== END DOCUMENT STATE ===");
-
     // Simple assertions using Jest/WDIO style
     expect(docState.rootExists).toBe(true);
 
     // If root has children, the app rendered
     if (docState.rootChildCount > 0) {
-      console.log("SUCCESS: App rendered content in #root");
       expect(docState.rootChildCount).toBeGreaterThan(0);
     } else {
       console.log("WARNING: #root has no children - app may not have rendered");

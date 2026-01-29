@@ -62,8 +62,6 @@ describe("File Tree - Comprehensive Tests", () => {
       const folderNodes = await fileTreePage.getFolderNodes();
       const fileNodes = await fileTreePage.getFileNodes();
 
-      // Should have at least some folders and files
-      console.log(`Found ${folderNodes.length} folders and ${fileNodes.length} files`);
 
       // Verify folder nodes have folder type
       for (const folder of folderNodes) {
@@ -86,7 +84,7 @@ describe("File Tree - Comprehensive Tests", () => {
       // Find a folder
       const folders = await fileTreePage.getFolderNodes();
       if (folders.length === 0) {
-        console.log("No folders found, skipping hierarchical test");
+        expect(folders.length).toBeGreaterThan(0);
         return;
       }
 
@@ -105,9 +103,6 @@ describe("File Tree - Comprehensive Tests", () => {
           await browser.pause(500);
         }
 
-        // Get visible nodes after expansion
-        const nodesAfter = await fileTreePage.getVisibleNodeCount();
-        console.log(`Nodes visible after expansion: ${nodesAfter}`);
       }
 
       // Verify container still works
@@ -145,7 +140,6 @@ describe("File Tree - Comprehensive Tests", () => {
 
       // Should return to same state
       expect(countAfterReExpand).toBe(countAfterExpand);
-      console.log(`Expand: ${countAfterExpand}, Collapse: ${countAfterCollapse}, Re-expand: ${countAfterReExpand}`);
     });
   });
 
@@ -241,9 +235,6 @@ describe("File Tree - Comprehensive Tests", () => {
 
       // Get selected nodes
       const selectedNodes = await fileTreePage.getSelectedNodes();
-      console.log("Selected nodes:", selectedNodes);
-
-      // Should have selections
       expect(selectedNodes.length).toBeGreaterThan(0);
     });
   });
@@ -256,10 +247,7 @@ describe("File Tree - Comprehensive Tests", () => {
       // After ensureTestFixturesIndexed, root is expanded showing child folders.
       // Skip the root (folders[0]) and use two sibling child folders.
       const folders = await fileTreePage.getFolderNodes();
-      if (folders.length < 3) {
-        console.log(`Only ${folders.length} folders found, need at least 3 (root + 2 children)`);
-        return;
-      }
+      expect(folders.length).toBeGreaterThanOrEqual(3);
 
       // folders[0] is the root (already expanded), folders[1] and folders[2] are siblings
       const label1 = await folders[1].$(Selectors.treeLabel);
@@ -268,8 +256,8 @@ describe("File Tree - Comprehensive Tests", () => {
       const label2 = await folders[2].$(Selectors.treeLabel);
       const folder2Name = await label2.getText();
 
-      console.log(`Testing expansion independence: "${folder1Name}" and "${folder2Name}"`);
-
+      expect(folder1Name).not.toBe(folder2Name);
+      
       // Expand both sibling folders
       await fileTreePage.expandFolder(folder1Name);
       await browser.pause(500);
@@ -313,7 +301,7 @@ describe("File Tree - Comprehensive Tests", () => {
 
         // Should restore original view
         const afterClearCount = await fileTreePage.getVisibleNodeCount();
-        console.log(`Initial: ${initialCount}, After clear: ${afterClearCount}`);
+        expect(afterClearCount).toBe(initialCount);
       } catch (e) {
         console.log("Search test skipped - search may not be available");
       }
@@ -456,7 +444,7 @@ describe("File Tree - Comprehensive Tests", () => {
       const selectionInfo = await $(Selectors.selectionInfo);
       if (await selectionInfo.isExisting()) {
         const text = await selectionInfo.getText();
-        console.log("Selection info:", text);
+        expect(text).toContain(fileName);
         // Should contain some selection indication
       }
     });

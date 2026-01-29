@@ -51,13 +51,7 @@ describe("Regression Tests", () => {
       await appPage.navigateToMain();
       try {
         await fileTreePage.indexFolder(testFile);
-        await browser.execute(() => {
-          const tauri = (window as any).__TAURI__;
-          if (tauri) {
-            tauri.event.emit("refresh-file-tree");
-          }
-        });
-        await browser.pause(500);
+        await fileTreePage.refresh();
         await fileTreePage.waitForNodes(1, 5000);
       } catch {
       }
@@ -130,17 +124,14 @@ describe("Regression Tests", () => {
       // Wait for nodes - use longer timeout and graceful handling
       let hasNodes = false;
       try {
-        await fileTreePage.waitForNodes(1, 5000);
+        await fileTreePage.waitForNodes(1, 2000);
         hasNodes = true;
       } catch {
         console.log("No nodes available after timeout, skipping test");
         return;
       }
 
-      if (!hasNodes) {
-        console.log("No nodes available, skipping test");
-        return;
-      }
+      expect(hasNodes).toBe(true);
 
       // Select a file
       const nodes = await fileTreePage.getVisibleNodes();
@@ -159,10 +150,7 @@ describe("Regression Tests", () => {
         }
       }
 
-      if (!selectedFile) {
-        console.log("No files available to select, skipping test");
-        return;
-      }
+      expect(selectedFile).toBe(true);
 
       // Navigate to Prompt tab
       await browser.execute(() => {
@@ -255,14 +243,7 @@ describe("Regression Tests", () => {
       }
 
       // Refresh the file tree
-      await browser.execute(() => {
-        // @ts-ignore - Tauri API available in browser context
-        if (window.__TAURI__) {
-          // @ts-ignore
-          window.__TAURI__.event.emit("refresh-file-tree");
-        }
-      });
-      await browser.pause(500);
+      await fileTreePage.refresh();
 
       // Verify: nested.ts should NOT appear at root level anymore
       const rootNodes = await fileTreePage.getVisibleNodes();
@@ -356,7 +337,7 @@ describe("Regression Tests", () => {
 
       // Wait for nodes
       try {
-        await fileTreePage.waitForNodes(1, 5000);
+        await fileTreePage.waitForNodes(1, 2000);
       } catch {
         console.log("No nodes available, skipping test");
         return;
@@ -381,10 +362,7 @@ describe("Regression Tests", () => {
         }
       }
 
-      if (!selectedFileName) {
-        console.log("Could not select a file, skipping test");
-        return;
-      }
+      expect(selectedFileName).toBeTruthy();
 
       // Navigate to Prompt tab
       await browser.execute(() => {
@@ -453,7 +431,7 @@ describe("Regression Tests", () => {
 
       // Wait for nodes
       try {
-        await fileTreePage.waitForNodes(1, 5000);
+        await fileTreePage.waitForNodes(1, 2000);
       } catch {
         console.log("No nodes available, skipping test");
         return;
@@ -481,10 +459,7 @@ describe("Regression Tests", () => {
         }
       }
 
-      if (!selectedFileName) {
-        console.log("Could not select a file, skipping test");
-        return;
-      }
+      expect(selectedFileName).toBeTruthy();  
 
       // Navigate to Prompt tab and enter instructions
       await browser.execute(() => {

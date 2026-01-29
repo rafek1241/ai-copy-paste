@@ -43,10 +43,7 @@ describe("File Tree - State Preservation", () => {
 
       // Find and select a file
       const files = await fileTreePage.getFileNodes();
-      if (files.length === 0) {
-        console.log("No files found, skipping test");
-        return;
-      }
+      expect(files.length).toBeGreaterThan(0);
 
       const fileLabel = await files[0].$(Selectors.treeLabel);
       const fileName = await fileLabel.getText();
@@ -73,7 +70,6 @@ describe("File Tree - State Preservation", () => {
 
       // Check selection is preserved
       const stillSelected = await fileTreePage.isNodeSelected(fileName);
-      console.log(`File "${fileName}" selection preserved: ${stillSelected}`);
       expect(stillSelected).toBe(true);
     });
 
@@ -81,10 +77,7 @@ describe("File Tree - State Preservation", () => {
       await fileTreePage.ensureTestFixturesIndexed();
 
       const files = await fileTreePage.getFileNodes();
-      if (files.length < 2) {
-        console.log("Not enough files for multi-selection test");
-        return;
-      }
+      expect(files.length).toBeGreaterThanOrEqual(2);
 
       // Get names of first two files
       const label1 = await files[0].$(Selectors.treeLabel);
@@ -105,7 +98,6 @@ describe("File Tree - State Preservation", () => {
 
       // Get all selected nodes
       const selected = await fileTreePage.getSelectedNodes();
-      console.log("Selected nodes:", selected);
       expect(selected).toContain(fileName1);
       expect(selected).toContain(fileName2);
     });
@@ -166,7 +158,6 @@ describe("File Tree - State Preservation", () => {
 
       // Check expansion preserved
       const stillExpanded = await fileTreePage.isFolderExpanded(folderName);
-      console.log(`Folder "${folderName}" expansion preserved: ${stillExpanded}`);
       expect(stillExpanded).toBe(true);
     });
 
@@ -204,7 +195,6 @@ describe("File Tree - State Preservation", () => {
 
         // Nested should still be expanded
         const nestedStillExpanded = await fileTreePage.isFolderExpanded(nestedName);
-        console.log(`Nested folder "${nestedName}" still expanded: ${nestedStillExpanded}`);
         expect(nestedStillExpanded).toBe(true);
       }
     });
@@ -271,7 +261,7 @@ describe("File Tree - State Preservation", () => {
 
       // Select files inside
       const files = await fileTreePage.getFileNodes();
-      if (files.length === 0) return;
+      expect(files.length).toBeGreaterThan(0);
 
       const fileLabel = await files[0].$(Selectors.treeLabel);
       const fileName = await fileLabel.getText();
@@ -322,9 +312,6 @@ describe("File Tree - State Preservation", () => {
 
       // All visible files should now be selected
       const selectedNodes = await fileTreePage.getSelectedNodes();
-      console.log(`Selected ${selectedNodes.length} nodes after folder selection`);
-
-      // Should have multiple selections
       expect(selectedNodes.length).toBeGreaterThan(0);
     });
 
@@ -381,20 +368,14 @@ describe("File Tree - State Preservation", () => {
       await browser.pause(300);
 
       // Trigger refresh event
-      await browser.execute(() => {
-        // @ts-ignore
-        if (window.__TAURI__) {
-          // @ts-ignore
-          window.__TAURI__.event.emit("refresh-file-tree");
-        }
-      });
-      await browser.pause(1000);
+      await fileTreePage.refresh();
 
       // States should be preserved
       const stillExpanded = await fileTreePage.isFolderExpanded(folderName);
       const stillSelected = await fileTreePage.isNodeSelected(fileName);
 
-      console.log(`After refresh - Expanded: ${stillExpanded}, Selected: ${stillSelected}`);
+      expect(stillExpanded).toBe(true);
+      expect(stillSelected).toBe(true);
 
       // Note: depending on implementation, state may or may not be preserved
       // This test documents the current behavior

@@ -6,8 +6,7 @@ export class BasePage {
    * Wait for the application to be ready
    * Checks for the root React element instead of title (more reliable in CI)
    */
-  async waitForAppReady(timeout: number = 5000): Promise<void> {
-    console.log("Waiting for application to be ready...");
+  async waitForAppReady(timeout: number = 2000): Promise<void> {
 
     // First wait for any content to load
     await browser.waitUntil(
@@ -19,21 +18,18 @@ export class BasePage {
             return root !== null && root.children.length > 0;
           });
           if (rootExists) {
-            console.log("Root element found with content");
             return true;
           }
 
           // Fallback: check for any app-related element
           const appContainer = await $('[data-testid="app-container"]');
           if (await appContainer.isExisting()) {
-            console.log("App container found");
             return true;
           }
 
           // Another fallback: check for main element
           const mainEl = await $("main");
           if (await mainEl.isExisting()) {
-            console.log("Main element found");
             return true;
           }
 
@@ -52,7 +48,6 @@ export class BasePage {
 
     // Give React a moment to fully hydrate
     await browser.pause(500);
-    console.log("Application is ready");
   }
 
   async waitForTauriReady(timeout: number = 10000): Promise<void> {

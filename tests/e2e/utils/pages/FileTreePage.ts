@@ -322,6 +322,21 @@ export class FileTreePage extends BasePage {
   }
 
   /**
+   * Refresh the file tree via Tauri event
+   */
+  async refresh(): Promise<void> {
+    await browser.execute(() => {
+      // @ts-ignore
+      const tauri = window.__TAURI__;
+      if (tauri) {
+        // @ts-ignore
+        tauri.event.emit("refresh-file-tree");
+      }
+    });
+    await browser.pause(500);
+  }
+
+  /**
    * Ensure that test fixtures are indexed and visible
    */
   async ensureTestFixturesIndexed(): Promise<void> {
@@ -332,19 +347,9 @@ export class FileTreePage extends BasePage {
       console.log("FileTreePage: Tree is empty, indexing test fixtures...");
       const fixturesPath = this.getTestFixturesPath();
       await this.indexFolder(fixturesPath);
-      try {
-        await browser.execute(() => {
-          const tauri = (window as any).__TAURI__;
-          if (tauri) {
-            tauri.event.emit("refresh-file-tree");
-          }
-        });
-      } catch {
-      }
+      await this.refresh();
       await this.waitForNodes(1, 10000);
-    } else {
-      console.log(`FileTreePage: Tree already has ${nodeCount} nodes`);
-    }
+    } 
 
     // Ensure the root folder is expanded so tests can access files
     const folders = await this.getFolderNodes();
@@ -370,6 +375,8 @@ export class FileTreePage extends BasePage {
   async indexFolder(folderPath: string): Promise<void> {
     await this.waitForTauriReady();
 
+    const count = await this.getVisibleNodeCount();
+
     // Normalize path for Windows to avoid escaping issues
     const normalizedPath = folderPath.replace(/\\/g, '/');
 
@@ -389,10 +396,10 @@ export class FileTreePage extends BasePage {
     try {
       await browser.waitUntil(
         async () => {
-          const count = await this.getVisibleNodeCount();
-          return count > 0;
+          const newCount = await this.getVisibleNodeCount();
+          return newCount >= count;
         },
-        { timeout: 5000, interval: 300 }
+        { timeout: 3000, interval: 300 }
       );
     } catch {
       // Fallback: fixed pause if waitUntil fails

@@ -24,7 +24,7 @@ describe("Hierarchical Indexing", () => {
   const track1PlanPath = path.join(track1Path, "plan.ts");
   const track1SpecPath = path.join(track1Path, "spec.ts");
 
-  before(async () => {
+  beforeEach(async () => {
     await appPage.waitForLoad();
     await appPage.navigateToMain();
 
@@ -57,37 +57,20 @@ describe("Hierarchical Indexing", () => {
 
   describe("Selection and expansion state preservation", () => {
     it("Step 1: should index individual files from track1 directory", async () => {
-      // Index plan.ts
-      try {
-        await fileTreePage.indexFolder(track1PlanPath);
-      } catch (e) {
-        console.log("Could not index plan.ts:", e);
-        return;
-      }
 
+      // Index plan.ts
+      await expect(fileTreePage.indexFolder(track1PlanPath)).resolves.not.toThrow();
+      
       // Index spec.ts
-      try {
-        await fileTreePage.indexFolder(track1SpecPath);
-      } catch (e) {
-        console.log("Could not index spec.ts:", e);
-        return;
-      }
+      await expect(fileTreePage.indexFolder(track1SpecPath)).resolves.not.toThrow();
 
       // Refresh file tree
-      await browser.execute(() => {
-        // @ts-ignore
-        if (window.__TAURI__) {
-          // @ts-ignore
-          window.__TAURI__.event.emit("refresh-file-tree");
-        }
-      });
-      await browser.pause(500);
+      await fileTreePage.refresh();
 
       // Verify files are visible (they should appear at root level as orphans)
       try {
         await fileTreePage.waitForNodes(1, 5000);
         const nodeCount = await fileTreePage.getVisibleNodeCount();
-        console.log(`After indexing files: ${nodeCount} nodes visible`);
         expect(nodeCount).toBeGreaterThanOrEqual(1);
       } catch {
         console.log("No nodes visible after indexing files - test may fail");
@@ -97,11 +80,8 @@ describe("Hierarchical Indexing", () => {
     it("Step 2: should select plan.ts file", async () => {
       // Find and select plan.ts
       const planNode = await fileTreePage.findNodeByName("plan.ts");
-      if (!planNode) {
-        console.log("plan.ts not found, skipping selection test");
-        return;
-      }
-
+      expect(planNode).toBeTruthy();
+      
       await fileTreePage.selectNode("plan.ts");
       await browser.pause(300);
 
@@ -120,25 +100,15 @@ describe("Hierarchical Indexing", () => {
       }
 
       // Refresh file tree
-      await browser.execute(() => {
-        // @ts-ignore
-        if (window.__TAURI__) {
-          // @ts-ignore
-          window.__TAURI__.event.emit("refresh-file-tree");
-        }
-      });
-      await browser.pause(500);
+      await fileTreePage.refresh();
 
       // Find the track1 folder
       const track1Node = await fileTreePage.findNodeByName("track1");
-      if (!track1Node) {
-        console.log("track1 folder not found after indexing");
-        return;
-      }
+      expect(track1Node).toBeTruthy();
 
       // Check if track1 is expanded (should auto-expand due to selected children)
       const isExpanded = await fileTreePage.isFolderExpanded("track1");
-      console.log(`track1 expanded: ${isExpanded}`);
+      expect(isExpanded).toBe(true);
 
       // If not expanded, expand it manually
       if (!isExpanded) {
@@ -148,35 +118,19 @@ describe("Hierarchical Indexing", () => {
 
       // Verify plan.ts is still selected inside track1
       const isPlanSelected = await fileTreePage.isNodeSelected("plan.ts");
-      console.log(`plan.ts selected after parent indexing: ${isPlanSelected}`);
       expect(isPlanSelected).toBe(true);
     });
 
     it("Step 4: should index grandparent directory and show ALL child folders", async () => {
       // Index the hierarchical-test directory (grandparent)
-      try {
-        await fileTreePage.indexFolder(fixturesBase);
-      } catch (e) {
-        console.log("Could not index hierarchical-test directory:", e);
-        return;
-      }
+      await expect(fileTreePage.indexFolder(fixturesBase)).resolves.not.toThrow();
 
       // Refresh file tree
-      await browser.execute(() => {
-        // @ts-ignore
-        if (window.__TAURI__) {
-          // @ts-ignore
-          window.__TAURI__.event.emit("refresh-file-tree");
-        }
-      });
-      await browser.pause(500);
+      await fileTreePage.refresh();
 
       // Find the hierarchical-test folder
       const hierarchicalNode = await fileTreePage.findNodeByName("hierarchical-test");
-      if (!hierarchicalNode) {
-        console.log("hierarchical-test folder not found after indexing");
-        return;
-      }
+      expect(hierarchicalNode).toBeTruthy();
 
       // Expand hierarchical-test folder
       await fileTreePage.expandFolder("hierarchical-test");
@@ -192,16 +146,10 @@ describe("Hierarchical Indexing", () => {
         }
       }
 
-      console.log("Visible nodes after expanding hierarchical-test:", nodeNames);
-
       // Verify ALL three track folders are visible (not just track1 with selected files)
       const hasTrack1 = nodeNames.includes("track1");
       const hasTrack2 = nodeNames.includes("track2");
       const hasTrack3 = nodeNames.includes("track3");
-
-      console.log(`track1 visible: ${hasTrack1}`);
-      console.log(`track2 visible: ${hasTrack2}`);
-      console.log(`track3 visible: ${hasTrack3}`);
 
       // This is the key assertion - all three folders should be visible
       expect(hasTrack1).toBe(true);
@@ -219,7 +167,6 @@ describe("Hierarchical Indexing", () => {
 
       // Verify plan.ts is still selected
       const isPlanSelected = await fileTreePage.isNodeSelected("plan.ts");
-      console.log(`plan.ts still selected after grandparent indexing: ${isPlanSelected}`);
       expect(isPlanSelected).toBe(true);
     });
   });
@@ -228,19 +175,16 @@ describe("Hierarchical Indexing", () => {
     it("should show correct child count in folder labels", async () => {
       // Find hierarchical-test folder
       const hierarchicalNode = await fileTreePage.findNodeByName("hierarchical-test");
-      if (!hierarchicalNode) {
-        console.log("hierarchical-test folder not found");
-        return;
-      }
+      expect(hierarchicalNode).toBeTruthy();
 
       // Get the text content which should include "(3 items)" or similar
-      const nodeText = await hierarchicalNode.getText();
+      const nodeText = await hierarchicalNode?.getText() || "";
       console.log("hierarchical-test node text:", nodeText);
 
       // The folder should indicate it has 3 items (track1, track2, track3)
       // The exact format may vary, but we verify the number is correct
       const hasThreeItems = nodeText.includes("3");
-      console.log(`Shows 3 items: ${hasThreeItems}`);
+      expect(hasThreeItems).toBe(true);
 
       // When expanded, we should actually see 3 folders
       const isExpanded = await fileTreePage.isFolderExpanded("hierarchical-test");
@@ -262,7 +206,6 @@ describe("Hierarchical Indexing", () => {
         }
       }
 
-      console.log(`Actual folder count: ${folderCount}`);
       expect(folderCount).toBe(3);
     });
   });

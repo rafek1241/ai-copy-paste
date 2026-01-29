@@ -8,9 +8,7 @@ export class AppPage extends BasePage {
   /**
    * Wait for application to fully load
    */
-  async waitForLoad(timeout: number = 5000): Promise<void> {
-    console.log("AppPage: Waiting for app to load...");
-
+  async waitForLoad(timeout: number = 3000): Promise<void> {
     // Wait for the base app to be ready
     await this.waitForAppReady(timeout);
 
@@ -21,14 +19,12 @@ export class AppPage extends BasePage {
           // Try data-testid first
           const container = await $(Selectors.appContainer);
           if (await container.isExisting()) {
-            console.log("AppPage: Found app container via data-testid");
             return true;
           }
 
           // Try fallback class
           const containerFallback = await $(FallbackSelectors.appContainer);
           if (await containerFallback.isExisting()) {
-            console.log("AppPage: Found app container via fallback");
             return true;
           }
 
@@ -38,7 +34,6 @@ export class AppPage extends BasePage {
             return root !== null && root.innerHTML.length > 100;
           });
           if (hasContent) {
-            console.log("AppPage: Root has content");
             return true;
           }
 
@@ -55,7 +50,6 @@ export class AppPage extends BasePage {
       }
     );
 
-    console.log("AppPage: App loaded successfully");
   }
 
   /**

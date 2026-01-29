@@ -7,6 +7,8 @@ import { AppPage, FileTreePage } from "./utils/pages/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const __baseDir = path.join(__dirname, "..", "..");
+const __testResultsDir = path.join(__baseDir, "test-results");
 
 // Possible binary names (Cargo.toml name vs tauri.conf.json productName)
 const BINARY_NAMES = ["ai-context-collector", "ai-copy-paste-temp"];
@@ -15,12 +17,9 @@ const BINARY_NAMES = ["ai-context-collector", "ai-copy-paste-temp"];
 function getTauriAppPath(): string {
   const platform = os.platform();
   const ext = platform === "win32" ? ".exe" : "";
-  const baseDir = path.join(__dirname, "..", "..", "src-tauri", "target");
+  const baseDir = path.join(__baseDir, "src-tauri", "target");
 
   console.log("=== Searching for Tauri binary ===");
-  console.log(`Base directory: ${baseDir}`);
-  console.log(`Platform: ${platform}, Extension: ${ext || "(none)"}`);
-
   // Check all combinations of binary names and build types
   // Prioritize debug (easier for testing with devtools) over release
   const buildTypes = ["debug", "release"];
@@ -31,21 +30,8 @@ function getTauriAppPath(): string {
       console.log(`Checking: ${binaryPath}`);
 
       if (fs.existsSync(binaryPath)) {
-        console.log(`Found Tauri app at: ${binaryPath}`);
         return binaryPath;
       }
-    }
-  }
-
-  // List what's actually in the debug directory for debugging
-  const debugDir = path.join(baseDir, "debug");
-  if (fs.existsSync(debugDir)) {
-    console.log(`Contents of ${debugDir}:`);
-    try {
-      const files = fs.readdirSync(debugDir).filter((f) => !f.startsWith("."));
-      console.log(files.slice(0, 20).join(", "));
-    } catch (e) {
-      console.log(`Error listing directory: ${e}`);
     }
   }
 
@@ -105,7 +91,7 @@ export const config: Options.Testrunner = {
     [
       "junit",
       {
-        outputDir: "./reports",
+        outputDir: path.join(__testResultsDir, "reports"),
         outputFileFormat: function (options: any) {
           return `e2e-results-${options.cid}.xml`;
         },
@@ -115,7 +101,7 @@ export const config: Options.Testrunner = {
 
   // Logging
   logLevel: "info",
-  outputDir: "./logs",
+  outputDir: path.join(__testResultsDir, "logs"), 
 
   // Timeouts - CI needs longer due to Xvfb + webkit2gtk startup
   waitforTimeout: isCI ? 15000 : 5000,
@@ -128,7 +114,7 @@ export const config: Options.Testrunner = {
   // Hooks
   beforeSession: async function () {
     // Create test fixtures directory
-    const fixturesDir = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
+    const fixturesDir = path.join(__dirname,  "fixtures", "test-data");
     if (fs.existsSync(fixturesDir)) {
       fs.rmSync(fixturesDir, { recursive: true, force: true });
     }
@@ -262,7 +248,7 @@ export const config: Options.Testrunner = {
       const testName = test.title.replace(/[^a-zA-Z0-9]/g, "_");
 
       // Take screenshot on failure
-      const screenshotDir = path.join(__dirname, "screenshots");
+      const screenshotDir = path.join(__testResultsDir, "screenshots");
       if (!fs.existsSync(screenshotDir)) {
         fs.mkdirSync(screenshotDir, { recursive: true });
       }
@@ -273,7 +259,6 @@ export const config: Options.Testrunner = {
           `${testName}-${timestamp}.png`
         );
         await browser.saveScreenshot(screenshotPath);
-        console.log(`Screenshot saved: ${screenshotPath}`);
       } catch (screenshotError) {
         console.error("Failed to take screenshot:", screenshotError);
       }
@@ -281,7 +266,7 @@ export const config: Options.Testrunner = {
       // Capture page source for debugging
       try {
         const pageSource = await browser.getPageSource();
-        const logsDir = path.join(__dirname, "logs");
+        const logsDir = path.join(__testResultsDir, "logs");
         if (!fs.existsSync(logsDir)) {
           fs.mkdirSync(logsDir, { recursive: true });
         }
@@ -290,7 +275,6 @@ export const config: Options.Testrunner = {
           `${testName}-${timestamp}.html`
         );
         fs.writeFileSync(sourcePath, pageSource);
-        console.log(`Page source saved: ${sourcePath}`);
       } catch (sourceError) {
         console.error("Failed to capture page source:", sourceError);
       }

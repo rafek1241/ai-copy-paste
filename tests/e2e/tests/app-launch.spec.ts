@@ -4,7 +4,6 @@
 
 describe("Application Launch", () => {
   before(async () => {
-    console.log("Waiting for app to initialize...");
     await browser.waitUntil(
       async () => {
         return await browser.execute(() => {
