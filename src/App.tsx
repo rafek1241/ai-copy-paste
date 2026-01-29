@@ -1,13 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { FolderOpen } from "lucide-react";
-import { FileTree } from "./components/FileTree";
-import { PromptBuilder, PromptBuilderHandle } from "./components/PromptBuilder";
-import HistoryPanel from "./components/HistoryPanel";
-import Settings from "./components/Settings";
-import Sidebar from "./components/Sidebar";
-import Header from "./components/Header";
+import { PromptBuilderHandle } from "./components/PromptBuilder";
 import MainTabs, { ActiveTab } from "./components/MainTabs";
-import Footer from "./components/Footer";
 import { SidebarTab } from "./components/Sidebar";
 import { listen, emit, UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -16,6 +9,14 @@ import { useConfirmDialog } from "./components/ui/alert-dialog";
 import { useAppSettings, useAppCustomInstructions } from "./contexts/AppContext";
 import { useSessionPersistence } from "./hooks/useSessionPersistence";
 import "./App.css";
+
+// Layout & Views
+import { LayoutProvider } from "./components/layout/LayoutContext";
+import { AppLayout } from "./components/layout/AppLayout";
+import { FilesView } from "./components/views/FilesView";
+import { PromptView } from "./components/views/PromptView";
+import { HistoryView } from "./components/views/HistoryView";
+import { SettingsView } from "./components/views/SettingsView";
 
 type View = "main" | "history" | "settings";
 
@@ -158,6 +159,8 @@ function App() {
       confirmText: "Clear All",
       cancelText: "Cancel",
       variant: "destructive",
+      cancelButtonTestId: "confirm-dialog-cancel",
+      confirmButtonTestId: "confirm-dialog-confirm",
     });
 
     if (!confirmed) return;
@@ -201,95 +204,55 @@ function App() {
   }, [success, showError]);
 
   return (
-    <>
-      <div
-        className="flex h-screen w-screen border-t border-white/5 bg-[#010409] text-[#c9d1d9] antialiased overflow-hidden font-sans"
-        data-testid="app-container"
+    <LayoutProvider>
+      <AppLayout
+        activeTab={currentView === "main" ? activeTab : currentView}
+        onTabChange={handleSidebarChange}
+        dragActive={dragActive}
       >
-        <Sidebar
-          activeTab={currentView === "main" ? activeTab : currentView}
-          onTabChange={handleSidebarChange}
+        {currentView === "main" && (
+          <MainTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        )}
+
+        <FilesView
+          isActive={currentView === "main" && activeTab === "files"}
+          onSelectionChange={handleSelectionChange}
+          searchQuery={searchQuery}
+          initialSelectedPaths={selectedPaths}
+          shouldClearSelection={shouldClearFileTree}
+          onAddFolder={handleAddFolder}
+          onClear={handleClearContext}
+          onSearch={setSearchQuery}
+          onCopy={handleCopyContext}
+          tokenCount={tokenCount}
+          tokenLimit={settings.tokenLimit}
+          version="0.1.0"
         />
 
-        <div className="flex-1 flex flex-col min-w-0 relative bg-background-dark">
-          {currentView === "main" && activeTab === "files" && (
-            <Header
-              onAddFolder={handleAddFolder}
-              onSearch={setSearchQuery}
-              onClear={handleClearContext}
-            />
-          )}
-          {
-            currentView === "main" && activeTab !== "files" && (
-              // empty header to maintain layout
-               <header className="h-10 flex items-center px-3 border-b border-border-dark bg-[#0d1117]" data-testid="app-header">
-       </header>
-            )
-          }
+        <PromptView
+          ref={promptBuilderRef}
+          isActive={currentView === "main" && activeTab === "prompt"}
+          selectedFilePaths={selectedPaths}
+          onPromptBuilt={(prompt) => {
+            console.log("Built prompt:", prompt);
+          }}
+          onCopy={handleCopyContext}
+          tokenCount={tokenCount}
+          tokenLimit={settings.tokenLimit}
+          version="0.1.0"
+        />
 
-          {currentView === "main" && (
-            <MainTabs activeTab={activeTab} onTabChange={setActiveTab} />
-          )}
+        <HistoryView
+          isActive={currentView === "history"}
+          onRestore={handleHistoryRestore}
+        />
 
-          <main className="flex-1 flex flex-col overflow-hidden" role="main">
-            {currentView === "history" && (
-              <HistoryPanel onRestore={handleHistoryRestore} />
-            )}
-
-            {currentView === "settings" && (
-              <Settings />
-            )}
-
-            {/* FileTree stays mounted (hidden) to preserve expansion/selection state */}
-            <div className={currentView === "main" && activeTab === "files" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
-              <FileTree
-                onSelectionChange={handleSelectionChange}
-                searchQuery={searchQuery}
-                initialSelectedPaths={selectedPaths}
-                shouldClearSelection={shouldClearFileTree}
-              />
-            </div>
-
-            <div className={currentView === "main" && activeTab === "prompt" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
-              <PromptBuilder
-                ref={promptBuilderRef}
-                selectedFilePaths={selectedPaths}
-                onPromptBuilt={(prompt) => {
-                  console.log("Built prompt:", prompt);
-                }}
-              />
-            </div>
-          </main>
-
-          {currentView === "main" && (
-            <Footer
-              onCopy={handleCopyContext}
-              tokenCount={tokenCount}
-              tokenLimit={settings.tokenLimit}
-              version="0.1.0"
-            />
-          )}
-        </div>
-
-        {/* Drag and drop overlay */}
-        {dragActive && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#010409]/60 backdrop-blur-sm"
-            role="presentation"
-            aria-label="Drop zone active"
-          >
-            <div className="border-2 border-dashed border-primary/50 bg-primary/5 w-80 h-80 flex flex-col items-center justify-center rounded-xl gap-4">
-              <FolderOpen size={48} className="text-primary" aria-hidden="true" />
-              <span className="text-white/80 text-lg font-medium">Drop folder here</span>
-              <span className="text-white/40 text-xs">to add to context</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Render the confirm dialog */}
+        <SettingsView
+          isActive={currentView === "settings"}
+        />
+      </AppLayout>
       <ConfirmDialog />
-    </>
+    </LayoutProvider>
   );
 }
 
