@@ -100,7 +100,7 @@ export const config: Options.Testrunner = {
   ],
 
   // Logging
-  logLevel: "info",
+  logLevel: "warn",
   outputDir: path.join(__testResultsDir, "logs"), 
 
   // Timeouts - CI needs longer due to Xvfb + webkit2gtk startup

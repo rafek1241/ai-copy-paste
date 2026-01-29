@@ -221,4 +221,10 @@ describe("File Tree", () => {
       await browser.pause(300);
     });
   });
+
+  describe("Complex scenario: File hierarchy and interactions", ()=>{
+    beforeEach(async () =>{
+      await appPage.navigateToFiles();
+    });
+  })
 });
