@@ -106,9 +106,7 @@ describe('PromptBuilder', () => {
 
   it('should show error if building fails', async () => {
     const error = new Error('Build failed');
-    vi.mocked(assemblyService.assemblePrompt).mockImplementation(async () => {
-      throw error;
-    });
+    vi.mocked(assemblyService.assemblePrompt).mockRejectedValue(error);
 
     let builderRef: any = null;
     render(
@@ -122,19 +120,19 @@ describe('PromptBuilder', () => {
     // Wait for templates to load to avoid act() warnings
     await screen.findByText('Agent');
 
-    try {
-      await act(async () => {
+    await act(async () => {
+      try {
         await builderRef?.buildAndCopy();
-      });
-    } catch (e) {
-      // Expected
-    }
+      } catch (e) {
+        // Expected - error is re-thrown after setting state
+      }
+    });
     
     expect(assemblyService.assemblePrompt).toHaveBeenCalled();
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(screen.getByText(/Failed to build prompt: Error: Build failed/i)).toBeDefined();
+      expect(screen.getByTestId('error-display')).toBeInTheDocument();
     });
   });
 

@@ -19,7 +19,7 @@ describe("Header", () => {
         expect(screen.getByText("Clear")).toBeInTheDocument();
 
         // Check search toggle button
-        expect(screen.getByTestId("search-toggle-btn")).toBeInTheDocument();
+        expect(screen.getByTestId("search-toggle")).toBeInTheDocument();
     });
 
     it("calls onAddFolder when Add Context button is clicked", () => {
@@ -45,12 +45,12 @@ describe("Header", () => {
         render(<Header onSearch={onSearch} />);
 
         // Initially search input should not be visible
-        expect(screen.queryByTestId("file-tree-search")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("search-input")).not.toBeInTheDocument();
 
         // Click search toggle
-        fireEvent.click(screen.getByTestId("search-toggle-btn"));
+        fireEvent.click(screen.getByTestId("search-toggle"));
 
         // Now search input should be visible
-        expect(screen.getByTestId("file-tree-search")).toBeInTheDocument();
+        expect(screen.getByTestId("search-input")).toBeInTheDocument();
     });
 });

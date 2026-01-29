@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
 import { useHistory } from '../contexts/HistoryContext';
-import { useFileTree } from './FileTree/FileTreeContext';
 import { Trash2, History, CheckCircle, AlertTriangle, ChevronDown, RotateCcw, Loader2 } from "lucide-react";
 
 interface HistoryEntry {
@@ -26,9 +25,7 @@ interface HistoryPanelProps {
 }
 
 export const HistoryPanel = memo(function HistoryPanel({ onRestore }: HistoryPanelProps) {
-  const { history, loadHistory } = useHistory();
-  const { loadRootEntries: _loadRootEntries } = useFileTree();
-  const [loading, _setLoading] = useState(false);
+  const { history, loadHistory, isLoading } = useHistory();
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set());
   const [validationResults, setValidationResults] = useState<Map<number, ValidationResult>>(new Map());
 
@@ -129,7 +126,7 @@ export const HistoryPanel = memo(function HistoryPanel({ onRestore }: HistoryPan
     return new Date(timestamp * 1000).toLocaleString();
   };
 
-  if (loading && history.length === 0) {
+  if (isLoading && history.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#0d1117] text-white/40" role="status">
         <Loader2 className="animate-spin mr-2" size={24} aria-hidden="true" />

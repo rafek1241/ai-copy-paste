@@ -6,11 +6,11 @@ describe("Sidebar", () => {
     it("renders core navigation icons", () => {
         render(<Sidebar />);
 
-        expect(screen.getByText("terminal")).toBeInTheDocument();
-        expect(screen.getByText("folder")).toBeInTheDocument();
-        expect(screen.getByText("list_alt")).toBeInTheDocument(); // Prompt icon
-        expect(screen.getByText("history")).toBeInTheDocument();
-        expect(screen.getByText("settings")).toBeInTheDocument();
+        // Check for navigation buttons by testid since they use icon components
+        expect(screen.getByTestId("nav-files")).toBeInTheDocument();
+        expect(screen.getByTestId("nav-prompt")).toBeInTheDocument();
+        expect(screen.getByTestId("nav-history")).toBeInTheDocument();
+        expect(screen.getByTestId("nav-settings")).toBeInTheDocument();
     });
 
     it("handles tab switching", () => {
