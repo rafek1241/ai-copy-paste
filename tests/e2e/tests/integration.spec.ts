@@ -19,6 +19,20 @@ describe("End-to-End Integration Tests", () => {
   before(async () => {
     await appPage.waitForLoad();
 
+    // Clear any existing index from previous test specs
+    try {
+      await browser.execute(() => {
+        // @ts-ignore - Tauri API available in browser context
+        if (window.__TAURI__) {
+          // @ts-ignore
+          return window.__TAURI__.core.invoke("clear_index");
+        }
+      });
+      await browser.pause(500);
+    } catch {
+      // May fail if no data exists
+    }
+
     // Setup test fixtures
     if (!fs.existsSync(fixturesPath)) {
       fs.mkdirSync(fixturesPath, { recursive: true });
@@ -73,18 +87,8 @@ export const multiply = (a: number, b: number) => a * b;`,
       await appPage.navigateToMain();
       expect(await appPage.isFileTreeDisplayed()).toBe(true);
 
-      // Step 2: Index the test fixtures folder
-      try {
-        const currentCount = await fileTreePage.getVisibleNodeCount();
-        if (currentCount === 0) {
-          await fileTreePage.indexFolder(fixturesPath);
-        }
-        await fileTreePage.waitForNodes(1, 10000);
-      } catch (error) {
-        console.log("Indexing error:", error);
-        // May already be indexed - try waiting longer
-        await browser.pause(2000);
-      }
+      // Step 2: Ensure test fixtures are indexed
+      await fileTreePage.ensureTestFixturesIndexed();
 
       // Step 3: Verify files appear in tree
       const nodeCount = await fileTreePage.getVisibleNodeCount();

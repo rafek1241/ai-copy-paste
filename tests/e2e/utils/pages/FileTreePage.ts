@@ -429,12 +429,12 @@ export class FileTreePage extends BasePage {
       await browser.waitUntil(
         async () => {
           const newCount = await this.getVisibleNodeCount();
-          return newCount >= count;
+          return newCount > count;
         },
-        { timeout: 3000, interval: 300 }
+        { timeout: 5000, interval: 300 }
       );
     } catch {
-      // Fallback: fixed pause if waitUntil fails
+      // Count didn't increase - may be re-indexing already-indexed content
       await browser.pause(1000);
     }
   }
