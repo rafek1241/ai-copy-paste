@@ -1,8 +1,7 @@
 export interface FileEntry {
-  id: number;
-  parent_id: number | null;
+  path: string;  // Primary key
+  parent_path: string | null;
   name: string;
-  path: string;
   size: number | null;
   mtime: number | null;
   is_dir: boolean;
@@ -15,8 +14,10 @@ export interface TreeNode extends FileEntry {
   expanded: boolean;
   checked: boolean;
   indeterminate: boolean;
+  raw_path?: string;
+  raw_parent_path?: string | null;
   children?: TreeNode[];
-  childIds?: number[];
+  childPaths?: string[];  // Child paths instead of IDs
   hasChildren?: boolean;
 }
 

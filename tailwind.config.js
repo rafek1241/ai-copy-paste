@@ -58,7 +58,7 @@ export default {
         }
       },
       fontFamily: {
-        "sans": ["Inter", "system-ui", "sans-serif"],
+        "sans": ["Inter Variable", "Inter", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)"],
       },
       keyframes: {

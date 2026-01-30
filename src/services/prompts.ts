@@ -10,7 +10,7 @@ export interface PromptTemplate {
 export interface BuildPromptRequest {
   template_id: string;
   custom_instructions?: string;
-  file_ids: number[];
+  file_paths: string[];
 }
 
 export interface BuildPromptResponse {
@@ -20,7 +20,6 @@ export interface BuildPromptResponse {
 }
 
 export interface FileContent {
-  id: number;
   path: string;
   content: string;
 }
@@ -44,17 +43,17 @@ export async function buildPromptFromFiles(
 }
 
 /**
- * Get content of a single file
+ * Get content of a single file by path
  */
-export async function getFileContent(fileId: number): Promise<FileContent> {
-  return await invoke<FileContent>("get_file_content", { fileId });
+export async function getFileContent(filePath: string): Promise<FileContent> {
+  return await invoke<FileContent>("get_file_content", { filePath });
 }
 
 /**
- * Get content of multiple files
+ * Get content of multiple files by paths
  */
 export async function getFileContents(
-  fileIds: number[]
+  filePaths: string[]
 ): Promise<FileContent[]> {
-  return await invoke<FileContent[]>("get_file_contents", { fileIds });
+  return await invoke<FileContent[]>("get_file_contents", { filePaths });
 }

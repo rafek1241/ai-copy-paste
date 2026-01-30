@@ -51,3 +51,6 @@ coverage/
 
 # binaries with drivers for e2e tests
 bin/
+
+# test results
+test-results/

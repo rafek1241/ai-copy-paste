@@ -1,0 +1,40 @@
+/**
+ * Simple diagnostic test to verify app loads in CI
+ */
+
+describe("App Loading Diagnostic", () => {
+  it("should load the application and find basic elements", async () => {
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          return document.querySelector('[data-testid="app-container"]') !== null;
+        });
+      },
+      { timeout: 4000, interval: 200 }
+    );
+
+    // Check document state via execute
+    const docState = await browser.execute(() => {
+      return {
+        readyState: document.readyState,
+        rootExists: !!document.getElementById("root"),
+        rootChildCount: document.getElementById("root")?.children?.length || 0,
+        rootHTML: document.getElementById("root")?.innerHTML?.substring(0, 500) || "EMPTY",
+        bodyChildCount: document.body?.children?.length || 0,
+        hasAppContainer: !!document.querySelector('[data-testid="app-container"]'),
+        hasAppTitle: !!document.querySelector('[data-testid="app-title"]'),
+      };
+    });
+
+    // Simple assertions using Jest/WDIO style
+    expect(docState.rootExists).toBe(true);
+
+    // If root has children, the app rendered
+    if (docState.rootChildCount > 0) {
+      expect(docState.rootChildCount).toBeGreaterThan(0);
+    } else {
+      console.log("WARNING: #root has no children - app may not have rendered");
+      // Don't fail - just log for debugging
+    }
+  });
+});

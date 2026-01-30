@@ -12,7 +12,7 @@ import { useTokenCount } from "../hooks/useTokenCount";
 
 interface TokenCounterProps {
   text?: string;
-  selectedFileIds?: number[];
+  selectedFilePaths?: string[];
   modelName?: ModelName;
   showLimit?: boolean;
   variant?: "default" | "compact";
@@ -20,14 +20,14 @@ interface TokenCounterProps {
 
 export const TokenCounter: React.FC<TokenCounterProps> = ({
   text = "",
-  selectedFileIds = [],
+  selectedFilePaths = [],
   modelName = "gpt-4o",
   showLimit = true,
   variant = "default",
 }) => {
   const [textTokenCount, setTextTokenCount] = useState(0);
   const [isTextCalculating, setIsTextCalculating] = useState(false);
-  const { totalTokens: filesTokenCount, isCalculating: isFilesCalculating, error: _error } = useTokenCount(selectedFileIds);
+  const { totalTokens: filesTokenCount, isCalculating: isFilesCalculating, error: _error } = useTokenCount(selectedFilePaths);
 
   useEffect(() => {
     if (!text) {
