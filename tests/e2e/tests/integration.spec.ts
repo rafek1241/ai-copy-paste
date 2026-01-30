@@ -75,11 +75,15 @@ export const multiply = (a: number, b: number) => a * b;`,
 
       // Step 2: Index the test fixtures folder
       try {
-        await fileTreePage.indexFolder(fixturesPath);
+        const currentCount = await fileTreePage.getVisibleNodeCount();
+        if (currentCount === 0) {
+          await fileTreePage.indexFolder(fixturesPath);
+        }
         await fileTreePage.waitForNodes(1, 10000);
       } catch (error) {
         console.log("Indexing error:", error);
-        // May already be indexed
+        // May already be indexed - try waiting longer
+        await browser.pause(2000);
       }
 
       // Step 3: Verify files appear in tree

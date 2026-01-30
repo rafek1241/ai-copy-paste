@@ -18,12 +18,12 @@ export const Selectors = {
   // Header controls
   addFolderBtn: '[data-testid="add-folder-btn"]',
   clearContextBtn: '[data-testid="clear-context-btn"]',
-  searchToggleBtn: '[data-testid="search-toggle-btn"]',
+  searchToggleBtn: '[data-testid="search-toggle"]',
   clearSearchBtn: '[data-testid="clear-search-btn"]',
 
   // File Tree
   fileTreeContainer: '[data-testid="file-tree-container"]',
-  fileTreeSearch: '[data-testid="file-tree-search"]',
+  fileTreeSearch: '[data-testid="search-input"]',
   fileTreeScroll: '[data-testid="file-tree-scroll"]',
   emptyState: '[data-testid="empty-state"]',
   treeNode: '[data-testid="tree-node"]',

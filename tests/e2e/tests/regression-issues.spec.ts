@@ -245,17 +245,21 @@ describe("Regression Tests", () => {
       // Refresh the file tree
       await fileTreePage.refresh();
 
-      // Verify: nested.ts should NOT appear at root level anymore
-      const rootNodes = await fileTreePage.getVisibleNodes();
-      let foundNestedAtRoot = false;
+      // Verify: nested.ts should NOT appear at root level (level 0) anymore
+      const allNodes = await fileTreePage.getVisibleNodes();
+      let nestedAtRootLevel = false;
       let foundTestDataFolder = false;
 
-      for (const node of rootNodes) {
+      for (const node of allNodes) {
         const label = await node.$(Selectors.treeLabel);
         if (await label.isExisting()) {
           const text = await label.getText();
           if (text === "nested.ts") {
-            foundNestedAtRoot = true;
+            // Check the data-level attribute to determine actual tree level
+            const level = await node.getAttribute("data-level");
+            if (level === "0" || level === null) {
+              nestedAtRootLevel = true;
+            }
           }
           if (text === "test-data" || text === "subfolder") {
             foundTestDataFolder = true;
@@ -263,9 +267,9 @@ describe("Regression Tests", () => {
         }
       }
 
-      // If parent folder is indexed, nested file should not be at root
+      // If parent folder is indexed, nested file should not be at root level (level 0)
       if (foundTestDataFolder) {
-        expect(foundNestedAtRoot).toBe(false);
+        expect(nestedAtRootLevel).toBe(false);
       }
     });
 

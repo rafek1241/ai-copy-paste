@@ -83,7 +83,7 @@ describe("Application Launch", () => {
       return {
         header: document.querySelector('[data-testid="app-header"]') !== null,
         addFolder: document.querySelector('[data-testid="add-folder-btn"]') !== null,
-        searchToggle: document.querySelector('[data-testid="search-toggle-btn"]') !== null,
+        searchToggle: document.querySelector('[data-testid="search-toggle"]') !== null,
       };
     });
 

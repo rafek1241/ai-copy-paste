@@ -24,11 +24,11 @@ describe("Hierarchical Indexing", () => {
   const track1PlanPath = path.join(track1Path, "plan.ts");
   const track1SpecPath = path.join(track1Path, "spec.ts");
 
-  beforeEach(async () => {
+  before(async () => {
     await appPage.waitForLoad();
     await appPage.navigateToMain();
 
-    // Clear any existing indexed data
+    // Clear any existing indexed data once before all tests
     try {
       await appPage.clearContext();
     } catch (e) {

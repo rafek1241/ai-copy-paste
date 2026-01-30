@@ -78,6 +78,7 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
                             <button
                                 onClick={clearSearch}
                                 className="absolute right-2 text-white/20 hover:text-white transition-colors"
+                                data-testid="clear-search-btn"
                             >
                                 <X size={12} />
                             </button>
