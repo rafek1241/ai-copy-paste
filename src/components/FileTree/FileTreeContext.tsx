@@ -148,7 +148,11 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   // Normalize path separators for cross-platform consistency
   const normalizePath = useCallback((filePath: string): string => {
-    return filePath.replace(/\\/g, '/');
+    const normalized = filePath.replace(/\\/g, '/');
+    if (/^[A-Za-z]:\/$/.test(normalized)) {
+      return normalized.slice(0, 2);
+    }
+    return normalized;
   }, []);
 
   // Helper function to get parent directory path
@@ -162,6 +166,9 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   // Helper function to get name from path
   const getNameFromPath = useCallback((filePath: string): string => {
     const normalized = normalizePath(filePath);
+    if (/^[A-Za-z]:$/.test(normalized)) {
+      return normalized;
+    }
     const lastSlash = normalized.lastIndexOf('/');
     return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
   }, [normalizePath]);
@@ -191,113 +198,147 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         parent_path: entry.parent_path ? normalizePath(entry.parent_path) : null,
       }));
 
-      // Group orphaned files by their parent directory
-      // An orphaned file is one whose parent directory is not in the entries list
-      const orphanedFilesByParent = new Map<string, FileEntry[]>();
-      const directoryPaths = new Set(normalizedEntries.filter(e => e.is_dir).map(e => e.path));
+      const rootEntries = normalizedEntries;
+      const rootDirs = rootEntries.filter(entry => entry.is_dir);
+      const rootFiles = rootEntries.filter(entry => !entry.is_dir);
 
-      normalizedEntries.forEach((entry) => {
-        if (!entry.is_dir && entry.parent_path) {
-          if (!directoryPaths.has(entry.parent_path)) {
-            if (!orphanedFilesByParent.has(entry.parent_path)) {
-              orphanedFilesByParent.set(entry.parent_path, []);
-            }
-            orphanedFilesByParent.get(entry.parent_path)!.push(entry);
+      const getCommonAncestorPath = (paths: string[]): string | null => {
+        if (paths.length === 0) return null;
+        const splitPaths = paths.map(p => normalizePath(p).split('/'));
+        let commonSegments = splitPaths[0];
+        for (let index = 1; index < splitPaths.length; index += 1) {
+          const segments = splitPaths[index];
+          let shared = 0;
+          while (shared < commonSegments.length && shared < segments.length && commonSegments[shared] === segments[shared]) {
+            shared += 1;
+          }
+          commonSegments = commonSegments.slice(0, shared);
+          if (commonSegments.length === 0) return null;
+        }
+        return commonSegments.join('/');
+      };
+
+      let rootAnchor: string | null = null;
+      if (rootDirs.length > 0 && rootFiles.length === 0) {
+        const commonDirAncestor = getCommonAncestorPath(rootDirs.map(entry => entry.path));
+        if (commonDirAncestor) {
+          rootAnchor = commonDirAncestor;
+        }
+      } else if (rootFiles.length > 0 && rootDirs.length === 0) {
+        const parentPaths = rootFiles.map(entry => entry.parent_path).filter((path): path is string => !!path);
+        const uniqueParents = new Set(parentPaths);
+        if (uniqueParents.size === 1 && parentPaths.length > 0) {
+          rootAnchor = parentPaths[0];
+        } else {
+          const commonFileAncestor = getCommonAncestorPath(rootFiles.map(entry => entry.path));
+          if (commonFileAncestor) {
+            rootAnchor = getParentDirectoryPath(commonFileAncestor) ?? commonFileAncestor;
           }
         }
-      });
+      } else if (rootEntries.length > 0) {
+        const commonMixedAncestor = getCommonAncestorPath(rootEntries.map(entry => entry.path));
+        if (commonMixedAncestor) {
+          rootAnchor = getParentDirectoryPath(commonMixedAncestor) ?? commonMixedAncestor;
+        }
+      }
 
       // Fresh maps for rebuild
       const newNodesMap: Record<string, TreeNode> = {};
-      const newRootPaths: string[] = [];
-      const processedPaths = new Set<string>();
-
-      const addRootPath = (path: string) => {
-        if (!processedPaths.has(path)) {
-          processedPaths.add(path);
-          newRootPaths.push(path);
-        }
-      };
 
       // Add all directory entries
       normalizedEntries.forEach((entry) => {
-        if (entry.is_dir) {
-          newNodesMap[entry.path] = {
-            ...entry,
-            expanded: false,
-            checked: false,
-            indeterminate: false,
-            hasChildren: true,
-            childPaths: [],
-          };
-          if (!entry.parent_path || !directoryPaths.has(entry.parent_path)) {
-            addRootPath(entry.path);
-          }
-        }
+        newNodesMap[entry.path] = {
+          ...entry,
+          expanded: entry.is_dir,
+          checked: false,
+          indeterminate: false,
+          hasChildren: entry.is_dir,
+          childPaths: [],
+        };
       });
 
-      // Create synthetic folder nodes for orphaned files
-      orphanedFilesByParent.forEach((files, parentPath) => {
-        if (!newNodesMap[parentPath]) {
-          const folderName = getNameFromPath(parentPath);
-          newNodesMap[parentPath] = {
-            path: parentPath,
-            parent_path: getParentDirectoryPath(parentPath),
-            raw_path: parentPath,
-            raw_parent_path: getParentDirectoryPath(parentPath),
-            name: folderName,
+      const ensureSyntheticNode = (path: string, parentPath: string | null) => {
+        if (!newNodesMap[path]) {
+          newNodesMap[path] = {
+            path,
+            parent_path: parentPath,
+            raw_path: path,
+            raw_parent_path: parentPath,
+            name: getNameFromPath(path),
             size: null,
             mtime: null,
             is_dir: true,
             token_count: null,
             fingerprint: null,
-            child_count: files.length,
+            child_count: null,
             expanded: true,
             checked: false,
             indeterminate: false,
             hasChildren: true,
-            childPaths: files.map(f => f.path),
+            childPaths: [],
           };
-          addRootPath(parentPath);
+        }
+      };
+
+      const ensureAncestorChain = (startPath: string | null) => {
+        let currentPath = startPath;
+        while (currentPath) {
+          const parentPath = getParentDirectoryPath(currentPath);
+          const isRoot = rootAnchor ? currentPath === rootAnchor : parentPath === null;
+          ensureSyntheticNode(currentPath, isRoot ? null : parentPath);
+          if (isRoot) break;
+          currentPath = parentPath;
+        }
+      };
+
+      rootEntries.forEach((entry) => {
+        ensureAncestorChain(entry.parent_path ?? null);
+      });
+
+      if (rootAnchor) {
+        ensureSyntheticNode(rootAnchor, null);
+      }
+
+      Object.values(newNodesMap).forEach((node) => {
+        if (node.is_dir) {
+          node.childPaths = [];
         }
       });
 
-      // Add all file entries
-      normalizedEntries.forEach((entry) => {
-        if (!entry.is_dir) {
-          const parentPath = entry.parent_path;
-          const isOrphaned = parentPath && !directoryPaths.has(parentPath);
-
-          newNodesMap[entry.path] = {
-            ...entry,
-            parent_path: isOrphaned && parentPath ? parentPath : entry.parent_path,
-            expanded: false,
-            checked: false,
-            indeterminate: false,
-            hasChildren: false,
-            childPaths: [],
-          };
-
-          if (!entry.parent_path) {
-            addRootPath(entry.path);
+      Object.values(newNodesMap).forEach((node) => {
+        const parentPath = node.parent_path;
+        if (parentPath && newNodesMap[parentPath]) {
+          const parent = newNodesMap[parentPath];
+          if (parent.is_dir) {
+            parent.childPaths = parent.childPaths ?? [];
+            if (!parent.childPaths.includes(node.path)) {
+              parent.childPaths.push(node.path);
+            }
           }
         }
       });
 
-      // Update childPaths for directories from root entries (both files AND subdirectories)
       Object.values(newNodesMap).forEach((node) => {
-        if (node.is_dir) {
-          const childPaths: string[] = node.childPaths || [];
-          normalizedEntries.forEach((entry) => {
-            if (entry.parent_path === node.path) {
-              if (!childPaths.includes(entry.path)) {
-                childPaths.push(entry.path);
-              }
-            }
-          });
-          node.childPaths = childPaths;
+        if (node.is_dir && node.childPaths) {
+          node.hasChildren = node.childPaths.length > 0 || node.hasChildren;
         }
       });
+
+      const newRootPaths: string[] = [];
+      if (rootAnchor) {
+        newRootPaths.push(rootAnchor);
+      } else {
+        const seenRoots = new Set<string>();
+        Object.values(newNodesMap).forEach((node) => {
+          const parentPath = node.parent_path;
+          if (!parentPath || !newNodesMap[parentPath]) {
+            if (!seenRoots.has(node.path)) {
+              seenRoots.add(node.path);
+              newRootPaths.push(node.path);
+            }
+          }
+        });
+      }
 
       // --- State preservation: auto-expand roots and restore previous state ---
       // Only apply state preservation when re-indexing (previous state existed)

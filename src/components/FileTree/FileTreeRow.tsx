@@ -14,6 +14,7 @@ import {
   FileText,
   FileType2,
   FileVideo,
+  HardDrive,
   Folder,
   FolderOpen,
 } from "lucide-react";
@@ -110,6 +111,7 @@ export const FileTreeRow = memo(function FileTreeRow({
   const { toggleExpand, toggleCheck } = useFileTree();
   const isFolder = node.is_dir;
   const paddingLeft = node.level * 12 + 8;
+  const isDriveRoot = isFolder && /^[A-Za-z]:$/.test(node.path);
 
   const handleRowClick = useCallback(() => {
     toggleCheck(node.path, !node.checked);
@@ -213,20 +215,23 @@ export const FileTreeRow = memo(function FileTreeRow({
 
         {/* Folder icon */}
         <div
-          className="mr-2 select-none text-yellow-600/70"
+          className={cn(
+            "mr-2 select-none ", 
+            isDriveRoot ? "text-gray-400" : "text-yellow-600/70"
+          )}  
           aria-hidden="true"
           data-testid="tree-icon"
         >
-          {node.expanded ? <FolderOpen size={16} /> : <Folder size={16} />}
+          {isDriveRoot ? <HardDrive size={16} /> : (node.expanded ? <FolderOpen size={16} /> : <Folder size={16} />)}
         </div>
 
         {/* Folder name */}
-        <span className="text-xs font-medium text-white/70 flex-shrink-0" data-testid="tree-label">
+        <span className="text-xs font-medium select-none text-white/70 flex-shrink-0" data-testid="tree-label">
           {node.name}
         </span>
 
         {/* Item count */}
-        <span className="text-[10px] text-white/30 ml-2 flex-1 whitespace-nowrap">
+        <span className="text-[10px] select-none text-white/30 ml-2 flex-1 whitespace-nowrap">
           ({node.child_count ?? node.childPaths?.length ?? 0} items)
         </span>
 

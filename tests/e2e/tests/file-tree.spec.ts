@@ -226,38 +226,114 @@ describe("File Tree", () => {
   describe("Complex scenario: File hierarchy and interactions", () => {
     const fixturesBase = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
     const hierarchicalTestPath = path.join(fixturesBase, "hierarchical-test");
+
+    const track1Path = path.join(hierarchicalTestPath, "track1");
+    const track2Path = path.join(hierarchicalTestPath, "track2");
+
     const track1PlanPath = path.join(hierarchicalTestPath, "track1", "plan.ts");
     const track1SpecPath = path.join(hierarchicalTestPath, "track1", "spec.ts");
 
-    // Helper: get visible node names
-    async function getVisibleNodeNames(): Promise<string[]> {
-      const nodes = await fileTreePage.getVisibleNodes();
-      const names: string[] = [];
-      for (const node of nodes) {
-        const label = await node.$(Selectors.treeLabel);
-        if (await label.isExisting()) {
-          names.push(await label.getText());
-        }
-      }
-      return names;
-    }
-
-    it("should handle full hierarchical indexing workflow with state preservation", async () => {
-      // Step 1 & 2: Navigate to files and clear context
+    beforeEach(async () => {
+      // Ensure we're on Files tab
       await appPage.navigateToFiles();
       await appPage.clearContext();
-      await browser.pause(500);
+      await browser.waitUntil(async () => {
+        const emptyNodeCount = await fileTreePage.getVisibleNodeCount();
+        return emptyNodeCount === 0;
+      }, {
+        timeout: 5000,
+        interval: 200,
+        timeoutMsg: "File tree did not become empty after clear context"
+      })
+    });
 
+    it("ensure that path will be always the direction of the nesting", async () => {
+      const veryDeepPath = path.join(hierarchicalTestPath, "track2", "notes.md");
+      const veryFarPath = path.join(fixturesBase, "utils.ts")
+
+      // verify that veryDeepPath is always the direction of the nesting
+      expect(veryDeepPath.includes(fixturesBase)).toBe(true);
+      expect(veryFarPath.includes(fixturesBase)).toBe(true);
+      expect(veryDeepPath.includes(path.dirname(veryFarPath))).toBe(true);
+
+      await fileTreePage.indexFolder(veryDeepPath);
+      await fileTreePage.indexFolder(veryFarPath);
+
+      const parentDir = path.basename(path.dirname(veryFarPath));
+      //except very far path parent folder should be a root folder and very deep path should be nested in it.
+      const veryFarParentNode = await fileTreePage.findNodeByName(parentDir);
+      expect(veryFarParentNode).toBeTruthy();
+
+      const veryFarParentLevel = await fileTreePage.getNodeLevel(parentDir);
+      expect(veryFarParentLevel).toBe(1);
+
+      const veryFarNode = await fileTreePage.findNodeByName(path.basename(veryFarPath));
+      expect(veryFarNode).toBeTruthy();
+      const veryFarNodeLevel = await fileTreePage.getNodeLevel(path.basename(veryFarPath));
+      expect(veryFarNodeLevel).toBe(2);
+
+      //split veryDeepPath into a parts and from the path that is not in parent dir is nested to the root parent dir folder
+      const veryDeepPathParts = veryDeepPath.split(path.sep);
+      const veryDeepPathNotInParentDir = veryDeepPathParts.slice(veryDeepPathParts.indexOf(parentDir) + 1).join(path.sep);
+
+      await fileTreePage.expandFolder(parentDir);
+      const nestedParts = veryDeepPathNotInParentDir.split(path.sep);
+      for (let index = 0; index < nestedParts.length; index += 1) {
+        const part = nestedParts[index];
+        const node = await fileTreePage.findNodeByName(part);
+        expect(node).toBeTruthy();
+        const expectedLevel = veryFarParentLevel + index + 1;
+        const actualLevel = await fileTreePage.getNodeLevel(part);
+        expect(actualLevel).toBe(expectedLevel);
+        if (index < nestedParts.length - 1) {
+          await fileTreePage.expandFolder(part);
+        }
+      }
+    });
+
+    it("should always group files that has same parent path in a folder", async () => {
+      //add first folder
+      await fileTreePage.indexFolder(track1Path);
+      const track1Node = await fileTreePage.findNodeByName("track1");
+      expect(track1Node).toBeTruthy();
+      const track1Expanded = await fileTreePage.isFolderExpanded("track1");
+      expect(track1Expanded).toBe(true);
+      let track1Level = await fileTreePage.getNodeLevel("track1");
+      expect(track1Level).toBe(1);
+
+      //add second folder with same path, therefore it should create common parent folder
+      await fileTreePage.indexFolder(track2Path);
+
+      const parentNode = await fileTreePage.findNodeByName("hierarchical-test");
+      expect(parentNode).toBeTruthy();
+
+      const parentLevel = await fileTreePage.getNodeLevel("hierarchical-test");
+      expect(parentLevel).toBe(1);
+
+      //hierarchical-test should be expanded and contains track1 and track2 in it
+      const hierarchicalTestExpanded = await fileTreePage.isFolderExpanded("hierarchical-test");
+      expect(hierarchicalTestExpanded).toBe(true);
+
+      const track2Node = await fileTreePage.findNodeByName("track2");
+      expect(track2Node).toBeTruthy();
+      const track2Expanded = await fileTreePage.isFolderExpanded("track2");
+      expect(track2Expanded).toBe(true);
+
+      track1Level = await fileTreePage.getNodeLevel("track1");
+      const track2Level = await fileTreePage.getNodeLevel("track2");
+      expect(track1Level).toBe(2);
+      expect(track2Level).toBe(2);
+    });
+
+    it("should handle full hierarchical indexing workflow with state preservation", async () => {
       // Step 3: EXPECT empty tree (no selected, expanded, or indexed files)
       const emptyNodeCount = await fileTreePage.getVisibleNodeCount();
       expect(emptyNodeCount).toBe(0);
 
       // Step 4: Index nested files via drag-drop (multiple files at once)
       await fileTreePage.indexFiles([track1PlanPath, track1SpecPath]);
-      await browser.pause(1000);
 
       // Step 5: EXPECT files are indexed and visible in file tree
-      await fileTreePage.waitForNodes(1, 10000);
       const afterIndexCount = await fileTreePage.getVisibleNodeCount();
       expect(afterIndexCount).toBeGreaterThanOrEqual(2);
 
@@ -284,7 +360,6 @@ describe("File Tree", () => {
 
       // Step 8: Select (check) plan.ts
       await fileTreePage.selectNode("plan.ts");
-      await browser.pause(300);
 
       // Step 9: EXPECT plan.ts is selected
       const planSelected = await fileTreePage.isNodeSelected("plan.ts");
@@ -292,7 +367,6 @@ describe("File Tree", () => {
 
       // Step 10: Drag-drop the hierarchical-test folder
       await fileTreePage.indexFolder(hierarchicalTestPath);
-      await browser.pause(1500);
 
       // Step 11: EXPECT hierarchical-test is root and expanded
       const hierarchicalNode = await fileTreePage.findNodeByName("hierarchical-test");
@@ -345,7 +419,6 @@ describe("File Tree", () => {
 
       // Step 17: Select notes.md
       await fileTreePage.selectNode("notes.md");
-      await browser.pause(300);
 
       // Step 18: EXPECT track2 checkbox is selected/marked
       // (notes.md is the only file in track2, so selecting it marks the folder)
@@ -358,7 +431,6 @@ describe("File Tree", () => {
 
       // Step 20: Index the test-data folder
       await fileTreePage.indexFolder(fixturesBase);
-      await browser.pause(1500);
 
       // Step 21: EXPECT test-data is root folder (first level) and expanded
       const testDataNode = await fileTreePage.findNodeByName("test-data");
