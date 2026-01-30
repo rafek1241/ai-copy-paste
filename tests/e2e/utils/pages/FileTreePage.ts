@@ -424,18 +424,20 @@ export class FileTreePage extends BasePage {
       }
     }, normalizedPath);
 
-    // Wait for indexing to complete - use waitUntil for faster detection
-    try {
-      await browser.waitUntil(
-        async () => {
-          const newCount = await this.getVisibleNodeCount();
-          return newCount > count;
-        },
-        { timeout: 5000, interval: 300 }
-      );
-    } catch {
-      // Count didn't increase - may be re-indexing already-indexed content
-      await browser.pause(1000);
+    // Wait for indexing to complete
+    if (count === 0) {
+      // First-time indexing: actively poll until nodes appear
+      try {
+        await browser.waitUntil(
+          async () => (await this.getVisibleNodeCount()) > 0,
+          { timeout: 10000, interval: 300 }
+        );
+      } catch {
+        await browser.pause(2000);
+      }
+    } else {
+      // Re-indexing existing content: count won't change, wait for render cycle
+      await browser.pause(2000);
     }
   }
 
