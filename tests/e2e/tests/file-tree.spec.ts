@@ -269,11 +269,18 @@ describe("File Tree", () => {
       const track1Expanded = await fileTreePage.isFolderExpanded("track1");
       expect(track1Expanded).toBe(true);
 
+      // EXPECT hierarchy levels: track1 is root (level 0), files are level 1
+      expect(await fileTreePage.getNodeLevel("track1")).toBe(0);
+
       // Verify plan.ts and spec.ts are visible inside track1
       const planNode = await fileTreePage.findNodeByName("plan.ts");
       expect(planNode).toBeTruthy();
       const specNode = await fileTreePage.findNodeByName("spec.ts");
       expect(specNode).toBeTruthy();
+
+      // EXPECT file hierarchy levels
+      expect(await fileTreePage.getNodeLevel("plan.ts")).toBe(1);
+      expect(await fileTreePage.getNodeLevel("spec.ts")).toBe(1);
 
       // Step 8: Select (check) plan.ts
       await fileTreePage.selectNode("plan.ts");
@@ -293,9 +300,19 @@ describe("File Tree", () => {
       const hierarchicalExpanded = await fileTreePage.isFolderExpanded("hierarchical-test");
       expect(hierarchicalExpanded).toBe(true);
 
+      // EXPECT hierarchical-test is root level (0)
+      expect(await fileTreePage.getNodeLevel("hierarchical-test")).toBe(0);
+
       // Step 12: EXPECT track1 is at second level, still expanded (state preserved)
       const track1StillExpanded = await fileTreePage.isFolderExpanded("track1");
       expect(track1StillExpanded).toBe(true);
+
+      // EXPECT track1 is now at level 1 (child of hierarchical-test)
+      expect(await fileTreePage.getNodeLevel("track1")).toBe(1);
+
+      // EXPECT plan.ts and spec.ts are now at level 2
+      expect(await fileTreePage.getNodeLevel("plan.ts")).toBe(2);
+      expect(await fileTreePage.getNodeLevel("spec.ts")).toBe(2);
 
       // Step 13: EXPECT plan.ts is still selected
       const planStillSelected = await fileTreePage.isNodeSelected("plan.ts");
@@ -312,12 +329,19 @@ describe("File Tree", () => {
       const track3Collapsed = await fileTreePage.isFolderExpanded("track3");
       expect(track3Collapsed).toBe(false);
 
+      // EXPECT track2 and track3 are at level 1 (siblings of track1)
+      expect(await fileTreePage.getNodeLevel("track2")).toBe(1);
+      expect(await fileTreePage.getNodeLevel("track3")).toBe(1);
+
       // Step 15: Expand track2
       await fileTreePage.expandFolder("track2");
 
       // Step 16: EXPECT notes.md is visible inside track2
       const notesNode = await fileTreePage.findNodeByName("notes.md");
       expect(notesNode).toBeTruthy();
+
+      // EXPECT notes.md is at level 2 (child of track2)
+      expect(await fileTreePage.getNodeLevel("notes.md")).toBe(2);
 
       // Step 17: Select notes.md
       await fileTreePage.selectNode("notes.md");
@@ -342,13 +366,23 @@ describe("File Tree", () => {
       const testDataExpanded = await fileTreePage.isFolderExpanded("test-data");
       expect(testDataExpanded).toBe(true);
 
+      // EXPECT test-data is at level 0 (root)
+      expect(await fileTreePage.getNodeLevel("test-data")).toBe(0);
+
       // Step 22: EXPECT hierarchical-test (second level) and expanded
       const hierarchicalStillExpanded = await fileTreePage.isFolderExpanded("hierarchical-test");
       expect(hierarchicalStillExpanded).toBe(true);
 
+      // EXPECT hierarchical-test is now at level 1 (child of test-data)
+      expect(await fileTreePage.getNodeLevel("hierarchical-test")).toBe(1);
+
       // Step 23: EXPECT track1, track2 (third level) and expanded
       expect(await fileTreePage.isFolderExpanded("track1")).toBe(true);
       expect(await fileTreePage.isFolderExpanded("track2")).toBe(true);
+
+      // EXPECT track1 and track2 are now at level 2 (grandchildren of test-data)
+      expect(await fileTreePage.getNodeLevel("track1")).toBe(2);
+      expect(await fileTreePage.getNodeLevel("track2")).toBe(2);
 
       // Step 24: EXPECT track2 is still checkbox-marked (all content selected)
       const track2StillSelected = await fileTreePage.isNodeSelected("track2");
@@ -359,6 +393,10 @@ describe("File Tree", () => {
       expect(notesStillSelected).toBe(true);
       const planFinalSelected = await fileTreePage.isNodeSelected("plan.ts");
       expect(planFinalSelected).toBe(true);
+
+      // EXPECT files are now at level 3 (great-grandchildren of test-data)
+      expect(await fileTreePage.getNodeLevel("plan.ts")).toBe(3);
+      expect(await fileTreePage.getNodeLevel("notes.md")).toBe(3);
     });
   })
 });

@@ -456,6 +456,18 @@ export class FileTreePage extends BasePage {
   }
 
   /**
+   * Get the hierarchy level of a node by name (reads data-level attribute)
+   */
+  async getNodeLevel(name: string): Promise<number> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      throw new Error(`Node "${name}" not found`);
+    }
+    const level = await node.getAttribute("data-level");
+    return parseInt(level, 10);
+  }
+
+  /**
    * Get all folder nodes
    */
   async getFolderNodes(): Promise<WebdriverIO.ElementArray> {
