@@ -31,9 +31,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children, activeTab, onTab
                 </main>
 
                 {footerContent && (
-                    <footer className="p-2 border-t border-border-dark bg-[#0d1117] z-30" role="contentinfo">
+                    <div className="border-t border-border-dark bg-[#0d1117] z-30">
                         {footerContent}
-                    </footer>
+                    </div>
                 )}
             </div>
 

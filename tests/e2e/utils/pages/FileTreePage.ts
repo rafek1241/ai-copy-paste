@@ -370,6 +370,38 @@ export class FileTreePage extends BasePage {
   }
 
   /**
+   * Index multiple files/folders at once via drag-drop
+   */
+  async indexFiles(paths: string[]): Promise<void> {
+    await this.waitForTauriReady();
+
+    const count = await this.getVisibleNodeCount();
+    const normalizedPaths = paths.map(p => p.replace(/\\/g, '/'));
+
+    await browser.execute((filePaths: string[]) => {
+      const tauri = (window as any).__TAURI__;
+      if (tauri) {
+        tauri.event.emit("tauri://drag-drop", {
+          paths: filePaths,
+          position: { x: 0, y: 0 }
+        });
+      } else {
+        throw new Error("Tauri API not available");
+      }
+    }, normalizedPaths);
+
+    // Wait for indexing to complete
+    try {
+      await browser.waitUntil(
+        async () => (await this.getVisibleNodeCount()) > count,
+        { timeout: 10000, interval: 300 }
+      );
+    } catch {
+      await browser.pause(2000);
+    }
+  }
+
+  /**
    * Index a folder via Tauri command (simulated through UI drag-drop)
    */
   async indexFolder(folderPath: string): Promise<void> {

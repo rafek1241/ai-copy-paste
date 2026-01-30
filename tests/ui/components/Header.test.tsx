@@ -8,7 +8,7 @@ describe("Header", () => {
         render(<Header onSearch={onSearch} />);
 
         // Check header exists
-        expect(screen.getByTestId("app-header")).toBeInTheDocument();
+        expect(screen.getByTestId("app-header-content")).toBeInTheDocument();
 
         // Check Add Context button
         expect(screen.getByTestId("add-folder-btn")).toBeInTheDocument();

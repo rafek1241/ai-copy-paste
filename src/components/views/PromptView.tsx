@@ -1,4 +1,4 @@
-import React, { useEffect, forwardRef } from "react";
+import { useEffect, forwardRef } from "react";
 import { PromptBuilder, PromptBuilderHandle } from "../PromptBuilder";
 import Footer from "../Footer";
 import { useLayout } from "../layout/LayoutContext";

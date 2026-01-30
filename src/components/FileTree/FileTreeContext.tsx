@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useCallback, useMemo, ReactNode } from "react";
+import React, { createContext, useContext, useReducer, useCallback, useMemo, useRef, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { TreeNode, FileEntry } from "../../types";
 
@@ -92,6 +92,10 @@ interface FileTreeProviderProps {
 export function FileTreeProvider({ children, searchQuery = "", onSelectionChange }: FileTreeProviderProps) {
   const [state, dispatch] = useReducer(fileTreeReducer, initialState);
 
+  // Ref to access current state inside loadRootEntries without stale closure
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   // Helper: Check if node matches filter
   const matchesFilter = useCallback(
     (node: TreeNode): boolean => {
@@ -162,8 +166,18 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
   }, [normalizePath]);
 
-  // Load root entries
+  // Load root entries - preserves expansion/selection state across re-indexing
   const loadRootEntries = useCallback(async () => {
+    // Capture previous state for preservation across rebuild
+    const prevNodesMap = stateRef.current.nodesMap;
+    const prevExpandedPaths = new Set<string>();
+    const prevCheckedFilePaths = new Set<string>();
+
+    Object.values(prevNodesMap).forEach(node => {
+      if (node.expanded) prevExpandedPaths.add(node.path);
+      if (node.checked && !node.is_dir) prevCheckedFilePaths.add(node.path);
+    });
+
     dispatch({ type: "SET_LOADING", payload: true });
     try {
       const entries = await invoke<FileEntry[]>("get_children", { parentPath: null });
@@ -184,9 +198,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
       normalizedEntries.forEach((entry) => {
         if (!entry.is_dir && entry.parent_path) {
-          // Check if the parent directory is in our entries
           if (!directoryPaths.has(entry.parent_path)) {
-            // This is an orphaned file - group it by its parent directory
             if (!orphanedFilesByParent.has(entry.parent_path)) {
               orphanedFilesByParent.set(entry.parent_path, []);
             }
@@ -195,12 +207,11 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         }
       });
 
-      // Start with fresh maps - don't preserve old state to avoid stale data
+      // Fresh maps for rebuild
       const newNodesMap: Record<string, TreeNode> = {};
       const newRootPaths: string[] = [];
       const processedPaths = new Set<string>();
 
-      // Helper to add a path as root (and avoid duplicates)
       const addRootPath = (path: string) => {
         if (!processedPaths.has(path)) {
           processedPaths.add(path);
@@ -208,7 +219,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         }
       };
 
-      // First, add all directory entries
+      // Add all directory entries
       normalizedEntries.forEach((entry) => {
         if (entry.is_dir) {
           newNodesMap[entry.path] = {
@@ -225,8 +236,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         }
       });
 
-      // Create synthetic folder nodes for directories containing orphaned files
-      // Auto-expand these folders so individually selected files are immediately visible
+      // Create synthetic folder nodes for orphaned files
       orphanedFilesByParent.forEach((files, parentPath) => {
         if (!newNodesMap[parentPath]) {
           const folderName = getNameFromPath(parentPath);
@@ -242,7 +252,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             token_count: null,
             fingerprint: null,
             child_count: files.length,
-            expanded: true, // Auto-expand so files are visible
+            expanded: true,
             checked: false,
             indeterminate: false,
             hasChildren: true,
@@ -252,10 +262,9 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         }
       });
 
-      // Now add all file entries, updating parent_path for orphaned files
+      // Add all file entries
       normalizedEntries.forEach((entry) => {
         if (!entry.is_dir) {
-          // If this file's parent is not a directory in our index, it's under a synthetic folder
           const parentPath = entry.parent_path;
           const isOrphaned = parentPath && !directoryPaths.has(parentPath);
 
@@ -269,29 +278,145 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             childPaths: [],
           };
 
-          // Add files at the root level to rootPaths
           if (!entry.parent_path) {
             addRootPath(entry.path);
           }
         }
       });
 
-      // Update childPaths for all directories (real and synthetic)
+      // Update childPaths for directories from root entries (both files AND subdirectories)
       Object.values(newNodesMap).forEach((node) => {
         if (node.is_dir) {
-          // Collect all files that have this node as parent
           const childPaths: string[] = node.childPaths || [];
           normalizedEntries.forEach((entry) => {
-            if (!entry.is_dir && entry.parent_path === node.path) {
+            if (entry.parent_path === node.path) {
               if (!childPaths.includes(entry.path)) {
                 childPaths.push(entry.path);
               }
             }
           });
           node.childPaths = childPaths;
-          // node.child_count = childPaths.length; // Don't overwrite child_count from backend
         }
       });
+
+      // --- State preservation: auto-expand roots and restore previous state ---
+      // Only apply state preservation when re-indexing (previous state existed)
+      const isReIndex = Object.keys(prevNodesMap).length > 0;
+
+      // Helper to recursively load children for a directory from the backend
+      const loadedPaths = new Set<string>(); // Prevent infinite recursion
+      const loadAndExpandChildren = async (rawParentPath: string): Promise<string[]> => {
+        if (loadedPaths.has(rawParentPath)) return [];
+        loadedPaths.add(rawParentPath);
+
+        const childEntries = await invoke<FileEntry[]>("get_children", { parentPath: rawParentPath });
+        const childPaths: string[] = [];
+
+        for (const child of childEntries) {
+          const normalizedChildPath = normalizePath(child.path);
+          const normalizedChildParent = child.parent_path ? normalizePath(child.parent_path) : null;
+          childPaths.push(normalizedChildPath);
+
+          // Only add if not already in the map (from root entries)
+          if (!newNodesMap[normalizedChildPath]) {
+            const shouldExpand = prevExpandedPaths.has(normalizedChildPath) && child.is_dir;
+            newNodesMap[normalizedChildPath] = {
+              ...child,
+              raw_path: child.path,
+              raw_parent_path: child.parent_path,
+              path: normalizedChildPath,
+              parent_path: normalizedChildParent,
+              expanded: shouldExpand,
+              checked: false,
+              indeterminate: false,
+              hasChildren: child.is_dir,
+              childPaths: [],
+            };
+
+            // Recursively load children for previously-expanded subdirectories
+            if (shouldExpand) {
+              newNodesMap[normalizedChildPath].childPaths =
+                await loadAndExpandChildren(child.path);
+            }
+          } else if (prevExpandedPaths.has(normalizedChildPath)) {
+            const existingNode = newNodesMap[normalizedChildPath];
+            if (existingNode && existingNode.is_dir) {
+              // Node exists but was previously expanded - expand it and load children
+              newNodesMap[normalizedChildPath] = { ...existingNode, expanded: true };
+              if (!existingNode.childPaths || existingNode.childPaths.length === 0) {
+                newNodesMap[normalizedChildPath].childPaths =
+                  await loadAndExpandChildren(child.path);
+              }
+            }
+          }
+        }
+
+        return childPaths;
+      };
+
+      // Only run state preservation logic when re-indexing
+      if (isReIndex) {
+        // Auto-expand root directories and recursively restore expansion
+        for (const rootPath of newRootPaths) {
+          const rootNode = newNodesMap[rootPath];
+          if (rootNode && rootNode.is_dir && !rootNode.expanded) {
+            rootNode.expanded = true;
+            const rootChildPaths = rootNode.childPaths ?? [];
+            // Only load children from backend if childPaths isn't already populated
+            if (rootChildPaths.length === 0) {
+              const rawPath = rootNode.raw_path ?? rootPath;
+              rootNode.childPaths = await loadAndExpandChildren(rawPath);
+            } else {
+              // Children already populated - recursively restore expansion for sub-dirs
+              const restoreExpansion = async (parentChildPaths: string[]) => {
+                for (const childPath of parentChildPaths) {
+                  const childNode = newNodesMap[childPath];
+                  if (childNode && childNode.is_dir && prevExpandedPaths.has(childPath) && !childNode.expanded) {
+                    childNode.expanded = true;
+                    const grandchildPaths = childNode.childPaths ?? [];
+                    if (grandchildPaths.length === 0) {
+                      childNode.childPaths = await loadAndExpandChildren(childNode.raw_path ?? childPath);
+                    } else {
+                      await restoreExpansion(grandchildPaths);
+                    }
+                  }
+                }
+              };
+              await restoreExpansion(rootChildPaths);
+            }
+          }
+        }
+
+        // Restore selection state for previously-checked files
+        prevCheckedFilePaths.forEach(filePath => {
+          if (newNodesMap[filePath] && !newNodesMap[filePath].is_dir) {
+            newNodesMap[filePath] = { ...newNodesMap[filePath], checked: true };
+          }
+        });
+
+        // Propagate parent selection states (indeterminate/checked) upward
+        const propagateParentState = (parentPath: string | null) => {
+          if (!parentPath || !newNodesMap[parentPath]) return;
+          const parent = newNodesMap[parentPath];
+          if (!parent.childPaths || parent.childPaths.length === 0) return;
+
+          const childNodes = parent.childPaths.map(p => newNodesMap[p]).filter(Boolean);
+          const checkedCount = childNodes.filter(c => c.checked).length;
+          const indeterminateCount = childNodes.filter(c => c.indeterminate).length;
+          const isAllChecked = checkedCount === childNodes.length && childNodes.length > 0;
+          const isIndeterminate = (checkedCount > 0 && !isAllChecked) || indeterminateCount > 0;
+
+          newNodesMap[parentPath] = { ...parent, checked: isAllChecked, indeterminate: isIndeterminate };
+          propagateParentState(parent.parent_path);
+        };
+
+        prevCheckedFilePaths.forEach(filePath => {
+          const node = newNodesMap[filePath];
+          if (node) {
+            propagateParentState(node.parent_path);
+          }
+        });
+      }
 
       dispatch({ type: "SET_NODES", payload: { map: newNodesMap, rootPaths: newRootPaths } });
     } catch (error) {

@@ -251,6 +251,8 @@ interface ConfirmDialogOptions {
   confirmText?: string;
   cancelText?: string;
   variant?: "default" | "destructive";
+  cancelButtonTestId?: string;
+  confirmButtonTestId?: string;
 }
 
 interface ConfirmState {
@@ -309,12 +311,13 @@ export function useConfirmDialog() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleCancel}>
+            <AlertDialogCancel onClick={handleCancel} data-testid={state.options.cancelButtonTestId}>
               {state.options.cancelText || "Cancel"}
             </AlertDialogCancel>
             <AlertDialogAction
               variant={state.options.variant}
               onClick={handleConfirm}
+              data-testid={state.options.confirmButtonTestId}
             >
               {state.options.confirmText || "Confirm"}
             </AlertDialogAction>

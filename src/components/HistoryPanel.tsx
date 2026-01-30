@@ -27,7 +27,7 @@ interface HistoryPanelProps {
 export const HistoryPanel = memo(function HistoryPanel({ onRestore }: HistoryPanelProps) {
   const { history, loadHistory, isLoading } = useHistory();
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set());
-  const [validationResults, setValidationResults] = useState<Map<number, ValidationResult>>(new Map());
+  const [validationResults] = useState<Map<number, ValidationResult>>(new Map());
 
   const { success, error: showError } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
@@ -35,15 +35,6 @@ export const HistoryPanel = memo(function HistoryPanel({ onRestore }: HistoryPan
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
-
-  const validateEntry = async (id: number, paths: string[]) => {
-    try {
-      const result = await invoke<ValidationResult>('validate_history_paths', { paths });
-      setValidationResults(prev => new Map(prev).set(id, result));
-    } catch (error) {
-      console.error('Failed to validate paths:', error);
-    }
-  };
 
   const handleRestore = useCallback(async (entry: HistoryEntry) => {
     const result = validationResults.get(entry.id);
