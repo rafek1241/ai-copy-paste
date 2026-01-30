@@ -19,21 +19,7 @@ describe("End-to-End Integration Tests", () => {
   before(async () => {
     await appPage.waitForLoad();
 
-    // Clear any existing index from previous test specs
-    try {
-      await browser.execute(() => {
-        // @ts-ignore - Tauri API available in browser context
-        if (window.__TAURI__) {
-          // @ts-ignore
-          return window.__TAURI__.core.invoke("clear_index");
-        }
-      });
-      await browser.pause(500);
-    } catch {
-      // May fail if no data exists
-    }
-
-    // Setup test fixtures
+    // Setup test fixtures (filesystem ops - no app interaction needed)
     if (!fs.existsSync(fixturesPath)) {
       fs.mkdirSync(fixturesPath, { recursive: true });
     }
@@ -74,8 +60,16 @@ export const multiply = (a: number, b: number) => a * b;`,
       "export const Button = ({ label }: { label: string }) => <button>{label}</button>;"
     );
 
-    // Ensure fixtures are indexed
+    // Navigate to main and clear context via UI (properly awaits completion)
     await appPage.navigateToMain();
+    try {
+      await appPage.clearContext();
+    } catch {
+      // May fail if no context exists
+    }
+    await browser.pause(500);
+
+    // Ensure fixtures are indexed
     await fileTreePage.ensureTestFixturesIndexed();
   });
 
