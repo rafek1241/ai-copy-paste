@@ -342,22 +342,43 @@ export class FileTreePage extends BasePage {
   async ensureTestFixturesIndexed(): Promise<void> {
     await this.waitForReady();
     await this.waitForTauriReady();
-    const nodeCount = await this.getVisibleNodeCount();
+    
+    let nodeCount = await this.getVisibleNodeCount();
     if (nodeCount === 0) {
       console.log("FileTreePage: Tree is empty, indexing test fixtures...");
       const fixturesPath = this.getTestFixturesPath();
       await this.indexFolder(fixturesPath);
-      await this.refresh();
-      await this.waitForNodes(1, 10000);
-    } 
+      
+      // Wait for nodes to appear with retry
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await this.waitForNodes(1, 5000);
+          break;
+        } catch {
+          console.log(`FileTreePage: Attempt ${attempt + 1} - nodes not yet visible, refreshing...`);
+          await this.refresh();
+          await browser.pause(500);
+        }
+      }
+    }
+    
+    // Final check: verify we have nodes now
+    nodeCount = await this.getVisibleNodeCount();
+    console.log(`FileTreePage: ensureTestFixturesIndexed complete, node count: ${nodeCount}`);
 
     // Ensure the root folder is expanded so tests can access files
-    const folders = await this.getFolderNodes();
-    if (folders.length > 0) {
-      const label = await folders[0].$(Selectors.treeLabel);
-      if (await label.isExisting()) {
-        const name = await label.getText();
-        await this.expandFolder(name);
+    if (nodeCount > 0) {
+      const folders = await this.getFolderNodes();
+      if (folders.length > 0) {
+        const label = await folders[0].$(Selectors.treeLabel);
+        if (await label.isExisting()) {
+          const name = await label.getText();
+          try {
+            await this.expandFolder(name);
+          } catch {
+            // May already be expanded
+          }
+        }
       }
     }
   }
@@ -375,7 +396,7 @@ export class FileTreePage extends BasePage {
   async indexFiles(paths: string[]): Promise<void> {
     await this.waitForTauriReady();
 
-    const count = await this.getVisibleNodeCount();
+    const countBefore = await this.getVisibleNodeCount();
     const normalizedPaths = paths.map(p => p.replace(/\\/g, '/'));
 
     await browser.execute((filePaths: string[]) => {
@@ -390,14 +411,29 @@ export class FileTreePage extends BasePage {
       }
     }, normalizedPaths);
 
-    // Wait for indexing to complete
+    // Wait for indexing to complete: poll for node count change, then stabilize
     try {
       await browser.waitUntil(
-        async () => (await this.getVisibleNodeCount()) > count,
+        async () => (await this.getVisibleNodeCount()) !== countBefore,
         { timeout: 10000, interval: 300 }
       );
     } catch {
-      await browser.pause(2000);
+      // Count may not change - fall through
+    }
+
+    // Stabilization: wait until node count stops changing
+    let lastCount = await this.getVisibleNodeCount();
+    let stableIterations = 0;
+    for (let i = 0; i < 10; i++) {
+      await browser.pause(300);
+      const currentCount = await this.getVisibleNodeCount();
+      if (currentCount === lastCount) {
+        stableIterations++;
+        if (stableIterations >= 2) break;
+      } else {
+        stableIterations = 0;
+        lastCount = currentCount;
+      }
     }
   }
 
@@ -407,7 +443,7 @@ export class FileTreePage extends BasePage {
   async indexFolder(folderPath: string): Promise<void> {
     await this.waitForTauriReady();
 
-    const count = await this.getVisibleNodeCount();
+    const countBefore = await this.getVisibleNodeCount();
 
     // Normalize path for Windows to avoid escaping issues
     const normalizedPath = folderPath.replace(/\\/g, '/');
@@ -424,20 +460,29 @@ export class FileTreePage extends BasePage {
       }
     }, normalizedPath);
 
-    // Wait for indexing to complete
-    if (count === 0) {
-      // First-time indexing: actively poll until nodes appear
-      try {
-        await browser.waitUntil(
-          async () => (await this.getVisibleNodeCount()) > 0,
-          { timeout: 10000, interval: 300 }
-        );
-      } catch {
-        await browser.pause(2000);
+    // Wait for indexing to complete: poll for node count change, then stabilize
+    try {
+      await browser.waitUntil(
+        async () => (await this.getVisibleNodeCount()) !== countBefore,
+        { timeout: 10000, interval: 300 }
+      );
+    } catch {
+      // Count may not change if re-indexing same content - fall through
+    }
+
+    // Stabilization: wait until node count stops changing
+    let lastCount = await this.getVisibleNodeCount();
+    let stableIterations = 0;
+    for (let i = 0; i < 10; i++) {
+      await browser.pause(300);
+      const currentCount = await this.getVisibleNodeCount();
+      if (currentCount === lastCount) {
+        stableIterations++;
+        if (stableIterations >= 2) break;
+      } else {
+        stableIterations = 0;
+        lastCount = currentCount;
       }
-    } else {
-      // Re-indexing existing content: count won't change, wait for render cycle
-      await browser.pause(2000);
     }
   }
 

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { FileTreeProvider, useFileTree } from "./FileTreeContext";
+import { FileTreeProvider, useFileTreeActions, useFileTreeState } from "./FileTreeContext";
 import { FileTreeFilters } from "./FileTreeFilters";
 import { FileTreeRow } from "./FileTreeRow";
 import { FileTreeEmpty } from "./FileTreeEmpty";
@@ -20,14 +20,15 @@ const FileTreeInner = memo(function FileTreeInner({
   initialSelectedPaths,
   shouldClearSelection,
 }: Omit<FileTreeProps, "onSelectionChange">) {
-  const { state, loadRootEntries, clearSelection, toggleCheck } = useFileTree();
+  const { state, flatTree } = useFileTreeState();
+  const { loadRootEntries, clearSelection, applyInitialSelection } = useFileTreeActions();
   const parentRef = useRef<HTMLDivElement>(null);
   const previousClearSelection = useRef(false);
   const { success } = useToast();
 
   // Virtual scrolling setup
   const rowVirtualizer = useVirtualizer({
-    count: state.flatTree.length,
+    count: flatTree.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 32,
     overscan: 10,
@@ -83,15 +84,9 @@ const FileTreeInner = memo(function FileTreeInner({
   // Restore selection from initial paths
   useEffect(() => {
     if (initialSelectedPaths && initialSelectedPaths.length > 0 && state.rootPaths.length > 0) {
-      const pathsSet = new Set(initialSelectedPaths);
-
-      Object.values(state.nodesMap).forEach((node) => {
-        if (!node.is_dir && pathsSet.has(node.path) && !node.checked) {
-          toggleCheck(node.path, true);
-        }
-      });
+      applyInitialSelection(initialSelectedPaths);
     }
-  }, [initialSelectedPaths, state.rootPaths.length, state.nodesMap, toggleCheck]);
+  }, [initialSelectedPaths, state.rootPaths.length, applyInitialSelection]);
 
   // Clear selection when signaled
   useEffect(() => {
@@ -121,7 +116,7 @@ const FileTreeInner = memo(function FileTreeInner({
         className="flex-1 overflow-auto relative custom-scrollbar"
         data-testid="file-tree-scroll"
       >
-        {state.flatTree.length === 0 ? (
+        {flatTree.length === 0 ? (
           <FileTreeEmpty hasSearchQuery={!!searchQuery} />
         ) : (
           <div
@@ -132,19 +127,18 @@ const FileTreeInner = memo(function FileTreeInner({
             }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const node = state.flatTree[virtualRow.index];
+              const flatNode = flatTree[virtualRow.index];
+              const node = flatNode ? state.nodesMap[flatNode.path] : undefined;
+              if (!node) {
+                return null;
+              }
 
               return (
                 <FileTreeRow
-                  key={virtualRow.key}
+                  key={node.path}
                   node={node}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
+                  level={flatNode.level}
+                  offsetTop={virtualRow.start}
                   onCopyPath={handleCopyPath}
                 />
               );

@@ -27,7 +27,12 @@
       "Bash(powershell:*)",
       "Bash(grep:*)",
       "Bash(npm run check:*)",
-      "Bash(npm run test:ui:*)"
+      "Bash(npm run test:ui:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm run e2e-session:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)"
     ]
   },
   "enabledPlugins": {

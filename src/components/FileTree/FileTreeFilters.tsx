@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
-import { FilterType, useFileTree } from "./FileTreeContext";
+import { FilterType, useFileTreeActions, useFilterType } from "./FileTreeContext";
 import { ChevronDown, ChevronsUpDown } from "lucide-react";
 
 const FILTER_OPTIONS: { id: FilterType; label: string }[] = [
@@ -14,7 +14,8 @@ interface FileTreeFiltersProps {
 }
 
 export const FileTreeFilters = memo(function FileTreeFilters({ className }: FileTreeFiltersProps) {
-  const { state, setFilter } = useFileTree();
+  const filterType = useFilterType();
+  const { setFilter } = useFileTreeActions();
 
   return (
     <div
@@ -35,11 +36,11 @@ export const FileTreeFilters = memo(function FileTreeFilters({ className }: File
             className={cn(
               "px-2 py-0.5 rounded text-[10px] font-bold transition-all",
               "focus:outline-none focus:ring-1 focus:ring-primary/50",
-              state.filterType === option.id
+              filterType === option.id
                 ? "bg-primary/20 text-primary"
                 : "text-white/40 hover:bg-white/5 hover:text-white/60"
             )}
-            aria-pressed={state.filterType === option.id}
+            aria-pressed={filterType === option.id}
           >
             {option.label}
           </button>

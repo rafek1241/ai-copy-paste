@@ -85,6 +85,23 @@ describe('FileTree Clear Context', () => {
         expect(emptyState).toHaveTextContent(/no matching files/i);
       });
     });
+
+    it('should match search query regardless of case and whitespace', async () => {
+      mockNodes = [
+        { path: '/FileOne.ts', parent_path: null, name: 'FileOne.ts', is_dir: false, size: 120, mtime: 125, token_count: null, fingerprint: null, child_count: null },
+      ];
+
+      mockInvoke.mockImplementation((cmd, args) => {
+        if (cmd === 'get_children' && args?.parentPath === null) {
+          return Promise.resolve(mockNodes);
+        }
+        return Promise.resolve([]);
+      });
+
+      render(<FileTree searchQuery="  fileone  " />);
+
+      await findNodeLabel('FileOne.ts');
+    });
   });
 
   describe('Clear all selections', () => {

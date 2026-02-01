@@ -79,12 +79,21 @@ export const multiply = (a: number, b: number) => a * b;`,
 
       // Step 1: Navigate to Main view
       await appPage.navigateToMain();
+      await browser.pause(500);
       expect(await appPage.isFileTreeDisplayed()).toBe(true);
 
       // Step 2: Ensure test fixtures are indexed
       await fileTreePage.ensureTestFixturesIndexed();
+      await browser.pause(500);
 
-      // Step 3: Verify files appear in tree
+      // Step 3: Verify files appear in tree - use waitForNodes for robustness
+      try {
+        await fileTreePage.waitForNodes(1, 5000);
+      } catch {
+        // If waitForNodes times out, refresh and try again
+        await fileTreePage.refresh();
+        await browser.pause(500);
+      }
       const nodeCount = await fileTreePage.getVisibleNodeCount();
       expect(nodeCount).toBeGreaterThanOrEqual(1);
 
@@ -137,6 +146,33 @@ export const multiply = (a: number, b: number) => a * b;`,
           expect(content.length).toBeGreaterThanOrEqual(10);
         }
       }
+    });
+  });
+
+  describe("Rust-React Indexing Integration", () => {
+    it("should reflect indexed files in the file tree", async function () {
+      this.timeout(30000);
+      await appPage.navigateToMain();
+      await fileTreePage.waitForReady();
+
+      try {
+        await appPage.clearContext();
+      } catch {
+        await browser.execute(() => {
+          const tauri = (window as any).__TAURI__;
+          if (tauri) {
+            tauri.core.invoke("clear_index");
+          }
+        });
+      }
+
+      await fileTreePage.indexFolder(fixturesPath);
+
+      const rootName = path.basename(fixturesPath);
+      await fileTreePage.expandFolder(rootName);
+
+      const node = await fileTreePage.findNodeByName("component.tsx");
+      expect(node).not.toBeNull();
     });
   });
 
@@ -239,6 +275,7 @@ export const multiply = (a: number, b: number) => a * b;`,
     });
 
     it("should restore full tree after clearing search", async function () {
+      this.timeout(30000);
       await appPage.navigateToMain();
 
       // Index if needed
@@ -266,6 +303,7 @@ export const multiply = (a: number, b: number) => a * b;`,
 
   describe("History Tracking Workflow", () => {
     it("should track sessions in history", async function () {
+      this.timeout(30000);
 
 
       // Get initial history count

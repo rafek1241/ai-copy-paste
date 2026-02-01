@@ -15,20 +15,26 @@ export const DOCS_EXTENSIONS = [
   ".md", ".txt", ".pdf", ".docx", ".doc", ".odt", ".rtf"
 ];
 
+const SRC_EXTENSION_SET = new Set(SRC_EXTENSIONS);
+const DOCS_EXTENSION_SET = new Set(DOCS_EXTENSIONS);
+
 // State types - using path as key instead of numeric ID
 interface FileTreeState {
   nodesMap: Record<string, TreeNode>;  // Keyed by path
   rootPaths: string[];
-  flatTree: (TreeNode & { level: number })[];
   filterType: FilterType;
   isLoading: boolean;
+}
+
+interface FlatTreeItem {
+  path: string;
+  level: number;
 }
 
 type FileTreeAction =
   | { type: "SET_NODES"; payload: { map: Record<string, TreeNode>; rootPaths: string[] } }
   | { type: "UPDATE_NODE"; payload: TreeNode }
   | { type: "UPDATE_NODES_MAP"; payload: Record<string, TreeNode> }
-  | { type: "SET_FLAT_TREE"; payload: (TreeNode & { level: number })[] }
   | { type: "SET_FILTER"; payload: FilterType }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "CLEAR_ALL" };
@@ -36,7 +42,6 @@ type FileTreeAction =
 const initialState: FileTreeState = {
   nodesMap: {},
   rootPaths: [],
-  flatTree: [],
   filterType: "ALL",
   isLoading: false,
 };
@@ -52,8 +57,6 @@ function fileTreeReducer(state: FileTreeState, action: FileTreeAction): FileTree
       };
     case "UPDATE_NODES_MAP":
       return { ...state, nodesMap: action.payload };
-    case "SET_FLAT_TREE":
-      return { ...state, flatTree: action.payload };
     case "SET_FILTER":
       return { ...state, filterType: action.payload };
     case "SET_LOADING":
@@ -66,10 +69,13 @@ function fileTreeReducer(state: FileTreeState, action: FileTreeAction): FileTree
 }
 
 // Context value type
-interface FileTreeContextValue {
+interface FileTreeStateContextValue {
   state: FileTreeState;
+  flatTree: FlatTreeItem[];
+}
+
+interface FileTreeActionsContextValue {
   dispatch: React.Dispatch<FileTreeAction>;
-  // Actions
   loadRootEntries: () => Promise<void>;
   loadChildren: (nodePath: string) => Promise<TreeNode[]>;
   toggleExpand: (nodePath: string) => Promise<void>;
@@ -77,11 +83,14 @@ interface FileTreeContextValue {
   clearSelection: () => void;
   setFilter: (filter: FilterType) => void;
   clearAll: () => void;
-  // Selection helpers
   getSelectedPaths: () => string[];
+  applyInitialSelection: (paths: string[]) => void;
 }
 
-const FileTreeContext = createContext<FileTreeContextValue | null>(null);
+const FileTreeStateContext = createContext<FileTreeStateContextValue | null>(null);
+const FileTreeActionsContext = createContext<FileTreeActionsContextValue | null>(null);
+// Dedicated context for filter type - prevents FileTreeFilters from re-rendering on tree changes
+const FilterTypeContext = createContext<FilterType>("ALL");
 
 interface FileTreeProviderProps {
   children: ReactNode;
@@ -91,6 +100,7 @@ interface FileTreeProviderProps {
 
 export function FileTreeProvider({ children, searchQuery = "", onSelectionChange }: FileTreeProviderProps) {
   const [state, dispatch] = useReducer(fileTreeReducer, initialState);
+  const normalizedQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
 
   // Ref to access current state inside loadRootEntries without stale closure
   const stateRef = useRef(state);
@@ -99,52 +109,53 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   // Helper: Check if node matches filter
   const matchesFilter = useCallback(
     (node: TreeNode): boolean => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
+      if (normalizedQuery) {
         const matchesSearch =
-          node.name.toLowerCase().includes(query) ||
-          (node.path && node.path.toLowerCase().includes(query));
+          node.name.toLowerCase().includes(normalizedQuery) ||
+          (node.path && node.path.toLowerCase().includes(normalizedQuery));
         if (!matchesSearch) return false;
       }
 
       if (state.filterType === "ALL") return true;
       if (node.is_dir) return true;
 
-      const ext = node.path.substring(node.path.lastIndexOf(".")).toLowerCase();
-      if (state.filterType === "SRC") return SRC_EXTENSIONS.includes(ext);
-      if (state.filterType === "DOCS") return DOCS_EXTENSIONS.includes(ext);
+      const dotIndex = node.path.lastIndexOf(".");
+      const ext = dotIndex >= 0 ? node.path.substring(dotIndex).toLowerCase() : "";
+      if (state.filterType === "SRC") return SRC_EXTENSION_SET.has(ext);
+      if (state.filterType === "DOCS") return DOCS_EXTENSION_SET.has(ext);
       return true;
     },
-    [state.filterType, searchQuery]
+    [state.filterType, normalizedQuery]
   );
 
-  // Build flat tree for virtual scrolling
+  // Build flat tree for virtual scrolling - uses single accumulator to avoid intermediate array allocations
   const buildFlatTree = useCallback(
-    (paths: string[], map: Record<string, TreeNode>, level = 0): (TreeNode & { level: number })[] => {
-      const result: (TreeNode & { level: number })[] = [];
-      for (const path of paths) {
-        const node = map[path];
-        if (!node) continue;
+    (rootPaths: string[], map: Record<string, TreeNode>): FlatTreeItem[] => {
+      const result: FlatTreeItem[] = [];
+      const traverse = (paths: string[], level: number) => {
+        for (const path of paths) {
+          const node = map[path];
+          if (!node) continue;
 
-        const isMatch = matchesFilter(node);
-        if (!node.is_dir && !isMatch) continue;
+          if (!node.is_dir && !matchesFilter(node)) continue;
 
-        result.push({ ...node, level });
+          result.push({ path, level });
 
-        if (node.expanded && node.childPaths) {
-          result.push(...buildFlatTree(node.childPaths, map, level + 1));
+          if (node.expanded && node.childPaths) {
+            traverse(node.childPaths, level + 1);
+          }
         }
-      }
+      };
+      traverse(rootPaths, 0);
       return result;
     },
     [matchesFilter]
   );
 
-  // Update flat tree when state changes
-  React.useEffect(() => {
-    const flatTree = buildFlatTree(state.rootPaths, state.nodesMap);
-    dispatch({ type: "SET_FLAT_TREE", payload: flatTree });
-  }, [state.nodesMap, state.rootPaths, buildFlatTree]);
+  const flatTree = useMemo(
+    () => buildFlatTree(state.rootPaths, state.nodesMap),
+    [state.rootPaths, state.nodesMap, buildFlatTree]
+  );
 
   // Normalize path separators for cross-platform consistency
   const normalizePath = useCallback((filePath: string): string => {
@@ -226,13 +237,15 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         }
       } else if (rootFiles.length > 0 && rootDirs.length === 0) {
         const parentPaths = rootFiles.map(entry => entry.parent_path).filter((path): path is string => !!path);
-        const uniqueParents = new Set(parentPaths);
-        if (uniqueParents.size === 1 && parentPaths.length > 0) {
-          rootAnchor = parentPaths[0];
-        } else {
-          const commonFileAncestor = getCommonAncestorPath(rootFiles.map(entry => entry.path));
-          if (commonFileAncestor) {
-            rootAnchor = getParentDirectoryPath(commonFileAncestor) ?? commonFileAncestor;
+        if (parentPaths.length === rootFiles.length) {
+          const uniqueParents = new Set(parentPaths);
+          if (uniqueParents.size === 1 && parentPaths.length > 0) {
+            rootAnchor = parentPaths[0];
+          } else {
+            const commonFileAncestor = getCommonAncestorPath(rootFiles.map(entry => entry.path));
+            if (commonFileAncestor) {
+              rootAnchor = getParentDirectoryPath(commonFileAncestor) ?? commonFileAncestor;
+            }
           }
         }
       } else if (rootEntries.length > 0) {
@@ -246,16 +259,16 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       const newNodesMap: Record<string, TreeNode> = {};
 
       // Add all directory entries
-      normalizedEntries.forEach((entry) => {
+      for (const entry of normalizedEntries) {
         newNodesMap[entry.path] = {
           ...entry,
-          expanded: entry.is_dir,
+          expanded: false,
           checked: false,
           indeterminate: false,
           hasChildren: entry.is_dir,
           childPaths: [],
         };
-      });
+      }
 
       const ensureSyntheticNode = (path: string, parentPath: string | null) => {
         if (!newNodesMap[path]) {
@@ -271,7 +284,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             token_count: null,
             fingerprint: null,
             child_count: null,
-            expanded: true,
+            expanded: false,
             checked: false,
             indeterminate: false,
             hasChildren: true,
@@ -291,38 +304,47 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         }
       };
 
-      rootEntries.forEach((entry) => {
+      for (const entry of rootEntries) {
         ensureAncestorChain(entry.parent_path ?? null);
-      });
+      }
 
       if (rootAnchor) {
         ensureSyntheticNode(rootAnchor, null);
       }
 
-      Object.values(newNodesMap).forEach((node) => {
+      // Single pass: reset childPaths, build parent-child relationships, and update hasChildren
+      const allNodes = Object.values(newNodesMap);
+      // First reset all directory childPaths
+      for (const node of allNodes) {
         if (node.is_dir) {
           node.childPaths = [];
         }
-      });
-
-      Object.values(newNodesMap).forEach((node) => {
+      }
+      // Then build parent-child links and update hasChildren in one pass
+      const childPathSets = new Map<string, Set<string>>();
+      for (const node of allNodes) {
         const parentPath = node.parent_path;
         if (parentPath && newNodesMap[parentPath]) {
           const parent = newNodesMap[parentPath];
           if (parent.is_dir) {
-            parent.childPaths = parent.childPaths ?? [];
-            if (!parent.childPaths.includes(node.path)) {
-              parent.childPaths.push(node.path);
+            let childSet = childPathSets.get(parentPath);
+            if (!childSet) {
+              childSet = new Set(parent.childPaths);
+              childPathSets.set(parentPath, childSet);
+            }
+            if (!childSet.has(node.path)) {
+              childSet.add(node.path);
+              parent.childPaths!.push(node.path);
             }
           }
         }
-      });
-
-      Object.values(newNodesMap).forEach((node) => {
+      }
+      // Update hasChildren based on childPaths
+      for (const node of allNodes) {
         if (node.is_dir && node.childPaths) {
           node.hasChildren = node.childPaths.length > 0 || node.hasChildren;
         }
-      });
+      }
 
       const newRootPaths: string[] = [];
       if (rootAnchor) {
@@ -344,17 +366,24 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       // Only apply state preservation when re-indexing (previous state existed)
       const isReIndex = Object.keys(prevNodesMap).length > 0;
 
+      // Track initial root entries to prevent treating them as children of each other
+      const initialRootPaths = new Set(newRootPaths);
+
       // Helper to recursively load children for a directory from the backend
       const loadedPaths = new Set<string>(); // Prevent infinite recursion
       const loadAndExpandChildren = async (rawParentPath: string): Promise<string[]> => {
-        if (loadedPaths.has(rawParentPath)) return [];
-        loadedPaths.add(rawParentPath);
+        const normalizedParent = normalizePath(rawParentPath);
+        if (loadedPaths.has(normalizedParent)) return [];
+        loadedPaths.add(normalizedParent);
 
         const childEntries = await invoke<FileEntry[]>("get_children", { parentPath: rawParentPath });
         const childPaths: string[] = [];
 
         for (const child of childEntries) {
           const normalizedChildPath = normalizePath(child.path);
+          // Skip self-references and root entries (to prevent siblings becoming each other's children)
+          if (normalizedChildPath === normalizedParent) continue;
+          if (initialRootPaths.has(normalizedChildPath)) continue;
           const normalizedChildParent = child.parent_path ? normalizePath(child.parent_path) : null;
           childPaths.push(normalizedChildPath);
 
@@ -395,15 +424,14 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         return childPaths;
       };
 
-      // Only run state preservation logic when re-indexing
+      // Only restore state during re-indexing (not initial load)
       if (isReIndex) {
-        // Auto-expand root directories and recursively restore expansion
+        // Restore expanded state for previously-expanded directories
         for (const rootPath of newRootPaths) {
           const rootNode = newNodesMap[rootPath];
-          if (rootNode && rootNode.is_dir && !rootNode.expanded) {
+          if (rootNode && rootNode.is_dir && prevExpandedPaths.has(rootPath) && !rootNode.expanded) {
             rootNode.expanded = true;
             const rootChildPaths = rootNode.childPaths ?? [];
-            // Only load children from backend if childPaths isn't already populated
             if (rootChildPaths.length === 0) {
               const rawPath = rootNode.raw_path ?? rootPath;
               rootNode.childPaths = await loadAndExpandChildren(rawPath);
@@ -427,7 +455,10 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             }
           }
         }
+      }
 
+      // Restore selection state when re-indexing
+      if (isReIndex) {
         // Restore selection state for previously-checked files
         prevCheckedFilePaths.forEach(filePath => {
           if (newNodesMap[filePath] && !newNodesMap[filePath].is_dir) {
@@ -492,8 +523,9 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   // Toggle node expansion
   const toggleExpand = useCallback(
     async (nodePath: string) => {
+      const currentState = stateRef.current;
       const normalizedNodePath = normalizePath(nodePath);
-      const node = state.nodesMap[normalizedNodePath];
+      const node = currentState.nodesMap[normalizedNodePath];
       if (!node || !node.is_dir) return;
 
       if (!node.expanded && (!node.childPaths || node.childPaths.length === 0)) {
@@ -505,11 +537,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
           parent_path: child.parent_path ? normalizePath(child.parent_path) : null,
         }));
 
-        const newNodesMap: Record<string, TreeNode> = {};
-        // Copy existing nodes with normalized paths
-        Object.entries(state.nodesMap).forEach(([path, n]) => {
-          newNodesMap[normalizePath(path)] = n;
-        });
+        const newNodesMap: Record<string, TreeNode> = { ...currentState.nodesMap };
 
         const childPaths = normalizedChildren.map((c) => c.path);
 
@@ -526,7 +554,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         dispatch({ type: "UPDATE_NODE", payload: { ...node, expanded: !node.expanded } });
       }
     },
-    [state.nodesMap, loadChildren, normalizePath]
+    [loadChildren, normalizePath]
   );
 
   // Helper: Update children selection recursively
@@ -602,53 +630,6 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     [normalizePath]
   );
 
-  // Toggle checkbox
-  const toggleCheck = useCallback(
-    async (nodePath: string, checked: boolean) => {
-      const newMap = { ...state.nodesMap };
-      const node = newMap[nodePath];
-      if (!node) return;
-
-      if (node.is_dir && checked && (!node.childPaths || node.childPaths.length === 0)) {
-        const childPaths = await loadAllChildrenRecursively(nodePath, newMap);
-        newMap[nodePath] = { ...node, checked, indeterminate: false, childPaths, expanded: true };
-      } else {
-        updateChildrenSelection(newMap, nodePath, checked);
-      }
-
-      updateParentSelection(newMap, node.parent_path);
-      dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
-
-      // Notify parent
-      if (onSelectionChange) {
-        const selected = collectSelected(newMap, state.rootPaths);
-        onSelectionChange(selected);
-      }
-    },
-    [state.nodesMap, state.rootPaths, onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection]
-  );
-
-  const clearSelection = useCallback(() => {
-    const newMap = { ...state.nodesMap };
-    let hasChanges = false;
-
-    Object.keys(newMap).forEach((path) => {
-      const node = newMap[path];
-      if (node && (node.checked || node.indeterminate)) {
-        newMap[path] = { ...node, checked: false, indeterminate: false };
-        hasChanges = true;
-      }
-    });
-
-    if (hasChanges) {
-      dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
-      if (onSelectionChange) {
-        onSelectionChange([]);
-      }
-    }
-  }, [state.nodesMap, onSelectionChange]);
-
-  // Helper: Collect selected files
   const collectSelected = useCallback(
     (map: Record<string, TreeNode>, paths: string[]): string[] => {
       const selectedPaths: string[] = [];
@@ -672,9 +653,58 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     []
   );
 
+  // Toggle checkbox
+  const toggleCheck = useCallback(
+    async (nodePath: string, checked: boolean) => {
+      const currentState = stateRef.current;
+      const newMap = { ...currentState.nodesMap };
+      const node = newMap[nodePath];
+      if (!node) return;
+
+      if (node.is_dir && checked && (!node.childPaths || node.childPaths.length === 0)) {
+        const childPaths = await loadAllChildrenRecursively(nodePath, newMap);
+        newMap[nodePath] = { ...node, checked, indeterminate: false, childPaths, expanded: true };
+      } else {
+        updateChildrenSelection(newMap, nodePath, checked);
+      }
+
+      updateParentSelection(newMap, node.parent_path);
+      dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
+
+      // Notify parent
+      if (onSelectionChange) {
+        const selected = collectSelected(newMap, currentState.rootPaths);
+        onSelectionChange(selected);
+      }
+    },
+    [onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection, collectSelected]
+  );
+
+  const clearSelection = useCallback(() => {
+    const currentState = stateRef.current;
+    const newMap = { ...currentState.nodesMap };
+    let hasChanges = false;
+
+    Object.keys(newMap).forEach((path) => {
+      const node = newMap[path];
+      if (node && (node.checked || node.indeterminate)) {
+        newMap[path] = { ...node, checked: false, indeterminate: false };
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
+      if (onSelectionChange) {
+        onSelectionChange([]);
+      }
+    }
+  }, [onSelectionChange]);
+
   const getSelectedPaths = useCallback(() => {
-    return collectSelected(state.nodesMap, state.rootPaths);
-  }, [state.nodesMap, state.rootPaths, collectSelected]);
+    const currentState = stateRef.current;
+    return collectSelected(currentState.nodesMap, currentState.rootPaths);
+  }, [collectSelected]);
 
   const setFilter = useCallback((filter: FilterType) => {
     dispatch({ type: "SET_FILTER", payload: filter });
@@ -684,9 +714,44 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     dispatch({ type: "CLEAR_ALL" });
   }, []);
 
-  const value = useMemo(
+  const applyInitialSelection = useCallback(
+    (paths: string[]) => {
+      const currentState = stateRef.current;
+      if (paths.length === 0 || currentState.rootPaths.length === 0) return;
+
+      const normalizedPaths = new Set(paths.map(normalizePath));
+      const newMap = { ...currentState.nodesMap };
+      let hasChanges = false;
+
+      normalizedPaths.forEach((path) => {
+        const node = newMap[path];
+        if (node && !node.is_dir && !node.checked) {
+          newMap[path] = { ...node, checked: true, indeterminate: false };
+          updateParentSelection(newMap, node.parent_path);
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
+        if (onSelectionChange) {
+          onSelectionChange(collectSelected(newMap, currentState.rootPaths));
+        }
+      }
+    },
+    [collectSelected, normalizePath, onSelectionChange, updateParentSelection]
+  );
+
+  const stateValue = useMemo(
     () => ({
       state,
+      flatTree,
+    }),
+    [state, flatTree]
+  );
+
+  const actionsValue = useMemo(
+    () => ({
       dispatch,
       loadRootEntries,
       loadChildren,
@@ -696,17 +761,45 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       setFilter,
       clearAll,
       getSelectedPaths,
+      applyInitialSelection,
     }),
-    [state, loadRootEntries, loadChildren, toggleExpand, toggleCheck, clearSelection, setFilter, clearAll, getSelectedPaths]
+    [dispatch, loadRootEntries, loadChildren, toggleExpand, toggleCheck, clearSelection, setFilter, clearAll, getSelectedPaths, applyInitialSelection]
   );
 
-  return <FileTreeContext.Provider value={value}>{children}</FileTreeContext.Provider>;
+  return (
+    <FilterTypeContext.Provider value={state.filterType}>
+      <FileTreeStateContext.Provider value={stateValue}>
+        <FileTreeActionsContext.Provider value={actionsValue}>
+          {children}
+        </FileTreeActionsContext.Provider>
+      </FileTreeStateContext.Provider>
+    </FilterTypeContext.Provider>
+  );
+}
+
+export function useFileTreeState() {
+  const context = useContext(FileTreeStateContext);
+  if (!context) {
+    throw new Error("useFileTreeState must be used within a FileTreeProvider");
+  }
+  return context;
+}
+
+export function useFileTreeActions() {
+  const context = useContext(FileTreeActionsContext);
+  if (!context) {
+    throw new Error("useFileTreeActions must be used within a FileTreeProvider");
+  }
+  return context;
+}
+
+// Lightweight hook that only re-renders when filterType changes (not on tree mutations)
+export function useFilterType(): FilterType {
+  return useContext(FilterTypeContext);
 }
 
 export function useFileTree() {
-  const context = useContext(FileTreeContext);
-  if (!context) {
-    throw new Error("useFileTree must be used within a FileTreeProvider");
-  }
-  return context;
+  const stateContext = useFileTreeState();
+  const actionsContext = useFileTreeActions();
+  return { ...stateContext, ...actionsContext };
 }

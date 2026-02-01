@@ -1,7 +1,7 @@
-import React, { memo, useCallback } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import { TreeNode } from "../../types";
 import { cn } from "@/lib/utils";
-import { useFileTree } from "./FileTreeContext";
+import { useFileTreeActions } from "./FileTreeContext";
 import {
   ChevronRight,
   FileArchive,
@@ -21,8 +21,9 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 interface FileTreeRowProps {
-  node: TreeNode & { level: number };
-  style: React.CSSProperties;
+  node: TreeNode;
+  level: number;
+  offsetTop: number;
   onCopyPath?: (path: string) => void;
 }
 
@@ -79,6 +80,10 @@ const fileIconMap: Record<string, { Icon: LucideIcon; className: string }> = {
 
 const defaultFileIcon = { Icon: FileText, className: "text-white/60" };
 
+// Stable references to prevent re-renders
+const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
+const rtlStyle: React.CSSProperties = { direction: "rtl", textAlign: "left" };
+
 function getFileIconMeta(name: string) {
   const parts = name.toLowerCase().split(".");
   if (parts.length < 2) {
@@ -105,13 +110,30 @@ function getParentPath(path: string): string {
 
 export const FileTreeRow = memo(function FileTreeRow({
   node,
-  style,
+  level,
+  offsetTop,
   onCopyPath,
 }: FileTreeRowProps) {
-  const { toggleExpand, toggleCheck } = useFileTree();
+  const { toggleExpand, toggleCheck } = useFileTreeActions();
   const isFolder = node.is_dir;
-  const paddingLeft = node.level * 12 + 8;
+  const paddingLeft = useMemo(() => level * 12 + 8, [level]);
+  const indentStyle = useMemo<React.CSSProperties>(() => ({ width: paddingLeft }), [paddingLeft]);
   const isDriveRoot = isFolder && /^[A-Za-z]:$/.test(node.path);
+  const parentPath = useMemo(() => getParentPath(node.path), [node.path]);
+  const fileIconMeta = useMemo(() => getFileIconMeta(node.name), [node.name]);
+  const formattedSize = useMemo(() => formatFileSize(node.size || 0), [node.size]);
+  const rowStyle = useMemo<React.CSSProperties>(
+    () => ({
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      transform: `translate3d(0, ${offsetTop}px, 0)`,
+      willChange: "transform",
+      contentVisibility: "auto",
+    }),
+    [offsetTop]
+  );
 
   const handleRowClick = useCallback(() => {
     toggleCheck(node.path, !node.checked);
@@ -147,37 +169,52 @@ export const FileTreeRow = memo(function FileTreeRow({
     [node.indeterminate]
   );
 
+  // Memoized keyboard handlers to avoid inline function allocation on every render
+  const handleFolderKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handleRowClick();
+      }
+      if (e.key === "ArrowRight" && !node.expanded) {
+        e.preventDefault();
+        toggleExpand(node.path);
+      }
+      if (e.key === "ArrowLeft" && node.expanded) {
+        e.preventDefault();
+        toggleExpand(node.path);
+      }
+    },
+    [handleRowClick, node.expanded, node.path, toggleExpand]
+  );
+
+  const handleFileKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handleRowClick();
+      }
+    },
+    [handleRowClick]
+  );
 
   if (isFolder) {
     return (
       <div
         className="flex items-center pr-2 h-8 w-full bg-[#161b22]/90 backdrop-blur-sm border-b border-border-dark group hover:bg-white/[0.02] transition-colors cursor-pointer"
-        style={style}
+        style={rowStyle}
         onClick={handleRowClick}
         data-testid="tree-node"
         data-node-type="folder"
-        data-level={node.level}
+        data-level={level}
         role="treeitem"
         aria-expanded={node.expanded}
         aria-selected={node.checked}
         tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            handleRowClick();
-          }
-          if (e.key === "ArrowRight" && !node.expanded) {
-            e.preventDefault();
-            toggleExpand(node.path);
-          }
-          if (e.key === "ArrowLeft" && node.expanded) {
-            e.preventDefault();
-            toggleExpand(node.path);
-          }
-        }}
+        onKeyDown={handleFolderKeyDown}
       >
         {/* Indentation Spacer */}
-        <div style={{ width: paddingLeft }} className="flex-shrink-0" />
+        <div style={indentStyle} className="flex-shrink-0" />
 
         {/* Expand button */}
         <button
@@ -201,7 +238,7 @@ export const FileTreeRow = memo(function FileTreeRow({
         </button>
 
         {/* Checkbox */}
-        <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
+        <div className="w-5 flex justify-center mr-1" onClick={stopPropagation}>
           <input
             ref={checkboxRef}
             type="checkbox"
@@ -238,36 +275,31 @@ export const FileTreeRow = memo(function FileTreeRow({
         {/* Path (clickable to copy) */}
         <span
           className="text-white/20 text-[10px] pr-2 ml-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
-          style={{ direction: "rtl", textAlign: "left" }}
+          style={rtlStyle}
           onClick={handlePathClick}
           title="Click to copy path"
         >
-          {getParentPath(node.path)}
+          {parentPath}
         </span>
       </div>
     );
   }
 
   // File row
-  const { Icon, className } = getFileIconMeta(node.name);
+  const { Icon, className } = fileIconMeta;
 
   return (
     <div
       className="flex items-center pr-2 h-8 w-full border-b border-border-dark/30 hover:bg-white/[0.04] transition-colors cursor-pointer"
-      style={style}
+      style={rowStyle}
       onClick={handleRowClick}
       data-testid="tree-node"
       data-node-type="file"
-      data-level={node.level}
+      data-level={level}
       role="treeitem"
       aria-selected={node.checked}
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleRowClick();
-        }
-      }}
+      onKeyDown={handleFileKeyDown}
     >
       {/* Indentation Spacer */}
       <div style={{ width: paddingLeft }} className="flex-shrink-0" />
@@ -278,7 +310,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       </div>
 
       {/* Checkbox */}
-      <div className="w-5 flex justify-center mr-1" onClick={(e) => e.stopPropagation()}>
+      <div className="w-5 flex justify-center mr-1" onClick={stopPropagation}>
         <input
           ref={checkboxRef}
           type="checkbox"
@@ -308,17 +340,17 @@ export const FileTreeRow = memo(function FileTreeRow({
         {/* Path (clickable to copy) */}
         <span
           className="text-white/20 text-[10px] pr-2 cursor-pointer hover:text-white/40 transition-colors select-none min-w-0 truncate"
-          style={{ direction: "rtl", textAlign: "left" }}
+          style={rtlStyle}
           onClick={handlePathClick}
           title="Click to copy path"
         >
-          {getParentPath(node.path)}
+          {parentPath}
         </span>
       </div>
 
       {/* File size */}
       <div className="px-2 select-none">
-        <span className="text-[10px] font-mono text-white/30">{formatFileSize(node.size || 0)}</span>
+        <span className="text-[10px] font-mono text-white/30">{formattedSize}</span>
       </div>
     </div>
   );

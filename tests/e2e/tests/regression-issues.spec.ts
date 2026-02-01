@@ -53,6 +53,21 @@ describe("Regression Tests", () => {
         await fileTreePage.indexFolder(testFile);
         await fileTreePage.refresh();
         await fileTreePage.waitForNodes(1, 5000);
+        // Expand any visible folders to make files visible
+        const nodes = await fileTreePage.getVisibleNodes();
+        for (const node of nodes) {
+          const isFolder = await fileTreePage.isNodeFolder(node);
+          if (isFolder) {
+            const label = await node.$(Selectors.treeLabel);
+            if (await label.isExisting()) {
+              const nodeText = await label.getText();
+              if (nodeText) {
+                await fileTreePage.expandFolder(nodeText);
+                await browser.pause(300);
+              }
+            }
+          }
+        }
       } catch {
       }
     });
@@ -215,7 +230,8 @@ describe("Regression Tests", () => {
       await browser.pause(500);
     });
 
-    it("should not show files at root level when their parent folder is indexed", async () => {
+    it("should not show files at root level when their parent folder is indexed", async function() {
+      this.timeout(30000);
       // First, index just the nested file
       try {
         await fileTreePage.indexFolder(nestedFile);
@@ -324,8 +340,31 @@ describe("Regression Tests", () => {
       const testFile = path.join(fixturesPath, "persistence-test.ts");
       fs.writeFileSync(testFile, 'export const persist = "test";');
 
+      // Navigate to Files tab first
+      await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="nav-files"]') as HTMLElement;
+        btn?.click();
+      });
+      await browser.pause(500);
+
       try {
         await fileTreePage.indexFolder(fixturesPath);
+        await fileTreePage.waitForNodes(1, 5000);
+        // Expand folders to make files visible
+        const nodes = await fileTreePage.getVisibleNodes();
+        for (const node of nodes) {
+          const isFolder = await fileTreePage.isNodeFolder(node);
+          if (isFolder) {
+            const label = await node.$(Selectors.treeLabel);
+            if (await label.isExisting()) {
+              const nodeText = await label.getText();
+              if (nodeText) {
+                await fileTreePage.expandFolder(nodeText);
+                await browser.pause(300);
+              }
+            }
+          }
+        }
       } catch {
         // May already be indexed
       }

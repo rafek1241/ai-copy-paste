@@ -90,7 +90,8 @@ describe("Hierarchical Indexing", () => {
       expect(isSelected).toBe(true);
     });
 
-    it("Step 3: should index parent directory (track1) and preserve selection", async () => {
+    it("Step 3: should index parent directory (track1) and preserve selection", async function() {
+      this.timeout(30000);
       // Index the track1 directory
       try {
         await fileTreePage.indexFolder(track1Path);

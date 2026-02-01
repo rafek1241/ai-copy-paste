@@ -101,6 +101,65 @@ describe('FileTree Selection Propagation', () => {
     });
   });
 
+  it('should apply initial selection in a single update', async () => {
+    const selectionNodes = [
+      {
+        path: '/file1.txt',
+        parent_path: null,
+        name: 'file1.txt',
+        is_dir: false,
+        size: 100,
+        mtime: 123456,
+        token_count: null,
+        fingerprint: 'fp1',
+        child_count: null,
+      },
+      {
+        path: '/file2.txt',
+        parent_path: null,
+        name: 'file2.txt',
+        is_dir: false,
+        size: 200,
+        mtime: 123457,
+        token_count: null,
+        fingerprint: 'fp2',
+        child_count: null,
+      },
+    ];
+
+    mockInvoke.mockImplementation((command, args) => {
+      if (command === 'get_children') {
+        const parentPath = args.parentPath;
+        if (!parentPath) {
+          return Promise.resolve(selectionNodes);
+        }
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const onSelectionChange = vi.fn();
+    render(
+      <FileTree
+        initialSelectedPaths={['/file1.txt', '/file2.txt']}
+        onSelectionChange={onSelectionChange}
+      />
+    );
+
+    await waitFor(() => {
+      const checkboxes = screen.getAllByTestId('tree-checkbox');
+      expect(checkboxes).toHaveLength(2);
+      checkboxes.forEach(cb => {
+        expect(cb).toBeChecked();
+      });
+    });
+
+    await waitFor(() => {
+      expect(onSelectionChange).toHaveBeenCalledTimes(1);
+      expect(onSelectionChange).toHaveBeenCalledWith(['/file1.txt', '/file2.txt']);
+    });
+  });
+
   it('should set parent to indeterminate when only some children are checked', async () => {
     render(<FileTree />);
 
