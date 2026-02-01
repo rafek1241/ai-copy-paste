@@ -366,6 +366,43 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       // Only apply state preservation when re-indexing (previous state existed)
       const isReIndex = Object.keys(prevNodesMap).length > 0;
 
+      // Track paths that should be expanded
+      const pathsToExpand = new Set<string>(prevExpandedPaths);
+
+      const addAncestorsToExpand = (path: string | null) => {
+        let current = path;
+        while (current) {
+          pathsToExpand.add(current);
+          current = getParentDirectoryPath(current);
+        }
+      };
+
+      // Ensure all ancestors of previously expanded paths are also in the set
+      Array.from(prevExpandedPaths).forEach(addAncestorsToExpand);
+      // Ensure ancestors of checked files are expanded so they are visible
+      Array.from(prevCheckedFilePaths).forEach(addAncestorsToExpand);
+
+      if (isReIndex) {
+        // For re-indexing: auto-expand parents of NEWLY added items
+        Object.keys(newNodesMap).forEach(path => {
+          if (!prevNodesMap[path]) {
+            const node = newNodesMap[path];
+            if (node.is_dir) {
+              pathsToExpand.add(path);
+            }
+            addAncestorsToExpand(node.parent_path);
+          }
+        });
+      } else if (rootEntries.length > 0) {
+        // Initial load with entries: auto-expand parents of the added entries
+        rootEntries.forEach(entry => {
+          if (entry.is_dir) {
+            pathsToExpand.add(entry.path);
+          }
+          addAncestorsToExpand(entry.parent_path);
+        });
+      }
+
       // Track initial root entries to prevent treating them as children of each other
       const initialRootPaths = new Set(newRootPaths);
 
@@ -389,7 +426,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
           // Only add if not already in the map (from root entries)
           if (!newNodesMap[normalizedChildPath]) {
-            const shouldExpand = prevExpandedPaths.has(normalizedChildPath) && child.is_dir;
+            const shouldExpand = pathsToExpand.has(normalizedChildPath) && child.is_dir;
             newNodesMap[normalizedChildPath] = {
               ...child,
               raw_path: child.path,
@@ -408,7 +445,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
               newNodesMap[normalizedChildPath].childPaths =
                 await loadAndExpandChildren(child.path);
             }
-          } else if (prevExpandedPaths.has(normalizedChildPath)) {
+          } else if (pathsToExpand.has(normalizedChildPath)) {
             const existingNode = newNodesMap[normalizedChildPath];
             if (existingNode && existingNode.is_dir) {
               // Node exists but was previously expanded - expand it and load children
@@ -424,35 +461,32 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         return childPaths;
       };
 
-      // Only restore state during re-indexing (not initial load)
-      if (isReIndex) {
-        // Restore expanded state for previously-expanded directories
-        for (const rootPath of newRootPaths) {
-          const rootNode = newNodesMap[rootPath];
-          if (rootNode && rootNode.is_dir && prevExpandedPaths.has(rootPath) && !rootNode.expanded) {
-            rootNode.expanded = true;
-            const rootChildPaths = rootNode.childPaths ?? [];
-            if (rootChildPaths.length === 0) {
-              const rawPath = rootNode.raw_path ?? rootPath;
-              rootNode.childPaths = await loadAndExpandChildren(rawPath);
-            } else {
-              // Children already populated - recursively restore expansion for sub-dirs
-              const restoreExpansion = async (parentChildPaths: string[]) => {
-                for (const childPath of parentChildPaths) {
-                  const childNode = newNodesMap[childPath];
-                  if (childNode && childNode.is_dir && prevExpandedPaths.has(childPath) && !childNode.expanded) {
-                    childNode.expanded = true;
-                    const grandchildPaths = childNode.childPaths ?? [];
-                    if (grandchildPaths.length === 0) {
-                      childNode.childPaths = await loadAndExpandChildren(childNode.raw_path ?? childPath);
-                    } else {
-                      await restoreExpansion(grandchildPaths);
-                    }
+      // Apply expansion state (both restored and auto-expanded)
+      for (const rootPath of newRootPaths) {
+        const rootNode = newNodesMap[rootPath];
+        if (rootNode && rootNode.is_dir && pathsToExpand.has(rootPath) && !rootNode.expanded) {
+          rootNode.expanded = true;
+          const rootChildPaths = rootNode.childPaths ?? [];
+          if (rootChildPaths.length === 0) {
+            const rawPath = rootNode.raw_path ?? rootPath;
+            rootNode.childPaths = await loadAndExpandChildren(rawPath);
+          } else {
+            // Children already populated - recursively restore expansion for sub-dirs
+            const restoreExpansion = async (parentChildPaths: string[]) => {
+              for (const childPath of parentChildPaths) {
+                const childNode = newNodesMap[childPath];
+                if (childNode && childNode.is_dir && pathsToExpand.has(childPath) && !childNode.expanded) {
+                  childNode.expanded = true;
+                  const grandchildPaths = childNode.childPaths ?? [];
+                  if (grandchildPaths.length === 0) {
+                    childNode.childPaths = await loadAndExpandChildren(childNode.raw_path ?? childPath);
+                  } else {
+                    await restoreExpansion(grandchildPaths);
                   }
                 }
-              };
-              await restoreExpansion(rootChildPaths);
-            }
+              }
+            };
+            await restoreExpansion(rootChildPaths);
           }
         }
       }
