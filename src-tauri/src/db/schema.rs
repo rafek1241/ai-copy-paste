@@ -2,13 +2,15 @@ use rusqlite::{Connection, Result};
 
 /// Initialize the database schema
 pub fn init_database(conn: &Connection) -> Result<()> {
-    // Core file index table
+    // Core file index table - using path as PRIMARY KEY
+    // Note: parent_path is NOT a foreign key - it stores the true filesystem parent path
+    // even if that parent hasn't been indexed yet. This allows indexing individual files
+    // without requiring their parent folder to be indexed first.
     conn.execute(
         "CREATE TABLE IF NOT EXISTS files (
-            id INTEGER PRIMARY KEY,
-            parent_id INTEGER REFERENCES files(id),
+            path TEXT PRIMARY KEY,
+            parent_path TEXT,
             name TEXT NOT NULL,
-            path TEXT NOT NULL UNIQUE,
             size INTEGER,
             mtime INTEGER,
             is_dir INTEGER DEFAULT 0,
@@ -20,12 +22,7 @@ pub fn init_database(conn: &Connection) -> Result<()> {
 
     // Create indices for efficient queries
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_parent ON files(parent_id)",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_path ON files(path)",
+        "CREATE INDEX IF NOT EXISTS idx_parent_path ON files(parent_path)",
         [],
     )?;
 
@@ -78,5 +75,15 @@ mod tests {
             )
             .unwrap();
         assert_eq!(table_count, 3); // files, history, settings
+
+        // Verify path is primary key
+        let pk_info: String = conn
+            .query_row(
+                "SELECT name FROM pragma_table_info('files') WHERE pk = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pk_info, "path");
     }
 }

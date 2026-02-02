@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { Copy } from "lucide-react";
 
 interface FooterProps {
     onCopy: () => void;
@@ -26,7 +27,7 @@ const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version
                 onClick={onCopy}
                 className="w-full h-9 bg-primary hover:bg-primary/90 text-white font-bold rounded flex items-center justify-center gap-2 shadow-lg shadow-primary/10 transition-all active:scale-[0.98]"
             >
-                <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                <Copy size={16} />
                 <span className="text-[11px] uppercase tracking-wider">Copy Context</span>
             </button>
             <div className="mt-2 flex justify-between items-center px-1">

@@ -1,16 +1,22 @@
-import { useState, useEffect, useRef } from "react";
-import { FileTree } from "./components/FileTree";
-import { PromptBuilder, PromptBuilderHandle } from "./components/PromptBuilder";
-import HistoryPanel from "./components/HistoryPanel";
-import Settings from "./components/Settings";
-import Sidebar from "./components/Sidebar";
-import Header from "./components/Header";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { PromptBuilderHandle } from "./components/PromptBuilder";
 import MainTabs, { ActiveTab } from "./components/MainTabs";
-import Footer from "./components/Footer";
 import { SidebarTab } from "./components/Sidebar";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit, UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { useToast } from "./components/ui/toast";
+import { useConfirmDialog } from "./components/ui/alert-dialog";
+import { useAppSettings, useAppCustomInstructions } from "./contexts/AppContext";
+import { useSessionPersistence } from "./hooks/useSessionPersistence";
 import "./App.css";
+
+// Layout & Views
+import { LayoutProvider } from "./components/layout/LayoutContext";
+import { AppLayout } from "./components/layout/AppLayout";
+import { FilesView } from "./components/views/FilesView";
+import { PromptView } from "./components/views/PromptView";
+import { HistoryView } from "./components/views/HistoryView";
+import { SettingsView } from "./components/views/SettingsView";
 
 type View = "main" | "history" | "settings";
 
@@ -22,174 +28,233 @@ interface DragDropPayload {
 function App() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [activeTab, setActiveTab] = useState<ActiveTab>("files");
-  const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [shouldClearFileTree, setShouldClearFileTree] = useState<boolean>(false);
   const promptBuilderRef = useRef<PromptBuilderHandle>(null);
 
-  // TODO: Add real token counting logic. For now, using a placeholder or calculating based on file size approximation if possible, 
-  // or simple mock to satisfy the UI requirement until backend integration.
-  // Assuming a rough estimate or 0 for now until calculated by PromptBuilder or backend.
-  const [tokenCount] = useState<number>(0);
-  const tokenLimit = 120000; // Example limit, should probably come from implementation
+  const { success, error: showError } = useToast();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
+  const { settings } = useAppSettings();
+  const { customInstructions, setCustomInstructions } = useAppCustomInstructions();
 
+  // Session persistence - restores state on mount, saves on change
+  const { saveToHistory, clearSession } = useSessionPersistence(
+    selectedPaths,
+    customInstructions,
+    setSelectedPaths,
+    setCustomInstructions
+  );
+
+  // Token counting state
+  const [tokenCount] = useState<number>(0);
+
+  // Setup drag and drop listeners
   useEffect(() => {
-    let unlistenDragDrop: any;
-    let unlistenDragEnter: any;
-    let unlistenDragLeave: any;
+    let unlistenDragEnter: UnlistenFn | undefined;
+    let unlistenDragLeave: UnlistenFn | undefined;
+    let unlistenDragDrop: UnlistenFn | undefined;
+    let isIndexing = false;
+    let isMounted = true;
 
     const setupDragDrop = async () => {
-      unlistenDragEnter = await listen("tauri://drag-enter", () => {
+      const uDragEnter = await listen("tauri://drag-enter", () => {
         setDragActive(true);
       });
+      if (!isMounted) {
+        uDragEnter();
+        return;
+      }
+      unlistenDragEnter = uDragEnter;
 
-      unlistenDragLeave = await listen("tauri://drag-leave", () => {
+      const uDragLeave = await listen("tauri://drag-leave", () => {
         setDragActive(false);
       });
+      if (!isMounted) {
+        uDragLeave();
+        return;
+      }
+      unlistenDragLeave = uDragLeave;
 
-      unlistenDragDrop = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
+      const uDragDrop = await listen<DragDropPayload>("tauri://drag-drop", async (event) => {
         setDragActive(false);
+        
+        if (isIndexing) return;
+        isIndexing = true;
+
         const paths = event.payload.paths;
         if (paths && paths.length > 0) {
           for (const path of paths) {
             try {
               await invoke("index_folder", { path });
-            } catch (error) {
-              console.error(`Failed to index dropped path ${path}:`, error);
+              await emit("refresh-file-tree");
+              success(`Indexing folder: ${path.split(/[\\/]/).pop()}`);
+            } catch (err) {
+              console.error(`Failed to index dropped path ${path}:`, err);
+              showError(`Failed to index: ${path.split(/[\\/]/).pop()}`);
             }
           }
         }
+        isIndexing = false;
       });
+      if (!isMounted) {
+        uDragDrop();
+        return;
+      }
+      unlistenDragDrop = uDragDrop;
     };
 
     setupDragDrop();
 
     return () => {
-      if (unlistenDragEnter) unlistenDragEnter();
-      if (unlistenDragLeave) unlistenDragLeave();
-      if (unlistenDragDrop) unlistenDragDrop();
+      isMounted = false;
+      unlistenDragEnter?.();
+      unlistenDragLeave?.();
+      unlistenDragDrop?.();
     };
   }, []);
 
-  const handleSelectionChange = (paths: string[], ids: number[]) => {
-    setSelectedFileIds(ids);
+  const handleSelectionChange = useCallback((paths: string[]) => {
     setSelectedPaths(paths);
-  };
+  }, []);
 
-  const handleSidebarChange = (tab: SidebarTab) => {
+  const handleSidebarChange = useCallback((tab: SidebarTab) => {
     if (tab === "files" || tab === "prompt") {
       setCurrentView("main");
       setActiveTab(tab);
     } else if (tab === "history" || tab === "settings") {
       setCurrentView(tab);
     }
-  };
+  }, []);
 
-  const handleHistoryRestore = (entry: any) => {
-    console.log('Restoring history entry:', entry);
+  const handleHistoryRestore = useCallback((entry: unknown) => {
+    console.log("Restoring history entry:", entry);
     setCurrentView("main");
     setActiveTab("prompt");
-  };
+    success("Session restored");
+  }, [success]);
 
-  const handleAddFolder = async () => {
+  const handleAddFolder = useCallback(async () => {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
+      const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
         directory: true,
         multiple: false,
       });
 
       if (selected) {
-        await invoke('index_folder', { path: selected as string });
+        await invoke("index_folder", { path: selected as string });
+        await emit("refresh-file-tree");
+        success("Folder added to index");
       }
-    } catch (error) {
-      console.error('Failed to open folder dialog:', error);
+    } catch (err) {
+      console.error("Failed to open folder dialog:", err);
+      showError("Failed to add folder");
     }
-  };
+  }, [success, showError]);
 
-  const handleClearContext = async () => {
+  const handleClearContext = useCallback(async () => {
+    const confirmed = await confirm({
+      title: "Clear Context",
+      description: "Are you sure you want to clear all indexed files? This action cannot be undone.",
+      confirmText: "Clear All",
+      cancelText: "Cancel",
+      variant: "destructive",
+      cancelButtonTestId: "confirm-dialog-cancel",
+      confirmButtonTestId: "confirm-dialog-confirm",
+    });
+
+    if (!confirmed) return;
+
     try {
-      setShouldClearFileTree(true);
-      await invoke('clear_index');
-      setSelectedFileIds([]);
-      setSelectedPaths([]);
-      window.location.reload();
-    } catch (error) {
-      console.error('Failed to clear index:', error);
-    }
-  };
+      // Save current session to history before clearing
+      const saved = await saveToHistory();
+      if (saved) {
+        console.log("Session saved to history before clearing");
+      }
 
-  const handleCopyContext = async () => {
-    if (promptBuilderRef.current) {
-      await promptBuilderRef.current.buildAndCopy();
+      setShouldClearFileTree(true);
+      await invoke("clear_index");
+      setSelectedPaths([]);
+      setCustomInstructions("");
+      clearSession();
+
+      // Emit refresh event instead of reloading the page
+      await emit("refresh-file-tree");
+
+      // Reset the clear flag after a short delay
+      setTimeout(() => setShouldClearFileTree(false), 100);
+
+      success("Context cleared");
+    } catch (err) {
+      console.error("Failed to clear index:", err);
+      showError("Failed to clear context");
     }
-  };
+  }, [confirm, success, showError, saveToHistory, clearSession, setCustomInstructions]);
+
+  const handleCopyContext = useCallback(async () => {
+    if (promptBuilderRef.current) {
+      try {
+        await promptBuilderRef.current.buildAndCopy();
+        success("Context copied to clipboard");
+      } catch (err) {
+        console.error("Failed to copy context:", err);
+        showError("Failed to copy context");
+      }
+    }
+  }, [success, showError]);
 
   return (
-    <div className="flex h-screen w-screen border-t border-white/5 bg-[#010409] text-[#c9d1d9] antialiased overflow-hidden font-sans" data-testid="app-container">
-      <Sidebar
+    <LayoutProvider>
+      <AppLayout
         activeTab={currentView === "main" ? activeTab : currentView}
         onTabChange={handleSidebarChange}
-      />
-
-      <div className="flex-1 flex flex-col min-w-0 relative bg-background-dark">
-        <Header
-          onAddFolder={handleAddFolder}
-          onSearch={setSearchQuery}
-          onClear={handleClearContext}
-        />
-
+        dragActive={dragActive}
+      >
         {currentView === "main" && (
           <MainTabs activeTab={activeTab} onTabChange={setActiveTab} />
         )}
 
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {currentView === "history" ? (
-            <HistoryPanel onRestore={handleHistoryRestore} />
-          ) : currentView === "settings" ? (
-            <Settings />
-          ) : (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {activeTab === "files" ? (
-                <FileTree
-                  onSelectionChange={handleSelectionChange}
-                  searchQuery={searchQuery}
-                  initialSelectedPaths={selectedPaths}
-                  shouldClearSelection={shouldClearFileTree}
-                />
-              ) : (
-                <PromptBuilder
-                  ref={promptBuilderRef}
-                  selectedFileIds={selectedFileIds}
-                  onPromptBuilt={(prompt) => {
-                    console.log("Built prompt:", prompt);
-                  }}
-                />
-              )}
-            </div>
-          )}
-        </main>
+        <FilesView
+          isActive={currentView === "main" && activeTab === "files"}
+          onSelectionChange={handleSelectionChange}
+          searchQuery={searchQuery}
+          initialSelectedPaths={selectedPaths}
+          shouldClearSelection={shouldClearFileTree}
+          onAddFolder={handleAddFolder}
+          onClear={handleClearContext}
+          onSearch={setSearchQuery}
+          onCopy={handleCopyContext}
+          tokenCount={tokenCount}
+          tokenLimit={settings.tokenLimit}
+          version="0.1.0"
+        />
 
-        {currentView === "main" && (
-          <Footer
-            onCopy={handleCopyContext}
-            tokenCount={tokenCount}
-            tokenLimit={tokenLimit}
-            version="0.1.0"
-          />
-        )}
-      </div>
+        <PromptView
+          ref={promptBuilderRef}
+          isActive={currentView === "main" && activeTab === "prompt"}
+          selectedFilePaths={selectedPaths}
+          onPromptBuilt={(prompt) => {
+            console.log("Built prompt:", prompt);
+          }}
+          onCopy={handleCopyContext}
+          tokenCount={tokenCount}
+          tokenLimit={settings.tokenLimit}
+          version="0.1.0"
+        />
 
-      {dragActive && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#010409]/50 backdrop-blur-sm">
-          <div className="border-2 border-dashed border-[#c9d1d9] w-96 h-96 flex items-center justify-center rounded-lg">
-            <span className="text-[#c9d1d9] text-2xl font-medium">Drop here</span>
-          </div>
-        </div>
-      )}
-    </div>
+        <HistoryView
+          isActive={currentView === "history"}
+          onRestore={handleHistoryRestore}
+        />
+
+        <SettingsView
+          isActive={currentView === "settings"}
+        />
+      </AppLayout>
+      <ConfirmDialog />
+    </LayoutProvider>
   );
 }
 

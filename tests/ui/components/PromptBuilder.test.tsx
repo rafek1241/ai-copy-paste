@@ -1,0 +1,164 @@
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PromptBuilder } from '@/components/PromptBuilder';
+import * as promptsService from '@/services/prompts';
+import * as assemblyService from '@/services/assembly';
+import { AppProvider } from '@/contexts/AppContext';
+
+// Mock services
+vi.mock('@/services/prompts', () => ({
+  getTemplates: vi.fn(),
+}));
+
+vi.mock('@/services/assembly', () => ({
+  assemblePrompt: vi.fn(),
+}));
+
+vi.mock('@/hooks/useTokenCount', () => ({
+  useTokenCount: () => ({ totalTokens: 0, isCalculating: false }),
+}));
+
+// Wrapper component for tests
+const TestWrapper = ({ children }: { children: React.ReactNode }) => (
+  <AppProvider>{children}</AppProvider>
+);
+
+describe('PromptBuilder', () => {
+  const mockTemplates = [
+    { id: 'agent', name: 'Agent', description: 'Agent desc', template: '...' },
+    { id: 'review', name: 'Review', description: 'Review desc', template: '...' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(promptsService.getTemplates).mockResolvedValue(mockTemplates);
+
+    // Mock navigator.clipboard
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+  });
+
+  it('should load templates on mount', async () => {
+    render(<PromptBuilder selectedFilePaths={[]} />, { wrapper: TestWrapper });
+    await waitFor(() => {
+      expect(promptsService.getTemplates).toHaveBeenCalled();
+      expect(screen.getByText('Agent')).toBeDefined();
+    });
+  });
+
+  it('should build and copy prompt when called via ref', async () => {
+    const mockResponse = {
+      prompt: 'Built prompt',
+      file_count: 1,
+      total_chars: 100,
+    };
+    vi.mocked(assemblyService.assemblePrompt).mockResolvedValue(mockResponse);
+
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFilePaths={['/test/path']}
+        ref={(ref) => { builderRef = ref; }}
+      />,
+      { wrapper: TestWrapper }
+    );
+
+    // Wait for templates to load to avoid act() warnings
+    await screen.findByText('Agent');
+
+    // Trigger build
+    await act(async () => {
+      await builderRef?.buildAndCopy();
+    });
+
+    expect(assemblyService.assemblePrompt).toHaveBeenCalledWith({
+      templateId: 'custom',
+      filePaths: ['/test/path'],
+      customInstructions: "---CONTEXT:\n\n{{files}}",
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Built prompt');
+  });
+
+  it('should show error when no files selected', async () => {
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFilePaths={[]}
+        ref={(ref) => { builderRef = ref; }}
+      />,
+      { wrapper: TestWrapper }
+    );
+
+    // Wait for templates to load to avoid act() warnings
+    await screen.findByText('Agent');
+
+    await act(async () => {
+      await builderRef?.buildAndCopy();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Please select files or enter custom instructions/i)).toBeDefined();
+    });
+  });
+
+  it('should show error if building fails', async () => {
+    const error = new Error('Build failed');
+    vi.mocked(assemblyService.assemblePrompt).mockRejectedValue(error);
+
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFilePaths={['/test/path']}
+        ref={(ref) => { builderRef = ref; }}
+      />,
+      { wrapper: TestWrapper }
+    );
+
+    // Wait for templates to load to avoid act() warnings
+    await screen.findByText('Agent');
+
+    await act(async () => {
+      try {
+        await builderRef?.buildAndCopy();
+      } catch (e) {
+        // Expected - error is re-thrown after setting state
+      }
+    });
+    
+    expect(assemblyService.assemblePrompt).toHaveBeenCalled();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error-display')).toBeInTheDocument();
+    });
+  });
+
+  it('should copy only custom instructions when no files selected', async () => {
+    let builderRef: any = null;
+    render(
+      <PromptBuilder
+        selectedFilePaths={[]}
+        ref={(ref) => { builderRef = ref; }}
+      />,
+      { wrapper: TestWrapper }
+    );
+
+    // Wait for templates to load
+    await waitFor(() => expect(promptsService.getTemplates).toHaveBeenCalled());
+
+    // Enter custom instructions
+    const textarea = screen.getByTestId('custom-instructions');
+    fireEvent.change(textarea, { target: { value: 'Test instructions only' } });
+
+    // Trigger build
+    await builderRef?.buildAndCopy();
+
+    // Should NOT call assemblePrompt (no files)
+    expect(assemblyService.assemblePrompt).not.toHaveBeenCalled();
+    // Should copy just the instructions, no ---CONTEXT
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Test instructions only');
+  });
+});
