@@ -390,6 +390,55 @@ export class FileTreePage extends BasePage {
     return path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
   }
 
+  async waitForIndexingComplete(timeout: number = 15000): Promise<boolean> {
+    return await browser.executeAsync(
+      (timeoutMs: number, done: (result: boolean) => void) => {
+        const tauri = (window as any).__TAURI__;
+        if (!tauri?.event?.listen) {
+          done(false);
+          return;
+        }
+
+        let finished = false;
+        let unlisten: (() => void) | undefined;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+        const finalize = (result: boolean) => {
+          if (finished) {
+            return;
+          }
+          finished = true;
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          if (unlisten) {
+            unlisten();
+          }
+          done(result);
+        };
+
+        timeoutId = setTimeout(() => finalize(false), timeoutMs);
+
+        tauri.event
+          .listen("indexing-progress", (event: { payload?: { current_path?: string } }) => {
+            if (event?.payload?.current_path === "Complete") {
+              finalize(true);
+            }
+          })
+          .then((cleanup: () => void) => {
+            unlisten = cleanup;
+            if (finished) {
+              cleanup();
+            }
+          })
+          .catch(() => {
+            finalize(false);
+          });
+      },
+      timeout
+    );
+  }
+
   /**
    * Index multiple files/folders at once via drag-drop
    */
@@ -401,15 +450,17 @@ export class FileTreePage extends BasePage {
 
     await browser.execute((filePaths: string[]) => {
       const tauri = (window as any).__TAURI__;
-      if (tauri) {
-        tauri.event.emit("tauri://drag-drop", {
-          paths: filePaths,
-          position: { x: 0, y: 0 }
-        });
-      } else {
+      if (!tauri?.event?.emit) {
         throw new Error("Tauri API not available");
       }
+      void tauri.event.emit("tauri://drag-drop", {
+        paths: filePaths,
+        position: { x: 0, y: 0 }
+      });
+      return true;
     }, normalizedPaths);
+
+    await this.waitForIndexingComplete();
 
     // Wait for indexing to complete: poll for node count change, then stabilize
     try {
@@ -450,15 +501,17 @@ export class FileTreePage extends BasePage {
 
     await browser.execute((path) => {
       const tauri = (window as any).__TAURI__;
-      if (tauri) {
-        tauri.event.emit("tauri://drag-drop", {
-          paths: [path],
-          position: { x: 0, y: 0 }
-        });
-      } else {
+      if (!tauri?.event?.emit) {
         throw new Error("Tauri API not available");
       }
+      void tauri.event.emit("tauri://drag-drop", {
+        paths: [path],
+        position: { x: 0, y: 0 }
+      });
+      return true;
     }, normalizedPath);
+
+    await this.waitForIndexingComplete();
 
     // Wait for indexing to complete: poll for node count change, then stabilize
     try {

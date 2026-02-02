@@ -88,6 +88,7 @@ function App() {
           for (const path of paths) {
             try {
               await invoke("index_folder", { path });
+              await emit("refresh-file-tree");
               success(`Indexing folder: ${path.split(/[\\/]/).pop()}`);
             } catch (err) {
               console.error(`Failed to index dropped path ${path}:`, err);
@@ -144,6 +145,7 @@ function App() {
 
       if (selected) {
         await invoke("index_folder", { path: selected as string });
+        await emit("refresh-file-tree");
         success("Folder added to index");
       }
     } catch (err) {
