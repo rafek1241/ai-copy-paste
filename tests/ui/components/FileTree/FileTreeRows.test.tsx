@@ -44,9 +44,16 @@ describe("FileTree Rows", () => {
         expect(mainFile).toBeInTheDocument();
 
         // Check for Lucide icons (folders)
-        // Folders use "lucide-folder" class on the SVG
-        const folderIcon = document.querySelector('.lucide-folder');
-        expect(folderIcon).toBeInTheDocument();
+        // Find the folder row first
+        const folderRow = srcFolder.closest('[role="treeitem"]');
+        expect(folderRow).toBeInTheDocument();
+        
+        const folderIconContainer = folderRow?.querySelector('[data-testid="tree-icon"]');
+        expect(folderIconContainer).toBeInTheDocument();
+        
+        const folderIconSvg = folderIconContainer?.querySelector('svg');
+        expect(folderIconSvg).toBeInTheDocument();
+        expect(folderIconSvg?.getAttribute('class')).toContain('lucide-folder');
 
         // Check for Lucide icons (files)
         // We can look for the file row and check its icon

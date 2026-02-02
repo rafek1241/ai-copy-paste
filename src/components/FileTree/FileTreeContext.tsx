@@ -394,12 +394,12 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
           }
         });
       } else if (rootEntries.length > 0) {
-        // Initial load with entries: auto-expand parents of the added entries
+        // Initial load with entries: auto-expand parents only if the entry is a file
+        // This ensures specific files are visible, but avoids expanding directories by default
         rootEntries.forEach(entry => {
-          if (entry.is_dir) {
-            pathsToExpand.add(entry.path);
+          if (!entry.is_dir) {
+            addAncestorsToExpand(entry.parent_path);
           }
-          addAncestorsToExpand(entry.parent_path);
         });
       }
 

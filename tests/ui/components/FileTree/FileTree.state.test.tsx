@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { FileTree } from '@/components/FileTree/FileTree';
 import { vi, expect, it, describe, beforeEach, afterEach } from 'vitest';
 import { mockInvoke, mockEmit } from '../../setup';
@@ -48,7 +49,8 @@ describe('FileTree State Preservation', () => {
           return Promise.resolve(mockNodes.filter(n => n.parent_path === null));
         }
         if (cmd === 'get_children') {
-          return Promise.resolve(mockNodes.filter(n => n.parent_path === args.parentPath));
+          const result = mockNodes.filter(n => n.parent_path === args.parentPath);
+          return Promise.resolve(result);
         }
         return Promise.resolve([]);
       });
@@ -175,11 +177,14 @@ describe('FileTree State Preservation', () => {
       ];
 
       mockInvoke.mockImplementation((cmd, args) => {
+        console.error(`mockInvoke (Clear selection): ${cmd}`, JSON.stringify(args));
         if (cmd === 'get_children' && args?.parentPath === null) {
           return Promise.resolve(mockNodes.filter(n => n.parent_path === null));
         }
         if (cmd === 'get_children') {
-          return Promise.resolve(mockNodes.filter(n => n.parent_path === args.parentPath));
+          const result = mockNodes.filter(n => n.parent_path === args.parentPath);
+          console.error(`mockInvoke result for ${args.parentPath}:`, result);
+          return Promise.resolve(result);
         }
         return Promise.resolve([]);
       });
@@ -396,7 +401,8 @@ describe('FileTree State Preservation', () => {
           return Promise.resolve(mockNodes.filter(n => n.parent_path === null));
         }
         if (cmd === 'get_children') {
-          return Promise.resolve(mockNodes.filter(n => n.parent_path === args.parentPath));
+          const result = mockNodes.filter(n => n.parent_path === args.parentPath);
+          return Promise.resolve(result);
         }
         return Promise.resolve([]);
       });
@@ -406,8 +412,20 @@ describe('FileTree State Preservation', () => {
       await screen.findByText('mydir');
 
       // Expand and select
-      fireEvent.click(screen.getByTestId('expand-icon'));
-      await screen.findByText('file.ts');
+      const expandButton = screen.getByTestId('expand-icon');
+      fireEvent.click(expandButton);
+      
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith('get_children', { parentPath: '/mydir' });
+      });
+
+      // Wait for expansion state to reflect in DOM
+      await waitFor(() => {
+        const folderNode = screen.getAllByTestId('tree-node')[0];
+        expect(folderNode).toHaveAttribute('aria-expanded', 'true');
+      }, { timeout: 3000 });
+
+      await screen.findByText('file.ts', {}, { timeout: 3000 });
 
       const checkboxes = screen.getAllByTestId('tree-checkbox');
       fireEvent.click(checkboxes[1]);
