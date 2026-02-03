@@ -371,7 +371,7 @@ fn parallel_index_folder(
     log::info!("Gitignore support: {}", if respect_gitignore { "enabled" } else { "disabled" });
 
     // Create gitignore manager and discover .gitignore files if enabled
-    let gitignore_manager = if respect_gitignore {
+    let gitignore_manager: Option<Arc<GitignoreManager>> = if respect_gitignore {
         let mut manager = GitignoreManager::new(root);
         match manager.discover_gitignores(root) {
             Ok(count) => log::info!("Loaded {} .gitignore files", count),
@@ -390,7 +390,7 @@ fn parallel_index_folder(
     let last_progress_time = Arc::new(Mutex::new(Instant::now()));
 
     // Clone Arc for closure
-    let gitignore_manager_clone = gitignore_manager.clone();
+    let gitignore_manager_clone: Option<Arc<GitignoreManager>> = gitignore_manager.clone();
 
 
     // Collect entries with parallel iteration
@@ -970,6 +970,5 @@ mod tests {
             assert!(entries.iter().any(|p| p.to_string_lossy().contains("main.rs")));
             assert!(entries.iter().any(|p| p.to_string_lossy().contains(".gitignore")));
         }
-    }
     }
 }

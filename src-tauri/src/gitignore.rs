@@ -65,11 +65,11 @@ impl GitignoreManager {
 
         // Check all gitignore files from root to the path's parent
         // Patterns closer to the file have higher priority (checked last)
-        let mut current = Some(self.root.as_path());
+        let mut current = Some(self.root.clone());
         let mut ignored = false;
 
-        while let Some(dir) = current {
-            if let Some(gitignore) = self.gitignores.get(dir) {
+        while let Some(dir) = current.clone() {
+            if let Some(gitignore) = self.gitignores.get(&dir) {
                 match gitignore.matched(path, is_dir) {
                     ignore::Match::None => {}
                     ignore::Match::Ignore(_) => ignored = true,
@@ -78,15 +78,19 @@ impl GitignoreManager {
             }
 
             // Move to next directory in path towards the target
-            if dir == path || path.starts_with(dir) {
+            if dir == path || path.starts_with(&dir) {
                 // Find the next directory between current and path
-                let relative = path.strip_prefix(dir).ok();
+                let relative = path.strip_prefix(&dir).ok();
                 if let Some(rel) = relative {
                     if let Some(first_component) = rel.components().next() {
                         let next_dir = dir.join(first_component);
                         if next_dir != path && next_dir.is_dir() {
-                            current = Some(self.gitignores.get(&next_dir).map(|_| &next_dir).unwrap_or(dir));
-                            if current == Some(dir) {
+                            if self.gitignores.contains_key(&next_dir) {
+                                current = Some(next_dir);
+                            } else {
+                                current = Some(dir.clone());
+                            }
+                            if current.as_ref() == Some(&dir) {
                                 break;
                             }
                             continue;

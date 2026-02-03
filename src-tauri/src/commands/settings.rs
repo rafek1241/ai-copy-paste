@@ -116,7 +116,7 @@ pub async fn get_all_settings(
 }
 
 /// Internal function to load settings
-fn load_settings_internal(db: &DbConnection) -> Result<AppSettings, String> {
+pub(crate) fn load_settings_internal(db: &DbConnection) -> Result<AppSettings, String> {
     let settings_map = get_all_settings_internal(db)?;
 
     let mut settings = AppSettings::default();
