@@ -1,41 +1,37 @@
 # Conductor Context
 
-If a user mentions a "plan" or asks about the plan, and they have used the conductor extension in the current session, they are likely referring to the `conductor/tracks.md` file or one of the track plans (`conductor/tracks/<track_id>/plan.md`).
+Can be found in ./conductor/index.html with Project Context, tracks directory, and product guidelines.
 
-## Universal File Resolution Protocol
+## E2E Testing Environment (Local)
 
-**PROTOCOL: How to locate files.**
-To find a file (e.g., "**Product Definition**") within a specific context (Project Root or a specific Track):
+When running E2E tests on Windows, you must ensure `tauri-driver` is running and has access to `msedgedriver.exe`.
 
-1.  **Identify Index:** Determine the relevant index file:
-    -   **Project Context:** `conductor/index.md`
-    -   **Track Context:**
-        a. Resolve and read the **Tracks Registry** (via Project Context).
-        b. Find the entry for the specific `<track_id>`.
-        c. Follow the link provided in the registry to locate the track's folder. The index file is `<track_folder>/index.md`.
-        d. **Fallback:** If the track is not yet registered (e.g., during creation) or the link is broken:
-            1. Resolve the **Tracks Directory** (via Project Context).
-            2. The index file is `<Tracks Directory>/<track_id>/index.md`.
+- **Msedgedriver Path**: `bin/msedgedriver.exe` (relative to project root).
+- **Starting the Driver**: The driver must be started on port 4444. You can use the npm script `npm run driver`.
+- **Requirements**: WebView2 must be installed on the system.
 
-2.  **Check Index:** Read the index file and look for a link with a matching or semantically similar label.
+To run tests manually: `npm run e2e-session`. This will start the dev server, driver, and run the e2e tests.
 
-3.  **Resolve Path:** If a link is found, resolve its path **relative to the directory containing the `index.md` file**.
-    -   *Example:* If `conductor/index.md` links to `./workflow.md`, the full path is `conductor/workflow.md`.
+To run all tests: `npm run test:all`. This will run unit tests, rust (backend) tests, and e2e tests.
 
-4.  **Fallback:** If the index file is missing or the link is absent, use the **Default Path** keys below.
+## FileTree Component Architecture
 
-5.  **Verify:** You MUST verify the resolved file actually exists on the disk.
+The FileTree component uses a performance-optimized architecture:
 
-**Standard Default Paths (Project):**
-- **Product Definition**: `conductor/product.md`
-- **Tech Stack**: `conductor/tech-stack.md`
-- **Workflow**: `conductor/workflow.md`
-- **Product Guidelines**: `conductor/product-guidelines.md`
-- **Tracks Registry**: `conductor/tracks.md`
-- **Tracks Directory**: `conductor/tracks/`
+### Context Pattern
+- **FileTreeStateContext**: Contains state and flatTree (for reading)
+- **FileTreeActionsContext**: Contains dispatch and action methods (for mutations)
+- **FilterTypeContext**: Isolated context for filter type (prevents re-renders of FileTreeFilters on tree changes)
 
-**Standard Default Paths (Track):**
-- **Specification**: `conductor/tracks/<track_id>/spec.md`
-- **Implementation Plan**: `conductor/tracks/<track_id>/plan.md`
-- **Metadata**: `conductor/tracks/<track_id>/metadata.json`
+### Performance Optimizations (Completed 2025-02)
+1. **buildFlatTree**: Uses single accumulator pattern to avoid intermediate array allocations
+2. **loadRootEntries**: Consolidated O(n) passes for child path building
+3. **Extension matching**: Module-level `Set` objects for O(1) lookups instead of array `includes()`
+4. **FileTreeRow**: `useCallback` for keyboard handlers, `useMemo` for styles
+5. **flatTree**: Computed via `useMemo` instead of `useEffect` to avoid extra renders
 
+### Tree Behavior
+- Root directories start with `expanded: false`
+- Children are loaded on-demand when user clicks expand (via `toggleExpand`)
+- E2E tests should call `expandFolder()` after indexing to see files
+- Self-referential and cross-child cycle prevention in `loadAndExpandChildren`

@@ -143,31 +143,31 @@ jobs:
 
       - name: Create E2E test directories
         run: |
-          mkdir -p e2e/reports
-          mkdir -p e2e/logs
-          mkdir -p e2e/screenshots
-          mkdir -p e2e/fixtures/test-data
+          mkdir -p tests/e2e/reports
+          mkdir -p tests/e2e/logs
+          mkdir -p tests/e2e/screenshots
+          mkdir -p tests/e2e/fixtures/test-data
 
       - name: Create test fixtures
         run: |
-          cat > e2e/fixtures/test-data/sample.ts << 'EOF'
+          cat > tests/e2e/fixtures/test-data/sample.ts << 'EOF'
           export const hello = "world";
           export const add = (a: number, b: number) => a + b;
           EOF
 
-          cat > e2e/fixtures/test-data/sample.js << 'EOF'
+          cat > tests/e2e/fixtures/test-data/sample.js << 'EOF'
           const x = 42;
           console.log(x);
           module.exports = { x };
           EOF
 
-          cat > e2e/fixtures/test-data/sample.md << 'EOF'
+          cat > tests/e2e/fixtures/test-data/sample.md << 'EOF'
           # Hello
 
           This is a test file for E2E testing.
           EOF
 
-          cat > e2e/fixtures/test-data/sample.json << 'EOF'
+          cat > tests/e2e/fixtures/test-data/sample.json << 'EOF'
           {"key": "value", "number": 123}
           EOF
 
@@ -211,37 +211,54 @@ jobs:
 
           # Quick test: Try to launch app directly to see if it starts
           echo "=== Quick app startup test ==="
-          timeout 10 "$BINARY_PATH" &
+          timeout 15 "$BINARY_PATH" &
           APP_TEST_PID=$!
-          sleep 5
+          sleep 8
           if ps -p $APP_TEST_PID > /dev/null 2>&1; then
             echo "App started successfully (PID: $APP_TEST_PID)"
             kill $APP_TEST_PID 2>/dev/null || true
+            wait $APP_TEST_PID 2>/dev/null || true
           else
             echo "WARNING: App may have crashed or exited quickly"
           fi
-          sleep 1
+          sleep 2
 
-          # Start tauri-driver with verbose logging
+          # Start tauri-driver
           echo "=== Starting tauri-driver ==="
           tauri-driver &
           TAURI_DRIVER_PID=$!
-          sleep 3
 
-          # Verify tauri-driver is running
-          if ! ps -p $TAURI_DRIVER_PID > /dev/null; then
-            echo "ERROR: tauri-driver failed to start"
-            exit 1
+          # Wait for tauri-driver to be ready (poll port 4444)
+          echo "Waiting for tauri-driver to accept connections on port 4444..."
+          DRIVER_READY=false
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4444/status > /dev/null 2>&1; then
+              echo "tauri-driver is ready (attempt $i)"
+              DRIVER_READY=true
+              break
+            fi
+            # Also check if tauri-driver process is still running
+            if ! ps -p $TAURI_DRIVER_PID > /dev/null 2>&1; then
+              echo "ERROR: tauri-driver exited unexpectedly"
+              exit 1
+            fi
+            echo "  Waiting... (attempt $i/20)"
+            sleep 2
+          done
+
+          if [ "$DRIVER_READY" = false ]; then
+            echo "WARNING: tauri-driver /status not responding, checking if process is alive..."
+            if ps -p $TAURI_DRIVER_PID > /dev/null 2>&1; then
+              echo "tauri-driver process is running (PID: $TAURI_DRIVER_PID), proceeding anyway"
+            else
+              echo "ERROR: tauri-driver is not running"
+              exit 1
+            fi
           fi
-          echo "tauri-driver started with PID $TAURI_DRIVER_PID"
 
-          # Check if tauri-driver is listening
-          sleep 2
-          curl -s http://localhost:4444/status || echo "tauri-driver status endpoint not responding (this may be normal)"
-
-          # Run E2E tests (diagnostic and app-launch only for now)
+          # Run E2E tests
           echo "=== Running E2E tests ==="
-          npx wdio run e2e/wdio.conf.ts --logLevel=info || E2E_EXIT_CODE=$?
+          npx wdio run tests/e2e/wdio.conf.ts --logLevel=info || E2E_EXIT_CODE=$?
 
           # Cleanup
           echo "=== Cleanup ==="
@@ -263,7 +280,7 @@ jobs:
           Start-Sleep -Seconds 2
 
           # Run tests
-          npx wdio run e2e/wdio.conf.ts
+          npx wdio run tests/e2e/wdio.conf.ts
         env:
           CI: true
 
@@ -277,7 +294,7 @@ jobs:
           sleep 2
 
           # Run tests
-          npx wdio run e2e/wdio.conf.ts || E2E_EXIT_CODE=$?
+          npx wdio run tests/e2e/wdio.conf.ts || E2E_EXIT_CODE=$?
 
           # Cleanup
           kill $TAURI_DRIVER_PID 2>/dev/null || true
@@ -292,9 +309,9 @@ jobs:
         with:
           name: e2e-results-${{ matrix.os }}
           path: |
-            e2e/reports/
-            e2e/logs/
-            e2e/screenshots/
+            tests/e2e/reports/
+            tests/e2e/logs/
+            tests/e2e/screenshots/
           retention-days: 14
 
       - name: Upload E2E screenshots on failure
@@ -302,7 +319,7 @@ jobs:
         if: failure()
         with:
           name: e2e-screenshots-${{ matrix.os }}
-          path: e2e/screenshots/
+          path: tests/e2e/screenshots/
           retention-days: 14
 
   e2e-report:
@@ -330,10 +347,10 @@ jobs:
                 echo "### $os" >> $GITHUB_STEP_SUMMARY
 
                 # Check for JUnit results
-                if [ -f "$dir/reports/e2e-results-0.xml" ]; then
+                if [ -f "$dir/e2e-results-0.xml" ]; then
                   # Extract test counts from JUnit XML
-                  tests=$(grep -oP 'tests="\K[0-9]+' "$dir/reports/e2e-results-0.xml" | head -1 || echo "0")
-                  failures=$(grep -oP 'failures="\K[0-9]+' "$dir/reports/e2e-results-0.xml" | head -1 || echo "0")
+                  tests=$(grep -oP 'tests="\K[0-9]+' "$dir/e2e-results-0.xml" | head -1 || echo "0")
+                  failures=$(grep -oP 'failures="\K[0-9]+' "$dir/e2e-results-0.xml" | head -1 || echo "0")
                   echo "- Tests: $tests" >> $GITHUB_STEP_SUMMARY
                   echo "- Failures: $failures" >> $GITHUB_STEP_SUMMARY
                 else

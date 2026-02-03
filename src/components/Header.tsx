@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { PlusSquare, Eraser, Search, X } from "lucide-react";
 
 interface HeaderProps {
     onAddFolder?: () => void;
@@ -59,7 +60,7 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
         }
     }, []);
 
-    const handleSearchCheck = () => {
+    const handleSearchClick = () => {
         setIsSearchExpanded(true);
         setTooltipState('visible');
     };
@@ -104,15 +105,22 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
         }
     };
 
+    const clearSearch = () => {
+        setSearchQuery("");
+        onSearch("");
+        setTooltipState('visible');
+        inputRef.current?.focus();
+    };
+
     return (
-        <header className="h-10 flex items-center px-3 border-b border-border-dark bg-[#0d1117]" data-testid="app-header">
+        <header className="flex-1 flex items-center h-full" data-testid="app-header-content">
             <button
                 onClick={onAddFolder}
                 className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/5 transition-colors group"
                 title="Add Folder to Index"
                 data-testid="add-folder-btn"
             >
-                <span className="material-symbols-outlined text-[16px] text-primary group-hover:text-primary/80">add_box</span>
+                <PlusSquare size={16} className="text-primary group-hover:text-primary/80" />
                 <span className="text-[11px] font-semibold text-white/90 group-hover:text-white">Add Context</span>
             </button>
             <button
@@ -121,7 +129,7 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
                 title="Clear Context"
                 data-testid="clear-context-btn"
             >
-                <span className="material-symbols-outlined text-[16px] text-white/40 group-hover:text-white/80">refresh</span>
+                <Eraser size={16} className="text-white/40 group-hover:text-white/80" />
                 <span className="text-[11px] font-semibold text-white/50 group-hover:text-white/90">Clear</span>
             </button>
 
@@ -131,40 +139,35 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
             )}>
                 {isSearchExpanded ? (
                     <div
-                        className="w-full relative"
+                        className="relative w-full flex items-center"
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
                     >
+                        <Search size={14} className="absolute left-2 text-white/40" />
                         <input
                             ref={inputRef}
                             type="text"
+                            className="w-full bg-[#161b22] border border-white/10 rounded-md py-1 pl-8 pr-6 text-[11px] text-white placeholder:text-white/20 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
+                            placeholder={searchQuery ? "Search files..." : "Search files... (? for help)"}
                             value={searchQuery}
                             onChange={handleChange}
                             onBlur={handleBlur}
                             onKeyDown={handleKeyDown}
-                            placeholder={searchQuery ? "Search files..." : "Search files... (? for help)"}
-                            className="w-full h-7 bg-[#161b22] border border-border-dark rounded pl-8 pr-2 text-[11px] text-white placeholder-white/30 focus:outline-none focus:border-primary transition-all"
-                            data-testid="file-tree-search"
+                            data-testid="search-input"
                         />
-                        <span className="material-symbols-outlined text-[14px] text-white/40 absolute left-2 top-1/2 -translate-y-1/2">search</span>
                         {searchQuery && (
                             <button
-                                onClick={() => {
-                                    setSearchQuery("");
-                                    onSearch("");
-                                    setTooltipState('visible');
-                                    inputRef.current?.focus();
-                                }}
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white"
+                                onClick={clearSearch}
+                                className="absolute right-2 text-white/20 hover:text-white transition-colors"
                                 data-testid="clear-search-btn"
                             >
-                                <span className="material-symbols-outlined text-[14px]">close</span>
+                                <X size={12} />
                             </button>
                         )}
                         {/* Tooltip */}
                         {tooltipState === 'visible' && !searchQuery && (
                             <div
-                                className="absolute top-full left-0 mt-2 p-3 bg-[#1c2128] border border-border-dark rounded-lg shadow-lg z-50 text-[10px] text-white/70 whitespace-pre-line w-64"
+                                className="absolute top-full left-0 mt-2 p-3 bg-[#1c2128] border border-white/10 rounded-lg shadow-lg z-50 text-[10px] text-white/70 whitespace-pre-line w-64"
                                 data-testid="search-tooltip"
                             >
                                 {TOOLTIP_CONTENT}
@@ -173,12 +176,12 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
                     </div>
                 ) : (
                     <button
-                        onClick={handleSearchCheck}
-                        className="size-7 flex items-center justify-center rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+                        onClick={handleSearchClick}
+                        className="p-1.5 text-white/40 hover:text-white hover:bg-white/5 rounded transition-colors ml-auto"
                         title="Search"
-                        data-testid="search-toggle-btn"
+                        data-testid="search-toggle"
                     >
-                        <span className="material-symbols-outlined text-[16px]">search</span>
+                        <Search size={16} />
                     </button>
                 )}
             </div>
