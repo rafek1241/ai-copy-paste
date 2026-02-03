@@ -4,7 +4,6 @@ use crate::gitignore::GitignoreManager;
 use rayon::prelude::*;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -12,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
+// NOTE: Race condition fixed by always storing true parent_path and updating orphaned children when parent is indexed.
 
 use super::settings::load_settings_internal;
 
@@ -26,10 +26,9 @@ pub struct IndexProgress {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileEntry {
-    pub id: Option<i64>,
-    pub parent_id: Option<i64>,
-    pub name: String,
     pub path: String,
+    pub parent_path: Option<String>,
+    pub name: String,
     pub size: Option<i64>,
     pub mtime: Option<i64>,
     pub is_dir: bool,
@@ -38,8 +37,13 @@ pub struct FileEntry {
     pub child_count: Option<i64>,
 }
 
+/// Normalize path separators to forward slashes for cross-platform consistency
+fn normalize_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 impl FileEntry {
-    fn from_path(path: &Path, parent_id: Option<i64>) -> AppResult<Self> {
+    fn from_path(path: &Path, parent_path: Option<String>) -> AppResult<Self> {
         let metadata = fs::metadata(path)?;
         let name = path
             .file_name()
@@ -47,10 +51,14 @@ impl FileEntry {
             .ok_or_else(|| AppError::Path("Invalid file name".to_string()))?
             .to_string();
 
-        let path_str = path
-            .to_str()
-            .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
-            .to_string();
+        let path_str = normalize_path(
+            path
+                .to_str()
+                .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
+        );
+
+        // Normalize parent_path for consistency
+        let normalized_parent = parent_path.map(|p| normalize_path(&p));
 
         let size = if metadata.is_file() {
             Some(metadata.len() as i64)
@@ -67,10 +75,9 @@ impl FileEntry {
         let fingerprint = size.and_then(|s| mtime.map(|m| format!("{}_{}", m, s)));
 
         Ok(FileEntry {
-            id: None,
-            parent_id,
-            name,
             path: path_str,
+            parent_path: normalized_parent,
+            name,
             size,
             mtime,
             is_dir: metadata.is_dir(),
@@ -84,17 +91,24 @@ impl FileEntry {
     fn from_dir_entry(entry: &walkdir::DirEntry) -> AppResult<Self> {
         let path = entry.path();
         let metadata = entry.metadata()?;
-        
+
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| AppError::Path("Invalid file name".to_string()))?
             .to_string();
 
-        let path_str = path
-            .to_str()
-            .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
-            .to_string();
+        let path_str = normalize_path(
+            path
+                .to_str()
+                .ok_or_else(|| AppError::Path("Invalid path".to_string()))?
+        );
+
+        // Compute parent path from the file path and normalize it
+        let parent_path = path
+            .parent()
+            .and_then(|p| p.to_str())
+            .map(|s| normalize_path(s));
 
         let size = if metadata.is_file() {
             Some(metadata.len() as i64)
@@ -111,10 +125,9 @@ impl FileEntry {
         let fingerprint = size.and_then(|s| mtime.map(|m| format!("{}_{}", m, s)));
 
         Ok(FileEntry {
-            id: None,
-            parent_id: None, // Will be set later based on path hierarchy
-            name,
             path: path_str,
+            parent_path,
+            name,
             size,
             mtime,
             is_dir: metadata.is_dir(),
@@ -147,44 +160,71 @@ pub async fn index_folder(
     Ok(count)
 }
 
-/// Get children of a specific node
+/// Get children of a specific node by parent path
 #[tauri::command]
 pub async fn get_children(
-    parent_id: Option<i64>,
+    parent_path: Option<String>,
     db: tauri::State<'_, DbConnection>,
 ) -> Result<Vec<FileEntry>, String> {
-    log::debug!("Getting children for parent_id: {:?}", parent_id);
+    log::debug!("Getting children for parent_path: {:?}", parent_path);
 
     let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, parent_id, name, path, size, mtime, is_dir, token_count, fingerprint,
-             (SELECT COUNT(*) FROM files f2 WHERE f2.parent_id = files.id) as child_count
-             FROM files 
-             WHERE parent_id IS ? OR (parent_id IS NULL AND ? IS NULL)
-             ORDER BY is_dir DESC, name ASC",
-        )
-        .map_err(|e| e.to_string())?;
+    // For root queries (parent_path IS NULL), also include orphaned entries
+    // whose parent_path points to a non-existent path in the database.
+    // This ensures files indexed before their parent folder still appear at root level.
+    let query = if parent_path.is_none() {
+        "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
+         (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
+         FROM files
+         WHERE parent_path IS NULL
+            OR (parent_path IS NOT NULL AND NOT EXISTS (SELECT 1 FROM files f2 WHERE f2.path = files.parent_path))
+         ORDER BY is_dir DESC, name ASC"
+    } else {
+        "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
+         (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
+         FROM files
+         WHERE parent_path = ?
+         ORDER BY is_dir DESC, name ASC"
+    };
 
-    let entries = stmt
-        .query_map(params![parent_id, parent_id], |row| {
+    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+
+    let entries = if parent_path.is_none() {
+        stmt.query_map([], |row| {
             Ok(FileEntry {
-                id: row.get(0)?,
-                parent_id: row.get(1)?,
+                path: row.get(0)?,
+                parent_path: row.get(1)?,
                 name: row.get(2)?,
-                path: row.get(3)?,
-                size: row.get(4)?,
-                mtime: row.get(5)?,
-                is_dir: row.get::<_, i32>(6)? != 0,
-                token_count: row.get(7)?,
-                fingerprint: row.get(8)?,
-                child_count: row.get(9)?,
+                size: row.get(3)?,
+                mtime: row.get(4)?,
+                is_dir: row.get::<_, i32>(5)? != 0,
+                token_count: row.get(6)?,
+                fingerprint: row.get(7)?,
+                child_count: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+    } else {
+        stmt.query_map(params![parent_path], |row| {
+            Ok(FileEntry {
+                path: row.get(0)?,
+                parent_path: row.get(1)?,
+                name: row.get(2)?,
+                size: row.get(3)?,
+                mtime: row.get(4)?,
+                is_dir: row.get::<_, i32>(5)? != 0,
+                token_count: row.get(6)?,
+                fingerprint: row.get(7)?,
+                child_count: row.get(8)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+    };
 
     Ok(entries)
 }
@@ -202,9 +242,9 @@ pub async fn search_path(
     let search_pattern = format!("%{}%", pattern);
     let mut stmt = conn
         .prepare(
-            "SELECT id, parent_id, name, path, size, mtime, is_dir, token_count, fingerprint,
-             (SELECT COUNT(*) FROM files f2 WHERE f2.parent_id = files.id) as child_count
-             FROM files 
+            "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
+             (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
+             FROM files
              WHERE path LIKE ? OR name LIKE ?
              ORDER BY is_dir DESC, name ASC
              LIMIT 100",
@@ -214,16 +254,15 @@ pub async fn search_path(
     let entries = stmt
         .query_map(params![search_pattern.clone(), search_pattern], |row| {
             Ok(FileEntry {
-                id: row.get(0)?,
-                parent_id: row.get(1)?,
+                path: row.get(0)?,
+                parent_path: row.get(1)?,
                 name: row.get(2)?,
-                path: row.get(3)?,
-                size: row.get(4)?,
-                mtime: row.get(5)?,
-                is_dir: row.get::<_, i32>(6)? != 0,
-                token_count: row.get(7)?,
-                fingerprint: row.get(8)?,
-                child_count: row.get(9)?,
+                size: row.get(3)?,
+                mtime: row.get(4)?,
+                is_dir: row.get::<_, i32>(5)? != 0,
+                token_count: row.get(6)?,
+                fingerprint: row.get(7)?,
+                child_count: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -252,47 +291,45 @@ pub async fn clear_index(
 fn traverse_and_insert(
     conn: &rusqlite::Connection,
     path: &Path,
-    parent_id: Option<i64>,
+    parent_path: Option<String>,
 ) -> AppResult<u64> {
     let mut count = 0u64;
 
-    let entry = FileEntry::from_path(path, parent_id)?;
+    let entry = FileEntry::from_path(path, parent_path)?;
 
     // Check if entry already exists with same fingerprint
-    let existing: Option<(i64, Option<String>)> = conn
+    let existing_fingerprint: Option<Option<String>> = conn
         .query_row(
-            "SELECT id, fingerprint FROM files WHERE path = ?",
+            "SELECT fingerprint FROM files WHERE path = ?",
             params![&entry.path],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| row.get(0),
         )
         .optional()?;
 
-    let current_id = if let Some((id, existing_fingerprint)) = existing {
+    if let Some(existing_fp) = existing_fingerprint {
         // Entry exists - check if we need to update
-        if existing_fingerprint != entry.fingerprint {
+        if existing_fp != entry.fingerprint {
             conn.execute(
-                "UPDATE files SET size = ?, mtime = ?, fingerprint = ?, name = ? WHERE id = ?",
-                params![entry.size, entry.mtime, entry.fingerprint, entry.name, id],
+                "UPDATE files SET size = ?, mtime = ?, fingerprint = ?, name = ?, parent_path = ? WHERE path = ?",
+                params![entry.size, entry.mtime, entry.fingerprint, entry.name, entry.parent_path, entry.path],
             )?;
         }
-        id
     } else {
         // Insert new entry
         conn.execute(
-            "INSERT INTO files (parent_id, name, path, size, mtime, is_dir, fingerprint) 
+            "INSERT INTO files (path, parent_path, name, size, mtime, is_dir, fingerprint)
              VALUES (?, ?, ?, ?, ?, ?, ?)",
             params![
-                entry.parent_id,
-                entry.name,
                 entry.path,
+                entry.parent_path,
+                entry.name,
                 entry.size,
                 entry.mtime,
                 entry.is_dir as i32,
                 entry.fingerprint,
             ],
         )?;
-        conn.last_insert_rowid()
-    };
+    }
 
     count += 1;
 
@@ -302,7 +339,7 @@ fn traverse_and_insert(
             Ok(entries) => {
                 for dir_entry in entries.filter_map(|e| e.ok()) {
                     let child_path = dir_entry.path();
-                    match traverse_and_insert(conn, &child_path, Some(current_id)) {
+                    match traverse_and_insert(conn, &child_path, Some(entry.path.clone())) {
                         Ok(child_count) => count += child_count,
                         Err(e) => {
                             log::warn!("Failed to index {:?}: {}", child_path, e);
@@ -345,6 +382,7 @@ fn parallel_index_folder(
         None
     };
 
+
     // First pass: collect all entries using parallel walkdir
     let processed_count = Arc::new(AtomicU64::new(0));
     let error_count = Arc::new(AtomicU64::new(0));
@@ -353,6 +391,7 @@ fn parallel_index_folder(
 
     // Clone Arc for closure
     let gitignore_manager_clone = gitignore_manager.clone();
+
 
     // Collect entries with parallel iteration
     let entries: Vec<FileEntry> = WalkDir::new(root)
@@ -375,7 +414,8 @@ fn parallel_index_folder(
             };
 
             if should_emit {
-                let current_path = entry_result.as_ref()
+                let current_path = entry_result
+                    .as_ref()
                     .map(|e| e.path().to_string_lossy().to_string())
                     .unwrap_or_else(|_| "Unknown".to_string());
 
@@ -409,6 +449,7 @@ fn parallel_index_folder(
                         }
                     }
 
+
                     match FileEntry::from_dir_entry(&entry) {
                         Ok(file_entry) => Some(file_entry),
                         Err(e) => {
@@ -433,20 +474,20 @@ fn parallel_index_folder(
     }
 
     let total_entries = entries.len();
-    log::info!("Collected {} entries, now inserting into database", total_entries);
+    log::info!(
+        "Collected {} entries, now inserting into database",
+        total_entries
+    );
 
     // Second pass: batch insert into database
-    let mut conn = db.lock()
+    let mut conn = db
+        .lock()
         .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))?;
 
     // Sort entries by path depth to ensure parents are processed before children
+    // Use Path::components() for reliable cross-platform depth calculation
     let mut sorted_entries = entries;
-    sorted_entries.sort_by_key(|entry| {
-        entry.path.matches(std::path::MAIN_SEPARATOR).count()
-    });
-
-    // Build an in-memory path -> id mapping to track insertions
-    let mut path_to_id: HashMap<String, i64> = HashMap::new();
+    sorted_entries.sort_by_key(|entry| Path::new(&entry.path).components().count());
 
     // Insert in batches of 1000
     const BATCH_SIZE: usize = 1000;
@@ -456,66 +497,53 @@ fn parallel_index_folder(
         let tx = conn.transaction()?;
 
         for entry in chunk {
-            // Get parent_id by looking up parent path
-            let parent_id = PathBuf::from(&entry.path)
-                .parent()
-                .and_then(|p| p.to_str())
-                .and_then(|parent_path| {
-                    // First check in-memory mapping (for this batch)
-                    path_to_id.get(parent_path).copied().or_else(|| {
-                        // Then check database (for previous batches)
-                        tx.query_row(
-                            "SELECT id FROM files WHERE path = ?",
-                            params![parent_path],
-                            |row| row.get::<_, i64>(0),
-                        )
-                        .ok()
-                    })
-                });
+            // Always use the true parent_path from the file system.
+            // This ensures correct hierarchy even if parent isn't indexed yet.
+            // When we later index the parent, orphaned children will be found correctly.
+            let parent_path = &entry.parent_path;
 
             // Check if entry already exists
-            let existing: Option<(i64, Option<String>)> = tx
+            let existing_fingerprint: Option<Option<String>> = tx
                 .query_row(
-                    "SELECT id, fingerprint FROM files WHERE path = ?",
+                    "SELECT fingerprint FROM files WHERE path = ?",
                     params![&entry.path],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| row.get(0),
                 )
                 .optional()?;
 
-            let current_id = if let Some((id, existing_fingerprint)) = existing {
+            if let Some(existing_fp) = existing_fingerprint {
                 // Entry exists - check if we need to update
-                if existing_fingerprint != entry.fingerprint {
+                if existing_fp != entry.fingerprint {
                     tx.execute(
-                        "UPDATE files SET size = ?, mtime = ?, fingerprint = ?, name = ?, parent_id = ? WHERE id = ?",
-                        params![entry.size, entry.mtime, entry.fingerprint, entry.name, parent_id, id],
+                        "UPDATE files SET size = ?, mtime = ?, fingerprint = ?, name = ?, parent_path = ? WHERE path = ?",
+                        params![entry.size, entry.mtime, entry.fingerprint, entry.name, parent_path, entry.path],
                     )?;
                 }
-                id
             } else {
                 // Insert new entry
                 tx.execute(
-                    "INSERT INTO files (parent_id, name, path, size, mtime, is_dir, fingerprint)
+                    "INSERT INTO files (path, parent_path, name, size, mtime, is_dir, fingerprint)
                      VALUES (?, ?, ?, ?, ?, ?, ?)",
                     params![
-                        parent_id,
-                        entry.name,
                         entry.path,
+                        parent_path,
+                        entry.name,
                         entry.size,
                         entry.mtime,
                         entry.is_dir as i32,
                         entry.fingerprint,
                     ],
                 )?;
-                tx.last_insert_rowid()
-            };
-
-            // Store the path -> id mapping for future lookups within this session
-            path_to_id.insert(entry.path.clone(), current_id);
+            }
         }
 
         tx.commit()?;
         total_inserted += chunk.len() as u64;
-        log::debug!("Inserted batch {} ({} entries)", batch_idx + 1, total_inserted);
+        log::debug!(
+            "Inserted batch {} ({} entries)",
+            batch_idx + 1,
+            total_inserted
+        );
     }
 
     // Send final progress event
@@ -525,14 +553,17 @@ fn parallel_index_folder(
         current_path: "Complete".to_string(),
         errors: error_count.load(Ordering::Relaxed),
     };
-    
+
     if let Err(e) = app.emit("indexing-progress", &final_progress) {
         log::warn!("Failed to emit final progress event: {}", e);
     }
 
-    log::info!("Parallel indexing complete: {} entries inserted, {} errors", 
-              total_inserted, error_count.load(Ordering::Relaxed));
-    
+    log::info!(
+        "Parallel indexing complete: {} entries inserted, {} errors",
+        total_inserted,
+        error_count.load(Ordering::Relaxed)
+    );
+
     Ok(total_inserted)
 }
 
@@ -584,6 +615,7 @@ mod tests {
     fn test_traverse_and_insert() {
         let temp_dir = create_test_directory();
         let conn = create_test_db();
+        let root_path = temp_dir.path().to_str().unwrap().to_string();
 
         let count = traverse_and_insert(&conn, temp_dir.path(), None).unwrap();
 
@@ -595,6 +627,20 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM files", [], |row| row.get(0))
             .unwrap();
         assert_eq!(file_count, 8);
+
+        // Verify parent_path relationships work correctly
+        let child_path = temp_dir.path().join("folder1").join("file2.txt");
+        let normalized_child_path = normalize_path(child_path.to_str().unwrap());
+        let parent_path: Option<String> = conn
+            .query_row(
+                "SELECT parent_path FROM files WHERE path = ?",
+                params![&normalized_child_path],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let expected_parent = normalize_path(temp_dir.path().join("folder1").to_str().unwrap());
+        assert_eq!(parent_path, Some(expected_parent));
     }
 
     #[test]
@@ -630,7 +676,7 @@ mod tests {
         // Fingerprint should have changed
         assert_ne!(original_fingerprint, new_fingerprint);
 
-        // Should still have only one entry for the file
+        // Should still have only one entry for the file (path is primary key)
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM files WHERE name = ?",
@@ -668,6 +714,110 @@ mod tests {
 
         // Should return an error but not panic
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_path_as_primary_key() {
+        let temp_dir = create_test_directory();
+        let conn = create_test_db();
+        let file_path = temp_dir.path().join("file1.txt");
+        let path_str = normalize_path(file_path.to_str().unwrap());
+
+        // Insert the file
+        traverse_and_insert(&conn, &file_path, None).unwrap();
+
+        // Verify we can query by path (primary key)
+        let name: String = conn
+            .query_row(
+                "SELECT name FROM files WHERE path = ?",
+                params![&path_str],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(name, "file1.txt");
+
+        // Try to insert duplicate path - should update instead
+        traverse_and_insert(&conn, &file_path, None).unwrap();
+
+        // Should still have only one entry
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE path = ?",
+                params![&path_str],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_hierarchical_indexing_with_same_filenames() {
+        // Test scenario: files with identical names in different parent directories
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path();
+
+        // Create structure: folder1/plan.md, folder2/plan.md, folder3/spec.md
+        fs::create_dir_all(path.join("folder1")).unwrap();
+        fs::create_dir_all(path.join("folder2")).unwrap();
+        fs::create_dir_all(path.join("folder3")).unwrap();
+        fs::write(path.join("folder1/plan.md"), "plan from folder1").unwrap();
+        fs::write(path.join("folder2/plan.md"), "plan from folder2").unwrap();
+        fs::write(path.join("folder3/spec.md"), "spec from folder3").unwrap();
+
+        let conn = create_test_db();
+
+        // Index all three folders (simulating drag-and-drop of individual folders)
+        traverse_and_insert(&conn, &path.join("folder1"), None).unwrap();
+        traverse_and_insert(&conn, &path.join("folder2"), None).unwrap();
+        traverse_and_insert(&conn, &path.join("folder3"), None).unwrap();
+
+        // Query for all entries
+        let mut stmt = conn.prepare("SELECT path, parent_path, name FROM files ORDER BY path").unwrap();
+        let entries: Vec<(String, Option<String>, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        // Should have: folder1, folder1/plan.md, folder2, folder2/plan.md, folder3, folder3/spec.md = 6 entries
+        assert_eq!(entries.len(), 6, "Expected 6 entries (3 folders + 3 files)");
+
+        // Find all plan.md files
+        let plan_files: Vec<_> = entries.iter().filter(|(_, _, name)| name == "plan.md").collect();
+        assert_eq!(plan_files.len(), 2, "Should have 2 plan.md files");
+
+        // Verify each plan.md has different parent path
+        let parent_paths: Vec<_> = plan_files.iter().map(|(_, parent, _)| parent.clone()).collect();
+        assert_ne!(parent_paths[0], parent_paths[1], "plan.md files should have different parents");
+
+        // Verify normalized paths use forward slashes
+        for (path, _, _) in &entries {
+            assert!(!path.contains('\\'), "Path should not contain backslashes: {}", path);
+        }
+
+        // Verify we can query children of each folder
+        let folder1_path = normalize_path(path.join("folder1").to_str().unwrap());
+        let folder2_path = normalize_path(path.join("folder2").to_str().unwrap());
+
+        let folder1_children: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE parent_path = ?",
+                params![&folder1_path],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(folder1_children, 1, "folder1 should have 1 child");
+
+        let folder2_children: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE parent_path = ?",
+                params![&folder2_path],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(folder2_children, 1, "folder2 should have 1 child");
     }
 
     // Gitignore integration tests
@@ -820,5 +970,6 @@ mod tests {
             assert!(entries.iter().any(|p| p.to_string_lossy().contains("main.rs")));
             assert!(entries.iter().any(|p| p.to_string_lossy().contains(".gitignore")));
         }
+    }
     }
 }
