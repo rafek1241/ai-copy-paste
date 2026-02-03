@@ -11,6 +11,7 @@ pub struct AppSettings {
     pub default_template: String,
     pub auto_save_history: bool,
     pub cache_size_mb: i64,
+    pub respect_gitignore: bool,
 }
 
 impl Default for AppSettings {
@@ -34,6 +35,7 @@ impl Default for AppSettings {
             default_template: "agent".to_string(),
             auto_save_history: true,
             cache_size_mb: 100,
+            respect_gitignore: true,
         }
     }
 }
@@ -114,7 +116,7 @@ pub async fn get_all_settings(
 }
 
 /// Internal function to load settings
-fn load_settings_internal(db: &DbConnection) -> Result<AppSettings, String> {
+pub(crate) fn load_settings_internal(db: &DbConnection) -> Result<AppSettings, String> {
     let settings_map = get_all_settings_internal(db)?;
 
     let mut settings = AppSettings::default();
@@ -152,6 +154,13 @@ fn load_settings_internal(db: &DbConnection) -> Result<AppSettings, String> {
         }
     }
 
+    // Parse respect_gitignore
+    if let Some(respect_gitignore) = settings_map.get("respect_gitignore") {
+        if let Ok(respect_gitignore_bool) = respect_gitignore.parse::<bool>() {
+            settings.respect_gitignore = respect_gitignore_bool;
+        }
+    }
+
     Ok(settings)
 }
 
@@ -172,6 +181,7 @@ fn save_settings_internal(db: &DbConnection, settings: &AppSettings) -> Result<(
     save_setting_internal(db, "default_template", &settings.default_template)?;
     save_setting_internal(db, "auto_save_history", &settings.auto_save_history.to_string())?;
     save_setting_internal(db, "cache_size_mb", &settings.cache_size_mb.to_string())?;
+    save_setting_internal(db, "respect_gitignore", &settings.respect_gitignore.to_string())?;
 
     Ok(())
 }
@@ -295,6 +305,7 @@ mod tests {
             default_template: "test".to_string(),
             auto_save_history: false,
             cache_size_mb: 50,
+            respect_gitignore: false,
         };
 
         save_settings_internal(&db, &settings).unwrap();
@@ -305,6 +316,7 @@ mod tests {
         assert_eq!(loaded.default_template, settings.default_template);
         assert_eq!(loaded.auto_save_history, settings.auto_save_history);
         assert_eq!(loaded.cache_size_mb, settings.cache_size_mb);
+        assert_eq!(loaded.respect_gitignore, settings.respect_gitignore);
     }
 
     #[test]
@@ -317,12 +329,14 @@ mod tests {
             default_template: "test".to_string(),
             auto_save_history: false,
             cache_size_mb: 50,
+            respect_gitignore: false,
         };
 
         save_settings_internal(&db, &settings).unwrap();
 
         let exported = export_settings_internal(&db).unwrap();
         assert!(exported.contains("excluded_extensions"));
+        assert!(exported.contains("respect_gitignore"));
 
         // Clear settings
         reset_settings_internal(&db).unwrap();
@@ -333,6 +347,7 @@ mod tests {
         let loaded = load_settings_internal(&db).unwrap();
         assert_eq!(loaded.excluded_extensions, vec![".test".to_string()]);
         assert_eq!(loaded.token_limit, 100000);
+        assert_eq!(loaded.respect_gitignore, false);
     }
 
     #[test]
@@ -372,5 +387,21 @@ mod tests {
         assert!(settings.auto_save_history);
         assert_eq!(settings.cache_size_mb, 100);
         assert!(settings.excluded_extensions.contains(&".exe".to_string()));
+        assert!(settings.respect_gitignore);
+    }
+
+    #[test]
+    fn test_respect_gitignore_setting() {
+        let db = setup_test_db();
+
+        // Test saving respect_gitignore as true
+        save_setting_internal(&db, "respect_gitignore", "true").unwrap();
+        let settings = load_settings_internal(&db).unwrap();
+        assert!(settings.respect_gitignore);
+
+        // Test saving respect_gitignore as false
+        save_setting_internal(&db, "respect_gitignore", "false").unwrap();
+        let settings = load_settings_internal(&db).unwrap();
+        assert!(!settings.respect_gitignore);
     }
 }
