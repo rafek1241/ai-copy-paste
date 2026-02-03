@@ -390,13 +390,28 @@ fn parallel_index_folder(
     let last_progress_time = Arc::new(Mutex::new(Instant::now()));
 
     // Clone Arc for closure
-    let gitignore_manager_clone: Option<Arc<GitignoreManager>> = gitignore_manager.clone();
+    let gitignore_manager_for_filter: Option<Arc<GitignoreManager>> = gitignore_manager.clone();
 
 
     // Collect entries with parallel iteration
     let entries: Vec<FileEntry> = WalkDir::new(root)
         .follow_links(false) // Don't follow symlinks to avoid cycles
         .into_iter()
+        .filter_entry(|entry| {
+            if entry.path_is_symlink() {
+                return false;
+            }
+
+            if let Some(ref manager) = gitignore_manager_for_filter {
+                let is_dir = entry.file_type().is_dir();
+                if manager.is_ignored_with_type(entry.path(), is_dir) {
+                    ignored_count.fetch_add(1, Ordering::Relaxed);
+                    return false;
+                }
+            }
+
+            true
+        })
         .par_bridge() // Enable parallel processing
         .filter_map(|entry_result| {
             let count = processed_count.fetch_add(1, Ordering::Relaxed);
@@ -433,23 +448,6 @@ fn parallel_index_folder(
 
             match entry_result {
                 Ok(entry) => {
-                    // Skip symlinks
-                    if entry.path_is_symlink() {
-                        log::debug!("Skipping symlink: {:?}", entry.path());
-                        return None;
-                    }
-
-                    // Check gitignore patterns if enabled
-                    if let Some(ref manager) = gitignore_manager_clone {
-                        let is_dir = entry.file_type().is_dir();
-                        if manager.is_ignored_with_type(entry.path(), is_dir) {
-                            ignored_count.fetch_add(1, Ordering::Relaxed);
-                            log::debug!("Ignoring (gitignore): {:?}", entry.path());
-                            return None;
-                        }
-                    }
-
-
                     match FileEntry::from_dir_entry(&entry) {
                         Ok(file_entry) => Some(file_entry),
                         Err(e) => {
