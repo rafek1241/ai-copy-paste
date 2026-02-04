@@ -203,6 +203,10 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
     const ordered: string[] = [];
     const seen = new Set<string>();
+    const scoreByPath = new Map<string, number>();
+    matched.forEach((entry) => {
+      scoreByPath.set(entry.path, entry.score);
+    });
     matched.forEach((entry) => {
       if (!seen.has(entry.path)) {
         seen.add(entry.path);
@@ -217,10 +221,14 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       }
     });
 
-    const getDepth = (path: string) => path.split("/").length;
     ordered.sort((a, b) => {
-      const depthDiff = getDepth(a) - getDepth(b);
-      if (depthDiff !== 0) return depthDiff;
+      const scoreA = scoreByPath.get(a) ?? -1;
+      const scoreB = scoreByPath.get(b) ?? -1;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      const nameA = state.nodesMap[a]?.name ?? a;
+      const nameB = state.nodesMap[b]?.name ?? b;
+      const nameCompare = nameA.localeCompare(nameB);
+      if (nameCompare !== 0) return nameCompare;
       return a.localeCompare(b);
     });
 
