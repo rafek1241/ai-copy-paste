@@ -35,3 +35,9 @@ The FileTree component uses a performance-optimized architecture:
 - Children are loaded on-demand when user clicks expand (via `toggleExpand`)
 - E2E tests should call `expandFolder()` after indexing to see files
 - Self-referential and cross-child cycle prevention in `loadAndExpandChildren`
+
+## Search Behavior
+
+- Header search input calls `onSearch` with a 300ms debounce
+- FileTree search calls the `search_path` command for indexed results
+- Tests that assert search results should mock `search_path`

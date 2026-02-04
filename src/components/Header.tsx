@@ -22,6 +22,7 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
     const [tooltipState, setTooltipState] = useState<TooltipState>('visible');
     const inputRef = useRef<HTMLInputElement>(null);
     const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         if (isSearchExpanded && inputRef.current) {
@@ -34,6 +35,9 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
         return () => {
             if (tooltipTimeoutRef.current) {
                 clearTimeout(tooltipTimeoutRef.current);
+            }
+            if (searchDebounceRef.current) {
+                clearTimeout(searchDebounceRef.current);
             }
         };
     }, []);
@@ -78,8 +82,13 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setSearchQuery(value);
-        onSearch(value);
         updateTooltipVisibility(value);
+        if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
+        }
+        searchDebounceRef.current = setTimeout(() => {
+            onSearch(value);
+        }, 300);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -107,6 +116,9 @@ const Header: React.FC<HeaderProps> = ({ onAddFolder, onSearch, onClear }) => {
 
     const clearSearch = () => {
         setSearchQuery("");
+        if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
+        }
         onSearch("");
         setTooltipState('visible');
         inputRef.current?.focus();

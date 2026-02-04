@@ -75,6 +75,9 @@ describe('FileTree Clear Context', () => {
         if (cmd === 'get_children' && args?.parentPath === null) {
           return Promise.resolve(mockNodes);
         }
+        if (cmd === 'search_path') {
+          return Promise.resolve([]);
+        }
         return Promise.resolve([]);
       });
 
@@ -93,6 +96,9 @@ describe('FileTree Clear Context', () => {
 
       mockInvoke.mockImplementation((cmd, args) => {
         if (cmd === 'get_children' && args?.parentPath === null) {
+          return Promise.resolve(mockNodes);
+        }
+        if (cmd === 'search_path') {
           return Promise.resolve(mockNodes);
         }
         return Promise.resolve([]);

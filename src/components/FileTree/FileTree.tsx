@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, memo } from "react";
+import React, { useRef, useEffect, useCallback, memo, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { FileTreeProvider, useFileTreeActions, useFileTreeState } from "./FileTreeContext";
@@ -6,6 +6,7 @@ import { FileTreeFilters } from "./FileTreeFilters";
 import { FileTreeRow } from "./FileTreeRow";
 import { FileTreeEmpty } from "./FileTreeEmpty";
 import { useToast } from "../ui/toast";
+import { parseSearchQuery } from "@/lib/searchFilters";
 
 interface FileTreeProps {
   onSelectionChange?: (selectedPaths: string[]) => void;
@@ -104,6 +105,8 @@ const FileTreeInner = memo(function FileTreeInner({
 
   // Check if we're in search mode (flat results) or tree mode
   const isSearchMode = !!searchQuery;
+  const parsedFilters = useMemo(() => parseSearchQuery(searchQuery), [searchQuery]);
+  const highlightQuery = parsedFilters.fileName ?? parsedFilters.directoryName ?? parsedFilters.plainText ?? "";
 
   return (
     <div
@@ -140,10 +143,11 @@ const FileTreeInner = memo(function FileTreeInner({
                 <FileTreeRow
                   key={node.path}
                   node={node}
-                  level={isSearchMode ? 0 : flatNode.level}
+                  level={flatNode.level}
                   offsetTop={virtualRow.start}
                   onCopyPath={handleCopyPath}
                   showFullPath={isSearchMode}
+                  highlightQuery={highlightQuery}
                 />
               );
             })}

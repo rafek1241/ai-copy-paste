@@ -154,6 +154,7 @@ describe("Header", () => {
 
     describe("Search Callback", () => {
         it("calls onSearch with the current query", () => {
+            vi.useFakeTimers();
             const onSearch = vi.fn();
             render(<Header onSearch={onSearch} />);
 
@@ -164,8 +165,10 @@ describe("Header", () => {
             const input = screen.getByTestId("search-input");
             fireEvent.change(input, { target: { value: "file:App dir:src" } });
 
-            // Should call onSearch with the query
+            vi.advanceTimersByTime(300);
+
             expect(onSearch).toHaveBeenCalledWith("file:App dir:src");
+            vi.useRealTimers();
         });
     });
 });
