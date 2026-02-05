@@ -17,6 +17,8 @@
 - **Database**: SQLite (via `rusqlite` bundled)
 - **Concurrency**: `rayon` (for parallel processing)
 - **File System**: `walkdir` (for efficient directory traversal)
+- **Gitignore**: `ignore` (for `.gitignore` pattern matching)
+- **Regex**: `regex` (for advanced search filter patterns)
 - **Serialization**: `serde`, `serde_json`
 - **Logging**: `env_logger`, `log`
 

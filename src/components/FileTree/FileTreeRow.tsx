@@ -9,6 +9,7 @@ interface FileTreeRowProps {
   offsetTop: number;
   onCopyPath?: (path: string) => void;
   showFullPath?: boolean;
+  disambiguationPath?: string;
   highlightQuery?: string;
 }
 
@@ -18,6 +19,7 @@ export const FileTreeRow = memo(function FileTreeRow({
   offsetTop,
   onCopyPath,
   showFullPath = false,
+  disambiguationPath,
   highlightQuery = "",
 }: FileTreeRowProps) {
   const { toggleExpand, toggleCheck } = useFileTreeActions();
@@ -96,6 +98,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       onKeyDown={isFolder ? handleFolderKeyDown : handleFileKeyDown}
       checkboxRef={checkboxRef}
       showFullPath={showFullPath}
+      disambiguationPath={disambiguationPath}
       highlightQuery={highlightQuery}
     />
   );

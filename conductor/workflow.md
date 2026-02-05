@@ -20,13 +20,18 @@ All tasks follow a strict lifecycle:
 2. **Mark In Progress:** Before beginning work, edit `plan.md` and change the task from `[ ]` to `[~]`
 
 3. **Write Failing Tests (Red Phase):**
-   - Create a new test file for the feature or bug fix.
+   - Create a new test file for the feature or bug fix, or add tests to an existing test file if one already covers the module.
    - Write one or more unit tests that clearly define the expected behavior and acceptance criteria for the task.
    - **CRITICAL:** Run the tests and confirm that they fail as expected. This is the "Red" phase of TDD. Do not proceed until you have failing tests.
+   - **AI AGENT RULE:** You MUST write tests BEFORE writing any implementation code. Never write implementation first and tests after. If you catch yourself writing implementation code without a failing test, STOP immediately and write the test first.
+   - **Rust tests:** Add `#[cfg(test)]` module with `#[test]` functions in the same file, or in a dedicated test file. Run with `cargo test`.
+   - **Frontend tests:** Add `.test.ts` or `.test.tsx` files colocated with the source. Run with `npx vitest run`. Ensure the vitest config includes the test file location.
+   - **Minimum test scope:** Tests must cover: (1) the happy path, (2) at least one edge case, and (3) at least one error/invalid-input case where applicable.
 
 4. **Implement to Pass Tests (Green Phase):**
    - Write the minimum amount of application code necessary to make the failing tests pass.
    - Run the test suite again and confirm that all tests now pass. This is the "Green" phase.
+   - **AI AGENT RULE:** If the implementation requires changes across backend and frontend, write and pass backend tests first, then write and pass frontend tests. Never implement both layers simultaneously without test verification at each layer.
 
 5. **Refactor (Optional but Recommended):**
    - With the safety of passing tests, refactor the implementation code and the test code to improve clarity, remove duplication, and enhance performance without changing the external behavior.
@@ -138,39 +143,35 @@ All tasks follow a strict lifecycle:
 
 Before marking any task complete, verify:
 
-- [ ] All tests pass
-- [ ] Code coverage meets requirements (>80%)
-- [ ] Code follows project's code style guidelines (as defined in `code_styleguides/`)
-- [ ] All public functions/methods are documented (e.g., docstrings, JSDoc, GoDoc)
-- [ ] Type safety is enforced (e.g., type hints, TypeScript types, Go types)
-- [ ] No linting or static analysis errors (using the project's configured tools)
-- [ ] Works correctly on mobile (if applicable)
-- [ ] Documentation updated if needed
+- [ ] All Rust tests pass (`cargo test` in `src-tauri/`)
+- [ ] All frontend tests pass (`npx vitest run`)
+- [ ] TypeScript compiles without errors (`npx tsc --noEmit`)
+- [ ] No ESLint errors (`npm run lint`)
+- [ ] Tests were written BEFORE implementation (TDD red-green-refactor)
+- [ ] New test files are included in vitest config (check `vitest.config.ts` include patterns)
 - [ ] No security vulnerabilities introduced
+- [ ] Documentation updated if needed
 
 ## Development Commands
 
-**AI AGENT INSTRUCTION: This section should be adapted to the project's specific language, framework, and build tools.**
-
 ### Setup
 ```bash
-# Example: Commands to set up the development environment (e.g., install dependencies, configure database)
-# e.g., for a Node.js project: npm install
-# e.g., for a Go project: go mod tidy
+npm install                          # Install frontend dependencies
+cd src-tauri && cargo build          # Build Rust backend
 ```
 
 ### Daily Development
 ```bash
-# Example: Commands for common daily tasks (e.g., start dev server, run tests, lint, format)
-# e.g., for a Node.js project: npm run dev, npm test, npm run lint
-# e.g., for a Go project: go run main.go, go test ./..., go fmt ./...
+npm run tauri dev                    # Start Tauri app in dev mode (frontend + backend)
+npx vitest run                       # Run all frontend tests (single run)
+cd src-tauri && cargo test           # Run all Rust backend tests
+npm run lint                         # Run ESLint
+npx tsc --noEmit                     # TypeScript type check
 ```
 
 ### Before Committing
 ```bash
-# Example: Commands to run all pre-commit checks (e.g., format, lint, type check, run tests)
-# e.g., for a Node.js project: npm run check
-# e.g., for a Go project: make check (if a Makefile exists)
+cd src-tauri && cargo test && cd .. && npx vitest run && npx tsc --noEmit && npm run lint
 ```
 
 ## Testing Requirements

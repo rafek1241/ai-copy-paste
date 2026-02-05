@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useReducer, useCallback, useMemo, useRef, ReactNode, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { TreeNode, FileEntry } from "../../types";
-import { parseSearchQuery, matchesSearchFilters, getMatchScore, SearchFilters } from "@/lib/searchFilters";
-import { fuzzyMatch } from "@/lib/fuzzyMatch";
+import { TreeNode, FileEntry, SearchResult } from "../../types";
 
 // Filter types
 export type FilterType = "ALL" | "SRC" | "DOCS";
@@ -103,12 +101,7 @@ interface FileTreeProviderProps {
 export function FileTreeProvider({ children, searchQuery = "", onSelectionChange }: FileTreeProviderProps) {
   const [state, dispatch] = useReducer(fileTreeReducer, initialState);
 
-  // Parse search query into structured filters (memoized for performance)
-  const parsedFilters = useMemo<SearchFilters>(() => {
-    return parseSearchQuery(searchQuery);
-  }, [searchQuery]);
-
-  // Check if we're in search mode (should show flat results)
+  // Check if we're in search mode
   const isSearchMode = !!searchQuery.trim();
 
   // Ref to access current state inside loadRootEntries without stale closure
@@ -119,16 +112,9 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   const previousExpandedPathsRef = useRef<Set<string> | null>(null);
   const searchRequestIdRef = useRef(0);
 
-  // Helper: Check if node matches filter using advanced search filters
-  const matchesFilter = useCallback(
+  // Extension filter for SRC/DOCS tabs (not related to search)
+  const matchesExtensionFilter = useCallback(
     (node: TreeNode): boolean => {
-      // Use advanced search filters when there's a query
-      if (searchQuery.trim()) {
-        if (!matchesSearchFilters(node, parsedFilters)) {
-          return false;
-        }
-      }
-
       if (state.filterType === "ALL") return true;
       if (node.is_dir) return true;
 
@@ -138,182 +124,44 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       if (state.filterType === "DOCS") return DOCS_EXTENSION_SET.has(ext);
       return true;
     },
-    [state.filterType, searchQuery, parsedFilters]
+    [state.filterType]
   );
 
-  const matchesNameOnly = useCallback(
-    (node: TreeNode): boolean => {
-      if (!searchQuery.trim()) return false;
-      const { fileName, directoryName, regex, plainText } = parsedFilters;
+  // Search results root paths (built from backend search results)
+  const searchResultRootsRef = useRef<string[]>([]);
 
-      if (!fileName && !directoryName && !regex && !plainText) {
-        return true;
-      }
-
-      if (fileName && !fuzzyMatch(fileName, node.name)) {
-        return false;
-      }
-
-      if (directoryName) {
-        const dirNameLower = directoryName.toLowerCase();
-        if (!node.name.toLowerCase().includes(dirNameLower)) {
-          return false;
-        }
-      }
-
-      if (regex && !regex.test(node.name)) {
-        return false;
-      }
-
-      if (plainText) {
-        const textLower = plainText.toLowerCase();
-        if (!node.name.toLowerCase().includes(textLower)) {
-          return false;
-        }
-      }
-
-      return true;
-    },
-    [parsedFilters, searchQuery]
-  );
-
-  const searchRootPaths = useMemo(() => {
-    if (!isSearchMode) return state.rootPaths;
-
-    const rootPaths = state.rootPaths;
-    const hasRoots = rootPaths.length > 0;
-    const isUnderRoots = (path: string) => {
-      if (!hasRoots) return true;
-      return rootPaths.some((root) => path === root || path.startsWith(`${root}/`));
-    };
-
-    const matched: { path: string; score: number; name: string }[] = [];
-    Object.values(state.nodesMap).forEach((node) => {
-      if (!isUnderRoots(node.path)) return;
-      if (!matchesFilter(node)) return;
-      matched.push({ path: node.path, score: getMatchScore(node, parsedFilters), name: node.name });
-    });
-
-    matched.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      const nameCompare = a.name.localeCompare(b.name);
-      if (nameCompare !== 0) return nameCompare;
-      return a.path.localeCompare(b.path);
-    });
-
-    const ordered: string[] = [];
-    const seen = new Set<string>();
-    const scoreByPath = new Map<string, number>();
-    matched.forEach((entry) => {
-      scoreByPath.set(entry.path, entry.score);
-    });
-    matched.forEach((entry) => {
-      if (!seen.has(entry.path)) {
-        seen.add(entry.path);
-        ordered.push(entry.path);
-      }
-    });
-
-    rootPaths.forEach((rootPath) => {
-      if (!seen.has(rootPath)) {
-        seen.add(rootPath);
-        ordered.push(rootPath);
-      }
-    });
-
-    ordered.sort((a, b) => {
-      const scoreA = scoreByPath.get(a) ?? -1;
-      const scoreB = scoreByPath.get(b) ?? -1;
-      if (scoreB !== scoreA) return scoreB - scoreA;
-      const nameA = state.nodesMap[a]?.name ?? a;
-      const nameB = state.nodesMap[b]?.name ?? b;
-      const nameCompare = nameA.localeCompare(nameB);
-      if (nameCompare !== 0) return nameCompare;
-      return a.localeCompare(b);
-    });
-
-    return ordered;
-  }, [isSearchMode, state.rootPaths, state.nodesMap, matchesFilter, parsedFilters]);
-
-  // Build flat tree for virtual scrolling - uses single accumulator to avoid intermediate array allocations
+  // Build flat tree for virtual scrolling.
+  // Both normal and search modes use the same tree traversal - always tree-like.
   const buildFlatTree = useCallback(
     (rootPaths: string[], map: Record<string, TreeNode>): FlatTreeItem[] => {
       const result: FlatTreeItem[] = [];
 
-      if (isSearchMode) {
-        const visited = new Set<string>();
-        const traverse = (
-          paths: string[],
-          level: number,
-          ancestorVisible: boolean,
-          ancestorExpandedVisible: boolean
-        ) => {
-          for (const path of paths) {
-            if (visited.has(path)) continue;
-            const node = map[path];
-            if (!node) continue;
-            visited.add(path);
+      const traverse = (paths: string[], level: number) => {
+        for (const path of paths) {
+          const node = map[path];
+          if (!node) continue;
 
-            const nodeMatches = matchesFilter(node);
-            const nodeNameMatches = matchesNameOnly(node);
-            const isRootDisplay = !ancestorVisible || nodeNameMatches;
-            const shouldInclude = nodeMatches && (isRootDisplay || ancestorExpandedVisible);
-            const displayLevel = isRootDisplay ? 0 : level;
+          // Apply extension filter (SRC/DOCS) for non-directory nodes
+          if (!node.is_dir && !matchesExtensionFilter(node)) continue;
 
-            if (shouldInclude) {
-              result.push({ path, level: displayLevel });
-            }
+          result.push({ path, level });
 
-            if (node.is_dir && node.childPaths && node.childPaths.length > 0) {
-              let nextLevel = level;
-              let nextAncestorVisible = ancestorVisible;
-              let nextAncestorExpandedVisible = ancestorExpandedVisible;
-
-              if (shouldInclude) {
-                nextAncestorVisible = true;
-                if (isRootDisplay) {
-                  nextLevel = 1;
-                  nextAncestorExpandedVisible = node.expanded;
-                } else {
-                  nextLevel = level + 1;
-                  nextAncestorExpandedVisible = ancestorExpandedVisible && node.expanded;
-                }
-              }
-
-              traverse(node.childPaths, nextLevel, nextAncestorVisible, nextAncestorExpandedVisible);
-            }
+          if (node.expanded && node.childPaths) {
+            traverse(node.childPaths, level + 1);
           }
-        };
-
-        traverse(rootPaths, 0, false, false);
-      } else {
-        // Normal tree mode: maintain hierarchy
-        const traverse = (paths: string[], level: number) => {
-          for (const path of paths) {
-            const node = map[path];
-            if (!node) continue;
-
-            if (!node.is_dir && !matchesFilter(node)) continue;
-
-            result.push({ path, level });
-
-            if (node.expanded && node.childPaths) {
-              traverse(node.childPaths, level + 1);
-            }
-          }
-        };
-        traverse(rootPaths, 0);
-      }
+        }
+      };
+      traverse(rootPaths, 0);
 
       return result;
     },
-    [matchesFilter, isSearchMode, parsedFilters, matchesNameOnly]
+    [matchesExtensionFilter]
   );
 
   const flatTree = useMemo(() => {
-    const roots = isSearchMode ? searchRootPaths : state.rootPaths;
+    const roots = isSearchMode ? searchResultRootsRef.current : state.rootPaths;
     return buildFlatTree(roots, state.nodesMap);
-  }, [state.rootPaths, state.nodesMap, buildFlatTree, isSearchMode, searchRootPaths]);
+  }, [state.rootPaths, state.nodesMap, buildFlatTree, isSearchMode]);
 
   // Normalize path separators for cross-platform consistency
   const normalizePath = useCallback((filePath: string): string => {
@@ -391,6 +239,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (!trimmed) {
+      searchResultRootsRef.current = [];
       return;
     }
 
@@ -399,41 +248,23 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
     const run = async () => {
       try {
-        const entries = await invoke<FileEntry[]>("search_path", { pattern: trimmed });
+        // Backend returns scored, sorted results
+        const results = await invoke<SearchResult[]>("search_path", { pattern: trimmed });
         if (searchRequestIdRef.current !== requestId) return;
 
         const currentState = stateRef.current;
         const newMap: Record<string, TreeNode> = { ...currentState.nodesMap };
 
-        const ensureSyntheticNode = (path: string, parentPath: string | null) => {
-          if (!newMap[path]) {
-            newMap[path] = {
-              path,
-              parent_path: parentPath,
-              raw_path: path,
-              raw_parent_path: parentPath,
-              name: getNameFromPath(path),
-              size: null,
-              mtime: null,
-              is_dir: true,
-              token_count: null,
-              fingerprint: null,
-              child_count: null,
-              expanded: false,
-              checked: false,
-              indeterminate: false,
-              hasChildren: true,
-              childPaths: [],
-            };
-          }
-        };
+        // Flat list of search result paths (each at level 0)
+        const searchRoots: string[] = [];
 
-        for (const entry of entries) {
+        for (const entry of results) {
           const normalizedPath = normalizePath(entry.path);
           const normalizedParent = entry.parent_path ? normalizePath(entry.parent_path) : null;
 
+          // Merge entry into map (preserve checked/indeterminate state)
           const existingNode = newMap[normalizedPath];
-          const mergedNode: TreeNode = {
+          newMap[normalizedPath] = {
             ...entry,
             raw_path: entry.path,
             raw_parent_path: entry.parent_path,
@@ -442,31 +273,16 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
             expanded: existingNode?.expanded ?? false,
             checked: existingNode?.checked ?? false,
             indeterminate: existingNode?.indeterminate ?? false,
-            hasChildren: entry.is_dir || existingNode?.hasChildren || false,
+            hasChildren: entry.is_dir || (entry.child_count != null && entry.child_count > 0) || existingNode?.hasChildren || false,
             childPaths: existingNode?.childPaths ?? [],
           };
 
-          newMap[normalizedPath] = mergedNode;
-
-          let currentParent = normalizedParent;
-          let currentChild = normalizedPath;
-          while (currentParent) {
-            ensureSyntheticNode(currentParent, getParentDirectoryPath(currentParent));
-            const parentNode = newMap[currentParent];
-            if (parentNode && parentNode.is_dir) {
-              const childPaths = parentNode.childPaths ?? [];
-              if (!childPaths.includes(currentChild)) {
-                parentNode.childPaths = [...childPaths, currentChild];
-              }
-              parentNode.hasChildren = true;
-            }
-            currentChild = currentParent;
-            currentParent = newMap[currentParent]?.parent_path ?? null;
-          }
+          searchRoots.push(normalizedPath);
         }
 
         if (searchRequestIdRef.current !== requestId) return;
 
+        searchResultRootsRef.current = searchRoots;
         dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
       } catch (error) {
         console.error("Failed to search indexed paths:", error);
@@ -474,7 +290,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     };
 
     run();
-  }, [searchQuery, normalizePath, getNameFromPath, getParentDirectoryPath]);
+  }, [searchQuery, normalizePath]);
 
   // Load root entries - preserves expansion/selection state across re-indexing
   const loadRootEntries = useCallback(async () => {
@@ -686,11 +502,22 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
           }
         });
       } else if (rootEntries.length > 0) {
-        // Initial load with entries: auto-expand parents only if the entry is a file
-        // This ensures specific files are visible, but avoids expanding directories by default
+        // Initial load: auto-expand synthetic ancestors so the indexed content is visible.
+        // When a folder is indexed, its ancestor chain (rootAnchor up to drive root) should
+        // all be expanded so the user sees the indexed folder's contents immediately.
         rootEntries.forEach(entry => {
           if (!entry.is_dir) {
+            // Files: expand their ancestors so they're visible
             addAncestorsToExpand(entry.parent_path);
+          }
+        });
+        // Auto-expand all synthetic ancestor nodes (nodes that exist in the map
+        // but are NOT root entries themselves - they were created by ensureAncestorChain)
+        const rootEntryPaths = new Set(rootEntries.map(e => e.path));
+        Object.values(newNodesMap).forEach(node => {
+          if (node.is_dir && !rootEntryPaths.has(node.path)) {
+            // This is a synthetic ancestor node - auto-expand it
+            pathsToExpand.add(node.path);
           }
         });
       }
@@ -957,23 +784,13 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   );
 
   const collectSelected = useCallback(
-    (map: Record<string, TreeNode>, paths: string[]): string[] => {
+    (map: Record<string, TreeNode>): string[] => {
       const selectedPaths: string[] = [];
-
-      const traverse = (currentPaths: string[]) => {
-        for (const path of currentPaths) {
-          const node = map[path];
-          if (!node) continue;
-          if (node.checked && !node.is_dir) {
-            selectedPaths.push(node.path);
-          }
-          if (node.childPaths) {
-            traverse(node.childPaths);
-          }
+      for (const node of Object.values(map)) {
+        if (node.checked && !node.is_dir) {
+          selectedPaths.push(node.path);
         }
-      };
-
-      traverse(paths);
+      }
       return selectedPaths;
     },
     []
@@ -999,7 +816,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
 
       if (onSelectionChange) {
-        const selected = collectSelected(newMap, currentState.rootPaths);
+        const selected = collectSelected(newMap);
         onSelectionChange(selected);
       }
     },
@@ -1029,7 +846,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   const getSelectedPaths = useCallback(() => {
     const currentState = stateRef.current;
-    return collectSelected(currentState.nodesMap, currentState.rootPaths);
+    return collectSelected(currentState.nodesMap);
   }, [collectSelected]);
 
   const setFilter = useCallback((filter: FilterType) => {
@@ -1061,7 +878,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       if (hasChanges) {
         dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
         if (onSelectionChange) {
-          onSelectionChange(collectSelected(newMap, currentState.rootPaths));
+          onSelectionChange(collectSelected(newMap));
         }
       }
     },

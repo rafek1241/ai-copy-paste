@@ -62,62 +62,7 @@ impl GitignoreManager {
         }
 
         let is_dir = path.is_dir();
-
-        // Check all gitignore files from root to the path's parent
-        // Patterns closer to the file have higher priority (checked last)
-        let mut current = Some(self.root.clone());
-        let mut ignored = false;
-
-        while let Some(dir) = current.clone() {
-            if let Some(gitignore) = self.gitignores.get(&dir) {
-                match gitignore.matched(path, is_dir) {
-                    ignore::Match::None => {}
-                    ignore::Match::Ignore(_) => ignored = true,
-                    ignore::Match::Whitelist(_) => ignored = false,
-                }
-            }
-
-            // Move to next directory in path towards the target
-            if dir == path || path.starts_with(&dir) {
-                // Find the next directory between current and path
-                let relative = path.strip_prefix(&dir).ok();
-                if let Some(rel) = relative {
-                    if let Some(first_component) = rel.components().next() {
-                        let next_dir = dir.join(first_component);
-                        if next_dir != path && next_dir.is_dir() {
-                            if self.gitignores.contains_key(&next_dir) {
-                                current = Some(next_dir);
-                            } else {
-                                current = Some(dir.clone());
-                            }
-                            if current.as_ref() == Some(&dir) {
-                                break;
-                            }
-                            continue;
-                        }
-                    }
-                }
-            }
-            break;
-        }
-
-        // Re-check with all gitignores in the path hierarchy for correct precedence
-        let mut ancestor = path.parent();
-        while let Some(dir) = ancestor {
-            if !dir.starts_with(&self.root) {
-                break;
-            }
-            if let Some(gitignore) = self.gitignores.get(dir) {
-                match gitignore.matched(path, is_dir) {
-                    ignore::Match::None => {}
-                    ignore::Match::Ignore(_) => ignored = true,
-                    ignore::Match::Whitelist(_) => ignored = false,
-                }
-            }
-            ancestor = dir.parent();
-        }
-
-        ignored
+        self.check_ignored(path, is_dir)
     }
 
     /// Check if a path should be ignored, given explicit is_dir information
@@ -128,14 +73,59 @@ impl GitignoreManager {
             return false;
         }
 
-        let mut ignored = false;
+        self.check_ignored(path, is_dir)
+    }
 
-        // Check all gitignore files from ancestors of this path
-        let mut ancestor = path.parent();
-        while let Some(dir) = ancestor {
-            if !dir.starts_with(&self.root) && dir != self.root {
+    /// Core ignore check used by both is_ignored and is_ignored_with_type.
+    ///
+    /// Algorithm:
+    /// 1. Collect ancestor directories from root down to path's parent (top-down order)
+    /// 2. Check if any intermediate directory is itself ignored (directory inheritance:
+    ///    if node_modules/ is ignored, everything inside is too)
+    /// 3. Check the path itself against all gitignores (root to nearest, so nearest wins)
+    fn check_ignored(&self, path: &Path, is_dir: bool) -> bool {
+        // Collect directories from path's parent up to root
+        let mut dirs_to_root: Vec<&Path> = Vec::new();
+        let mut current = path.parent();
+        while let Some(dir) = current {
+            if dir == self.root {
+                dirs_to_root.push(dir);
                 break;
             }
+            if !dir.starts_with(&self.root) {
+                break;
+            }
+            dirs_to_root.push(dir);
+            current = dir.parent();
+        }
+        // Reverse so root is first, closest parent is last (top-down order)
+        dirs_to_root.reverse();
+
+        // Check if any intermediate directory is itself ignored.
+        // Skip index 0 (root) as it can never be ignored by its own gitignore.
+        // If a parent directory is ignored, all its children are implicitly ignored.
+        for i in 1..dirs_to_root.len() {
+            let dir = dirs_to_root[i];
+            let mut dir_ignored = false;
+            // Check this directory against gitignores from root to its parent
+            for j in 0..i {
+                if let Some(gitignore) = self.gitignores.get(dirs_to_root[j]) {
+                    match gitignore.matched(dir, true) {
+                        ignore::Match::None => {}
+                        ignore::Match::Ignore(_) => dir_ignored = true,
+                        ignore::Match::Whitelist(_) => dir_ignored = false,
+                    }
+                }
+            }
+            if dir_ignored {
+                return true;
+            }
+        }
+
+        // Check the path itself against all gitignores from root to closest parent.
+        // Processing root first ensures nearest gitignore wins (applied last).
+        let mut ignored = false;
+        for &dir in &dirs_to_root {
             if let Some(gitignore) = self.gitignores.get(dir) {
                 match gitignore.matched(path, is_dir) {
                     ignore::Match::None => {}
@@ -143,10 +133,6 @@ impl GitignoreManager {
                     ignore::Match::Whitelist(_) => ignored = false,
                 }
             }
-            if dir == self.root {
-                break;
-            }
-            ancestor = dir.parent();
         }
 
         ignored

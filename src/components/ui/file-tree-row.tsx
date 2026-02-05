@@ -263,6 +263,7 @@ export interface FileTreeRowViewProps {
   onKeyDown: (e: React.KeyboardEvent) => void
   checkboxRef: (el: HTMLInputElement | null) => void
   showFullPath?: boolean
+  disambiguationPath?: string
   highlightQuery?: string
 }
 
@@ -277,6 +278,7 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
   onKeyDown,
   checkboxRef,
   showFullPath = false,
+  disambiguationPath,
   highlightQuery = "",
 }: FileTreeRowViewProps) {
   const isFolder = node.is_dir
@@ -366,7 +368,13 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
           ({node.child_count ?? node.childPaths?.length ?? 0} items)
         </span>
 
-        <FileTreeRowPath path={displayPath} onClick={onPathClick} className="ml-2" />
+        {disambiguationPath ? (
+          <span className="text-[10px] text-white/25 ml-2 truncate min-w-0 flex-1 select-none" title={disambiguationPath}>
+            {disambiguationPath}
+          </span>
+        ) : (
+          <FileTreeRowPath path={displayPath} onClick={onPathClick} className="ml-2" />
+        )}
       </FileTreeRowContainer>
     )
   }
@@ -409,7 +417,13 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
           segmentKeyPrefix={`${node.path}-file`}
         />
 
-        <FileTreeRowPath path={displayPath} onClick={onPathClick} />
+        {disambiguationPath ? (
+          <span className="text-[10px] text-white/25 truncate min-w-0 flex-1 select-none" title={disambiguationPath}>
+            {disambiguationPath}
+          </span>
+        ) : (
+          <FileTreeRowPath path={displayPath} onClick={onPathClick} />
+        )}
       </div>
 
       <div className="px-2 select-none">
