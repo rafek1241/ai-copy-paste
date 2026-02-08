@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useReducer, useCallback, useMemo, useRef, ReactNode } from "react";
+import React, { createContext, useContext, useReducer, useCallback, useMemo, useRef, ReactNode, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { TreeNode, FileEntry } from "../../types";
+import { TreeNode, FileEntry, SearchResult } from "../../types";
 
 // Filter types
 export type FilterType = "ALL" | "SRC" | "DOCS";
@@ -100,22 +100,21 @@ interface FileTreeProviderProps {
 
 export function FileTreeProvider({ children, searchQuery = "", onSelectionChange }: FileTreeProviderProps) {
   const [state, dispatch] = useReducer(fileTreeReducer, initialState);
-  const normalizedQuery = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
+
+  // Check if we're in search mode
+  const isSearchMode = !!searchQuery.trim();
 
   // Ref to access current state inside loadRootEntries without stale closure
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // Helper: Check if node matches filter
-  const matchesFilter = useCallback(
-    (node: TreeNode): boolean => {
-      if (normalizedQuery) {
-        const matchesSearch =
-          node.name.toLowerCase().includes(normalizedQuery) ||
-          (node.path && node.path.toLowerCase().includes(normalizedQuery));
-        if (!matchesSearch) return false;
-      }
+  const previousSearchActiveRef = useRef(false);
+  const previousExpandedPathsRef = useRef<Set<string> | null>(null);
+  const searchRequestIdRef = useRef(0);
 
+  // Extension filter for SRC/DOCS tabs (not related to search)
+  const matchesExtensionFilter = useCallback(
+    (node: TreeNode): boolean => {
       if (state.filterType === "ALL") return true;
       if (node.is_dir) return true;
 
@@ -125,19 +124,25 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       if (state.filterType === "DOCS") return DOCS_EXTENSION_SET.has(ext);
       return true;
     },
-    [state.filterType, normalizedQuery]
+    [state.filterType]
   );
 
-  // Build flat tree for virtual scrolling - uses single accumulator to avoid intermediate array allocations
+  // Search results root paths (built from backend search results)
+  const searchResultRootsRef = useRef<string[]>([]);
+
+  // Build flat tree for virtual scrolling.
+  // Both normal and search modes use the same tree traversal - always tree-like.
   const buildFlatTree = useCallback(
     (rootPaths: string[], map: Record<string, TreeNode>): FlatTreeItem[] => {
       const result: FlatTreeItem[] = [];
+
       const traverse = (paths: string[], level: number) => {
         for (const path of paths) {
           const node = map[path];
           if (!node) continue;
 
-          if (!node.is_dir && !matchesFilter(node)) continue;
+          // Apply extension filter (SRC/DOCS) for non-directory nodes
+          if (!node.is_dir && !matchesExtensionFilter(node)) continue;
 
           result.push({ path, level });
 
@@ -147,15 +152,16 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         }
       };
       traverse(rootPaths, 0);
+
       return result;
     },
-    [matchesFilter]
+    [matchesExtensionFilter]
   );
 
-  const flatTree = useMemo(
-    () => buildFlatTree(state.rootPaths, state.nodesMap),
-    [state.rootPaths, state.nodesMap, buildFlatTree]
-  );
+  const flatTree = useMemo(() => {
+    const roots = isSearchMode ? searchResultRootsRef.current : state.rootPaths;
+    return buildFlatTree(roots, state.nodesMap);
+  }, [state.rootPaths, state.nodesMap, buildFlatTree, isSearchMode]);
 
   // Normalize path separators for cross-platform consistency
   const normalizePath = useCallback((filePath: string): string => {
@@ -183,6 +189,108 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     const lastSlash = normalized.lastIndexOf('/');
     return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
   }, [normalizePath]);
+
+  useEffect(() => {
+    const isActive = !!searchQuery.trim();
+    const wasActive = previousSearchActiveRef.current;
+    if (isActive && !wasActive) {
+      const currentState = stateRef.current;
+      const prevExpanded = new Set<string>();
+      const newMap: Record<string, TreeNode> = { ...currentState.nodesMap };
+      let hasChanges = false;
+
+      Object.values(currentState.nodesMap).forEach((node) => {
+        if (node.is_dir && node.expanded) {
+          prevExpanded.add(node.path);
+          newMap[node.path] = { ...node, expanded: false };
+          hasChanges = true;
+        }
+      });
+
+      previousExpandedPathsRef.current = prevExpanded;
+      if (hasChanges) {
+        dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
+      }
+    }
+
+    if (!isActive && wasActive) {
+      const restorePaths = previousExpandedPathsRef.current;
+      previousExpandedPathsRef.current = null;
+      const currentState = stateRef.current;
+      if (restorePaths && restorePaths.size > 0) {
+        const newMap: Record<string, TreeNode> = { ...currentState.nodesMap };
+        let hasChanges = false;
+        restorePaths.forEach((path) => {
+          const node = newMap[path];
+          if (node && node.is_dir && !node.expanded) {
+            newMap[path] = { ...node, expanded: true };
+            hasChanges = true;
+          }
+        });
+        if (hasChanges) {
+          dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
+        }
+      }
+    }
+
+    previousSearchActiveRef.current = isActive;
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      searchResultRootsRef.current = [];
+      return;
+    }
+
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+
+    const run = async () => {
+      try {
+        // Backend returns scored, sorted results
+        const results = await invoke<SearchResult[]>("search_path", { pattern: trimmed });
+        if (searchRequestIdRef.current !== requestId) return;
+
+        const currentState = stateRef.current;
+        const newMap: Record<string, TreeNode> = { ...currentState.nodesMap };
+
+        // Flat list of search result paths (each at level 0)
+        const searchRoots: string[] = [];
+
+        for (const entry of results) {
+          const normalizedPath = normalizePath(entry.path);
+          const normalizedParent = entry.parent_path ? normalizePath(entry.parent_path) : null;
+
+          // Merge entry into map (preserve checked/indeterminate state)
+          const existingNode = newMap[normalizedPath];
+          newMap[normalizedPath] = {
+            ...entry,
+            raw_path: entry.path,
+            raw_parent_path: entry.parent_path,
+            path: normalizedPath,
+            parent_path: normalizedParent,
+            expanded: existingNode?.expanded ?? false,
+            checked: existingNode?.checked ?? false,
+            indeterminate: existingNode?.indeterminate ?? false,
+            hasChildren: entry.is_dir || (entry.child_count != null && entry.child_count > 0) || existingNode?.hasChildren || false,
+            childPaths: existingNode?.childPaths ?? [],
+          };
+
+          searchRoots.push(normalizedPath);
+        }
+
+        if (searchRequestIdRef.current !== requestId) return;
+
+        searchResultRootsRef.current = searchRoots;
+        dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
+      } catch (error) {
+        console.error("Failed to search indexed paths:", error);
+      }
+    };
+
+    run();
+  }, [searchQuery, normalizePath]);
 
   // Load root entries - preserves expansion/selection state across re-indexing
   const loadRootEntries = useCallback(async () => {
@@ -394,11 +502,22 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
           }
         });
       } else if (rootEntries.length > 0) {
-        // Initial load with entries: auto-expand parents only if the entry is a file
-        // This ensures specific files are visible, but avoids expanding directories by default
+        // Initial load: auto-expand synthetic ancestors so the indexed content is visible.
+        // When a folder is indexed, its ancestor chain (rootAnchor up to drive root) should
+        // all be expanded so the user sees the indexed folder's contents immediately.
         rootEntries.forEach(entry => {
           if (!entry.is_dir) {
+            // Files: expand their ancestors so they're visible
             addAncestorsToExpand(entry.parent_path);
+          }
+        });
+        // Auto-expand all synthetic ancestor nodes (nodes that exist in the map
+        // but are NOT root entries themselves - they were created by ensureAncestorChain)
+        const rootEntryPaths = new Set(rootEntries.map(e => e.path));
+        Object.values(newNodesMap).forEach(node => {
+          if (node.is_dir && !rootEntryPaths.has(node.path)) {
+            // This is a synthetic ancestor node - auto-expand it
+            pathsToExpand.add(node.path);
           }
         });
       }
@@ -665,23 +784,13 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
   );
 
   const collectSelected = useCallback(
-    (map: Record<string, TreeNode>, paths: string[]): string[] => {
+    (map: Record<string, TreeNode>): string[] => {
       const selectedPaths: string[] = [];
-
-      const traverse = (currentPaths: string[]) => {
-        for (const path of currentPaths) {
-          const node = map[path];
-          if (!node) continue;
-          if (node.checked && !node.is_dir) {
-            selectedPaths.push(node.path);
-          }
-          if (node.childPaths) {
-            traverse(node.childPaths);
-          }
+      for (const node of Object.values(map)) {
+        if (node.checked && !node.is_dir) {
+          selectedPaths.push(node.path);
         }
-      };
-
-      traverse(paths);
+      }
       return selectedPaths;
     },
     []
@@ -697,7 +806,8 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
       if (node.is_dir && checked && (!node.childPaths || node.childPaths.length === 0)) {
         const childPaths = await loadAllChildrenRecursively(nodePath, newMap);
-        newMap[nodePath] = { ...node, checked, indeterminate: false, childPaths, expanded: true };
+        const expanded = isSearchMode ? node.expanded : true;
+        newMap[nodePath] = { ...node, checked, indeterminate: false, childPaths, expanded };
       } else {
         updateChildrenSelection(newMap, nodePath, checked);
       }
@@ -705,13 +815,12 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       updateParentSelection(newMap, node.parent_path);
       dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
 
-      // Notify parent
       if (onSelectionChange) {
-        const selected = collectSelected(newMap, currentState.rootPaths);
+        const selected = collectSelected(newMap);
         onSelectionChange(selected);
       }
     },
-    [onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection, collectSelected]
+    [onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection, collectSelected, isSearchMode]
   );
 
   const clearSelection = useCallback(() => {
@@ -737,7 +846,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   const getSelectedPaths = useCallback(() => {
     const currentState = stateRef.current;
-    return collectSelected(currentState.nodesMap, currentState.rootPaths);
+    return collectSelected(currentState.nodesMap);
   }, [collectSelected]);
 
   const setFilter = useCallback((filter: FilterType) => {
@@ -769,7 +878,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       if (hasChanges) {
         dispatch({ type: "UPDATE_NODES_MAP", payload: newMap });
         if (onSelectionChange) {
-          onSelectionChange(collectSelected(newMap, currentState.rootPaths));
+          onSelectionChange(collectSelected(newMap));
         }
       }
     },

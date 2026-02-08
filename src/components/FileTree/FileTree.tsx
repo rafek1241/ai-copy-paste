@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, memo } from "react";
+import React, { useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { FileTreeProvider, useFileTreeActions, useFileTreeState } from "./FileTreeContext";
@@ -102,6 +102,40 @@ const FileTreeInner = memo(function FileTreeInner({
     loadRootEntries();
   }, [loadRootEntries]);
 
+  // Extract highlight query from search string for UI highlighting
+  const isSearchMode = !!searchQuery;
+  const highlightQuery = (() => {
+    const trimmed = (searchQuery || "").trim();
+    if (!trimmed) return "";
+    // Extract the meaningful search term (strip file:/dir: prefixes)
+    const parts = trimmed.split(/\s+/).filter(
+      (p) => !p.toLowerCase().startsWith("file:") && !p.toLowerCase().startsWith("dir:")
+    );
+    if (parts.length > 0) return parts.join(" ");
+    // If only prefixed filters, use the value after the colon
+    const match = trimmed.match(/(?:file:|dir:)(\S+)/i);
+    return match ? match[1] : trimmed;
+  })();
+
+  // Detect duplicate names in search results for disambiguation
+  const duplicateNames = useMemo(() => {
+    if (!isSearchMode) return new Set<string>();
+    const nameCounts = new Map<string, number>();
+    for (const item of flatTree) {
+      if (item.level === 0) {
+        const node = state.nodesMap[item.path];
+        if (node) {
+          nameCounts.set(node.name, (nameCounts.get(node.name) || 0) + 1);
+        }
+      }
+    }
+    const dupes = new Set<string>();
+    for (const [name, count] of nameCounts) {
+      if (count > 1) dupes.add(name);
+    }
+    return dupes;
+  }, [isSearchMode, flatTree, state.nodesMap]);
+
   return (
     <div
       className="flex flex-col h-full w-full bg-[#0d1117] text-[#c9d1d9] overflow-hidden"
@@ -133,6 +167,9 @@ const FileTreeInner = memo(function FileTreeInner({
                 return null;
               }
 
+              // In search mode, show disambiguation path for level-0 items with duplicate names
+              const needsDisambiguation = isSearchMode && flatNode.level === 0 && duplicateNames.has(node.name);
+
               return (
                 <FileTreeRow
                   key={node.path}
@@ -140,6 +177,9 @@ const FileTreeInner = memo(function FileTreeInner({
                   level={flatNode.level}
                   offsetTop={virtualRow.start}
                   onCopyPath={handleCopyPath}
+                  showFullPath={false}
+                  disambiguationPath={needsDisambiguation ? node.parent_path ?? undefined : undefined}
+                  highlightQuery={highlightQuery}
                 />
               );
             })}

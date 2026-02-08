@@ -37,6 +37,20 @@ pub struct FileEntry {
     pub child_count: Option<i64>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub path: String,
+    pub parent_path: Option<String>,
+    pub name: String,
+    pub size: Option<i64>,
+    pub mtime: Option<i64>,
+    pub is_dir: bool,
+    pub token_count: Option<i64>,
+    pub fingerprint: Option<String>,
+    pub child_count: Option<i64>,
+    pub score: i32,
+}
+
 /// Normalize path separators to forward slashes for cross-platform consistency
 fn normalize_path(path: &str) -> String {
     path.replace('\\', "/")
@@ -229,47 +243,254 @@ pub async fn get_children(
     Ok(entries)
 }
 
-/// Search for files by path pattern
-#[tauri::command]
-pub async fn search_path(
-    pattern: String,
-    db: tauri::State<'_, DbConnection>,
-) -> Result<Vec<FileEntry>, String> {
-    log::debug!("Searching for pattern: {}", pattern);
+/// Parsed search filters for advanced query syntax
+#[derive(Debug, Default)]
+struct SearchFilter {
+    file_name: Option<String>,
+    directory_name: Option<String>,
+    regex_pattern: Option<regex::Regex>,
+    plain_text: Option<String>,
+}
 
-    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+/// Parse a search query into structured filters.
+/// Supports: file:<name>, dir:<name>, regex (auto-detected), plain text
+fn parse_search_query(query: &str) -> SearchFilter {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return SearchFilter::default();
+    }
 
-    let search_pattern = format!("%{}%", pattern);
-    let mut stmt = conn
-        .prepare(
-            "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
-             (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
-             FROM files
-             WHERE path LIKE ? OR name LIKE ?
-             ORDER BY is_dir DESC, name ASC
-             LIMIT 100",
-        )
-        .map_err(|e| e.to_string())?;
+    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+    let mut file_name = None;
+    let mut directory_name = None;
+    let mut remaining_parts = Vec::new();
 
-    let entries = stmt
-        .query_map(params![search_pattern.clone(), search_pattern], |row| {
-            Ok(FileEntry {
-                path: row.get(0)?,
-                parent_path: row.get(1)?,
-                name: row.get(2)?,
-                size: row.get(3)?,
-                mtime: row.get(4)?,
-                is_dir: row.get::<_, i32>(5)? != 0,
-                token_count: row.get(6)?,
-                fingerprint: row.get(7)?,
-                child_count: row.get(8)?,
-            })
+    for part in &parts {
+        let lower = part.to_lowercase();
+        if lower.starts_with("file:") && part.len() > 5 {
+            file_name = Some(part[5..].to_string());
+        } else if lower.starts_with("dir:") && part.len() > 4 {
+            directory_name = Some(part[4..].to_string());
+        } else {
+            remaining_parts.push(*part);
+        }
+    }
+
+    let remaining = remaining_parts.join(" ");
+    let regex_special = regex::Regex::new(r"[.*?\[\]()|^${}+\\]").unwrap();
+
+    let (regex_pattern, plain_text) = if !remaining.is_empty() {
+        if regex_special.is_match(&remaining) {
+            match regex::Regex::new(&format!("(?i){}", &remaining)) {
+                Ok(re) => (Some(re), None),
+                Err(_) => (None, Some(remaining)),
+            }
+        } else {
+            (None, Some(remaining))
+        }
+    } else {
+        (None, None)
+    };
+
+    SearchFilter {
+        file_name,
+        directory_name,
+        regex_pattern,
+        plain_text,
+    }
+}
+
+/// Compute relevance score for a search result.
+/// Higher score = better match. Scoring factors:
+/// - Exact name match (case-insensitive): +100
+/// - Name starts with query: +50
+/// - Name contains query: +30
+/// - Path contains query: +10
+fn compute_score(name: &str, path: &str, query: &str, is_dir: bool) -> i32 {
+    if query.is_empty() {
+        return 0;
+    }
+    let name_lower = name.to_lowercase();
+    let path_lower = path.to_lowercase();
+    let query_lower = query.to_lowercase();
+    let mut score = 0i32;
+
+    // Name-based scoring
+    if name_lower == query_lower {
+        score += 100; // Exact name match
+    } else if name_lower.starts_with(&query_lower) {
+        score += 50; // Name starts with query
+    } else if name_lower.contains(&query_lower) {
+        score += 30; // Name contains query
+    } else if path_lower.contains(&query_lower) {
+        score += 10; // Only path contains query
+    }
+
+    // Bonus for shorter names (more specific match)
+    if name_lower.contains(&query_lower) && name.len() < 20 {
+        score += 5;
+    }
+
+    // Slight bonus for files over directories in general text search
+    // (users typically search for files)
+    if !is_dir && score > 0 {
+        score += 1;
+    }
+
+    score
+}
+
+/// Internal search function that operates on a raw connection (testable without Tauri state).
+fn search_db(conn: &rusqlite::Connection, pattern: &str) -> Result<Vec<SearchResult>, String> {
+    let filters = parse_search_query(pattern);
+
+    // Empty query returns nothing
+    if filters.file_name.is_none()
+        && filters.directory_name.is_none()
+        && filters.regex_pattern.is_none()
+        && filters.plain_text.is_none()
+    {
+        return Ok(Vec::new());
+    }
+
+    // Build SQL conditions based on parsed filters
+    let mut conditions: Vec<String> = Vec::new();
+    let mut param_values: Vec<String> = Vec::new();
+
+    if let Some(ref file_name) = filters.file_name {
+        // file: matches FILES by name
+        conditions.push("(is_dir = 0 AND LOWER(name) LIKE ?)".to_string());
+        param_values.push(format!("%{}%", file_name.to_lowercase()));
+    }
+
+    if let Some(ref dir_name) = filters.directory_name {
+        // dir: matches DIRECTORIES by name
+        conditions.push("(is_dir = 1 AND LOWER(name) LIKE ?)".to_string());
+        param_values.push(format!("%{}%", dir_name.to_lowercase()));
+    }
+
+    // When both file: and dir: are present, we need files matching file: that are inside dirs matching dir:
+    if filters.file_name.is_some() && filters.directory_name.is_some() {
+        // Override: find files with name matching file: AND path containing dir:
+        conditions.clear();
+        param_values.clear();
+        let file_name = filters.file_name.as_ref().unwrap();
+        let dir_name = filters.directory_name.as_ref().unwrap();
+        conditions.push("(is_dir = 0 AND LOWER(name) LIKE ? AND LOWER(path) LIKE ?)".to_string());
+        param_values.push(format!("%{}%", file_name.to_lowercase()));
+        param_values.push(format!("%/{}/%", dir_name.to_lowercase()));
+    }
+
+    if let Some(ref plain_text) = filters.plain_text {
+        conditions.push("(LOWER(name) LIKE ? OR LOWER(path) LIKE ?)".to_string());
+        param_values.push(format!("%{}%", plain_text.to_lowercase()));
+        param_values.push(format!("%{}%", plain_text.to_lowercase()));
+    }
+
+    // For regex, we fetch broadly and filter in Rust
+    if filters.regex_pattern.is_some() && conditions.is_empty() {
+        // No SQL filters, query everything (limited)
+    }
+
+    let where_clause = if conditions.is_empty() {
+        "1=1".to_string()
+    } else {
+        conditions.join(" AND ")
+    };
+
+    let query = format!(
+        "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
+         (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
+         FROM files
+         WHERE {}
+         LIMIT 500",
+        where_clause
+    );
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(|p| p as &dyn rusqlite::types::ToSql)
+        .collect();
+
+    let entries: Vec<(String, Option<String>, String, Option<i64>, Option<i64>, bool, Option<i64>, Option<String>, Option<i64>)> = stmt
+        .query_map(rusqlite::params_from_iter(param_refs), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, Option<i64>>(4)?,
+                row.get::<_, i32>(5)? != 0,
+                row.get::<_, Option<i64>>(6)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<i64>>(8)?,
+            ))
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    Ok(entries)
+    // Build the score query string (what the user actually typed for scoring)
+    let score_query = if let Some(ref file_name) = filters.file_name {
+        file_name.clone()
+    } else if let Some(ref dir_name) = filters.directory_name {
+        dir_name.clone()
+    } else if let Some(ref plain_text) = filters.plain_text {
+        plain_text.clone()
+    } else {
+        String::new()
+    };
+
+    let mut results: Vec<SearchResult> = entries
+        .into_iter()
+        .map(|(path, parent_path, name, size, mtime, is_dir, token_count, fingerprint, child_count)| {
+            let score = compute_score(&name, &path, &score_query, is_dir);
+            SearchResult {
+                path,
+                parent_path,
+                name,
+                size,
+                mtime,
+                is_dir,
+                token_count,
+                fingerprint,
+                child_count,
+                score,
+            }
+        })
+        .collect();
+
+    // Apply regex filter in Rust if present
+    if let Some(ref re) = filters.regex_pattern {
+        results.retain(|r| re.is_match(&r.name) || re.is_match(&r.path));
+        // Score regex matches
+        for r in &mut results {
+            r.score = if re.is_match(&r.name) { 50 } else { 10 };
+        }
+    }
+
+    // Filter out zero-score results (no match)
+    results.retain(|r| r.score > 0);
+
+    // Sort by score DESC, then name ASC
+    results.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.name.cmp(&b.name)));
+
+    Ok(results)
+}
+
+/// Search for files by path pattern with advanced filter support.
+/// Supports: file:<name>, dir:<name>, regex patterns, plain text
+/// Returns results with relevance scores, sorted by score DESC.
+#[tauri::command]
+pub async fn search_path(
+    pattern: String,
+    db: tauri::State<'_, DbConnection>,
+) -> Result<Vec<SearchResult>, String> {
+    log::debug!("Searching for pattern: {}", pattern);
+    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+    search_db(&conn, &pattern)
 }
 
 /// Clear the file index
@@ -816,6 +1037,256 @@ mod tests {
             )
             .unwrap();
         assert_eq!(folder2_children, 1, "folder2 should have 1 child");
+    }
+
+    mod search_filter_tests {
+        use super::*;
+
+        #[test]
+        fn test_parse_empty_query() {
+            let f = parse_search_query("");
+            assert!(f.file_name.is_none());
+            assert!(f.directory_name.is_none());
+            assert!(f.regex_pattern.is_none());
+            assert!(f.plain_text.is_none());
+        }
+
+        #[test]
+        fn test_parse_whitespace_query() {
+            let f = parse_search_query("   ");
+            assert!(f.file_name.is_none());
+            assert!(f.plain_text.is_none());
+        }
+
+        #[test]
+        fn test_parse_file_prefix() {
+            let f = parse_search_query("file:App");
+            assert_eq!(f.file_name.as_deref(), Some("App"));
+            assert!(f.plain_text.is_none());
+        }
+
+        #[test]
+        fn test_parse_dir_prefix() {
+            let f = parse_search_query("dir:src");
+            assert_eq!(f.directory_name.as_deref(), Some("src"));
+            assert!(f.plain_text.is_none());
+        }
+
+        #[test]
+        fn test_parse_combined_file_dir() {
+            let f = parse_search_query("file:App dir:src");
+            assert_eq!(f.file_name.as_deref(), Some("App"));
+            assert_eq!(f.directory_name.as_deref(), Some("src"));
+        }
+
+        #[test]
+        fn test_parse_plain_text() {
+            let f = parse_search_query("test");
+            assert_eq!(f.plain_text.as_deref(), Some("test"));
+            assert!(f.regex_pattern.is_none());
+        }
+
+        #[test]
+        fn test_parse_regex_pattern() {
+            let f = parse_search_query("\\.test\\.ts$");
+            assert!(f.regex_pattern.is_some());
+            assert!(f.plain_text.is_none());
+        }
+
+        #[test]
+        fn test_parse_invalid_regex_falls_back_to_plain() {
+            let f = parse_search_query("[invalid");
+            assert!(f.regex_pattern.is_none());
+            assert_eq!(f.plain_text.as_deref(), Some("[invalid"));
+        }
+
+        #[test]
+        fn test_parse_mixed_file_and_plain() {
+            let f = parse_search_query("file:App test");
+            assert_eq!(f.file_name.as_deref(), Some("App"));
+            assert_eq!(f.plain_text.as_deref(), Some("test"));
+        }
+
+        #[test]
+        fn test_parse_case_insensitive_prefix() {
+            let f = parse_search_query("FILE:App DIR:src");
+            assert_eq!(f.file_name.as_deref(), Some("App"));
+            assert_eq!(f.directory_name.as_deref(), Some("src"));
+        }
+    }
+
+    mod search_integration_tests {
+        use super::*;
+
+        fn populate_test_db(conn: &Connection) {
+            // Create a realistic file structure:
+            // /project/src/App.tsx
+            // /project/src/components/Header.tsx
+            // /project/src/components/Footer.tsx
+            // /project/src/lib/utils.ts
+            // /project/conductor/tracks/track1.md
+            // /project/conductor/tracks/track2.md
+            // /project/conductor/plan.md
+            // /project/docs/plan.md  (duplicate name)
+            // /project/tests/app.test.ts
+            // /project/node_modules/react/index.js  (dir)
+            let entries = vec![
+                ("/project", None, "project", true),
+                ("/project/src", Some("/project"), "src", true),
+                ("/project/src/App.tsx", Some("/project/src"), "App.tsx", false),
+                ("/project/src/components", Some("/project/src"), "components", true),
+                ("/project/src/components/Header.tsx", Some("/project/src/components"), "Header.tsx", false),
+                ("/project/src/components/Footer.tsx", Some("/project/src/components"), "Footer.tsx", false),
+                ("/project/src/lib", Some("/project/src"), "lib", true),
+                ("/project/src/lib/utils.ts", Some("/project/src/lib"), "utils.ts", false),
+                ("/project/conductor", Some("/project"), "conductor", true),
+                ("/project/conductor/tracks", Some("/project/conductor"), "tracks", true),
+                ("/project/conductor/tracks/track1.md", Some("/project/conductor/tracks"), "track1.md", false),
+                ("/project/conductor/tracks/track2.md", Some("/project/conductor/tracks"), "track2.md", false),
+                ("/project/conductor/plan.md", Some("/project/conductor"), "plan.md", false),
+                ("/project/docs", Some("/project"), "docs", true),
+                ("/project/docs/plan.md", Some("/project/docs"), "plan.md", false),
+                ("/project/tests", Some("/project"), "tests", true),
+                ("/project/tests/app.test.ts", Some("/project/tests"), "app.test.ts", false),
+            ];
+
+            for (path, parent, name, is_dir) in entries {
+                conn.execute(
+                    "INSERT INTO files (path, parent_path, name, size, mtime, is_dir, fingerprint)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    params![path, parent, name, if is_dir { None::<i64> } else { Some(100) }, Some(1000i64), is_dir as i32, None::<String>],
+                ).unwrap();
+            }
+        }
+
+        #[test]
+        fn test_search_plain_text_finds_by_name() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "track1").unwrap();
+            assert!(!results.is_empty());
+            assert_eq!(results[0].name, "track1.md");
+        }
+
+        #[test]
+        fn test_search_plain_text_ordered_by_score() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "plan").unwrap();
+            // Should find both plan.md files, sorted by score DESC
+            assert!(results.len() >= 2);
+            assert!(results[0].score >= results[1].score);
+        }
+
+        #[test]
+        fn test_search_exact_name_match_scores_higher() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "App.tsx").unwrap();
+            // Exact name match should score highest
+            assert!(!results.is_empty());
+            assert_eq!(results[0].name, "App.tsx");
+            // app.test.ts also has "App" in path but should score lower
+            if results.len() > 1 {
+                assert!(results[0].score > results[1].score);
+            }
+        }
+
+        #[test]
+        fn test_search_file_prefix_only_matches_files() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "file:App").unwrap();
+            // Should find App.tsx (file), not any directory
+            assert!(!results.is_empty());
+            for r in &results {
+                assert!(!r.is_dir, "file: prefix should only return files, got dir: {}", r.name);
+            }
+            assert!(results.iter().any(|r| r.name == "App.tsx"));
+        }
+
+        #[test]
+        fn test_search_dir_prefix_only_matches_dirs() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "dir:src").unwrap();
+            // Should find the "src" directory itself
+            assert!(!results.is_empty());
+            for r in &results {
+                assert!(r.is_dir, "dir: prefix should only return directories, got file: {}", r.name);
+            }
+            assert!(results.iter().any(|r| r.name == "src"));
+        }
+
+        #[test]
+        fn test_search_dir_prefix_partial_match() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "dir:track").unwrap();
+            assert!(!results.is_empty());
+            assert!(results.iter().any(|r| r.name == "tracks"));
+        }
+
+        #[test]
+        fn test_search_combined_file_and_dir() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            // file:plan dir:conductor means: find files named "plan" inside "conductor" directory
+            let results = search_db(&conn, "file:plan dir:conductor").unwrap();
+            assert!(!results.is_empty());
+            // Should find conductor/plan.md but NOT docs/plan.md
+            assert!(results.iter().any(|r| r.path == "/project/conductor/plan.md"));
+            assert!(!results.iter().any(|r| r.path == "/project/docs/plan.md"));
+        }
+
+        #[test]
+        fn test_search_empty_returns_empty() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "").unwrap();
+            assert!(results.is_empty());
+        }
+
+        #[test]
+        fn test_search_no_match_returns_empty() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "xyznonexistent").unwrap();
+            assert!(results.is_empty());
+        }
+
+        #[test]
+        fn test_search_case_insensitive() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "app").unwrap();
+            assert!(!results.is_empty());
+            assert!(results.iter().any(|r| r.name == "App.tsx"));
+        }
+
+        #[test]
+        fn test_search_results_have_scores() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "Header").unwrap();
+            assert!(!results.is_empty());
+            // All results should have a positive score
+            for r in &results {
+                assert!(r.score > 0, "Result {} should have positive score", r.name);
+            }
+        }
+
+        #[test]
+        fn test_search_regex_pattern() {
+            let conn = create_test_db();
+            populate_test_db(&conn);
+            let results = search_db(&conn, "\\.tsx$").unwrap();
+            // Should find all .tsx files
+            assert!(!results.is_empty());
+            for r in &results {
+                assert!(r.name.ends_with(".tsx"), "Expected .tsx file, got {}", r.name);
+            }
+        }
     }
 
     // Gitignore integration tests

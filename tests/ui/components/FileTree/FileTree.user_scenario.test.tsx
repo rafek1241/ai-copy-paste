@@ -21,6 +21,22 @@ describe('FileTree User Scenarios', () => {
   let mockNodes: any[] = [];
   const eventCallbacks: Record<string, Function> = {};
 
+  const findNodeLabel = async (text: string) => {
+    await waitFor(() => {
+      const labels = screen.getAllByTestId('tree-label');
+      expect(labels.some(l => l.textContent === text)).toBe(true);
+    });
+  };
+
+  const getNodeLabel = (text: string) => {
+    const labels = screen.getAllByTestId('tree-label');
+    const match = labels.find(l => l.textContent === text);
+    if (!match) {
+      throw new Error(`Missing tree label: ${text}`);
+    }
+    return match;
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockNodes = [];
@@ -57,8 +73,8 @@ describe('FileTree User Scenarios', () => {
     render(<FileTree />);
 
     // Root anchor should be /a/b. So b is the root.
-    await screen.findByText('b', { selector: '[data-testid="tree-label"]' });
-    await screen.findByText('c.txt', { selector: '[data-testid="tree-label"]' });
+    await findNodeLabel('b');
+    await findNodeLabel('c.txt');
 
     // 'b' should be expanded
     const expandIcons = screen.getAllByTestId('expand-icon');
@@ -81,10 +97,10 @@ describe('FileTree User Scenarios', () => {
 
     render(<FileTree />);
 
-    await screen.findByText('plan.md', { selector: '[data-testid="tree-label"]' });
+    await findNodeLabel('plan.md');
     
     // Auto-expanded from initial load
-    expect(screen.getByText('refactor', { selector: '[data-testid="tree-label"]' })).toBeInTheDocument();
+    expect(getNodeLabel('refactor')).toBeInTheDocument();
 
     // 2. Add grandparent 'E:/project/tracks'
     const newRootNodes = [
@@ -112,12 +128,12 @@ describe('FileTree User Scenarios', () => {
     // 'refactor' and 'plan.md' should still be visible because their parent 'tracks' 
     // was an ancestor of previously expanded nodes and should now be expanded.
     await waitFor(() => {
-      expect(screen.getByText('tracks', { selector: '[data-testid="tree-label"]' })).toBeInTheDocument();
+      expect(getNodeLabel('tracks')).toBeInTheDocument();
     }, { timeout: 5000 });
 
     // If these are in the document, it means their parents are expanded
-    expect(await screen.findByText('refactor', { selector: '[data-testid="tree-label"]' })).toBeInTheDocument();
-    expect(await screen.findByText('plan.md', { selector: '[data-testid="tree-label"]' })).toBeInTheDocument();
+    await findNodeLabel('refactor');
+    await findNodeLabel('plan.md');
 
     // Verify at least the visible folders are expanded
     const expandIcons = screen.getAllByTestId('expand-icon');
@@ -162,7 +178,7 @@ describe('FileTree User Scenarios', () => {
       expect(icons.some(icon => icon.getAttribute('data-expanded') === 'true')).toBe(true);
     });
 
-    expect(screen.getByText('c.txt', { selector: '[data-testid="tree-label"]' })).toBeInTheDocument();
+    expect(getNodeLabel('c.txt')).toBeInTheDocument();
   });
 
 

@@ -1,0 +1,8 @@
+{
+  "track_id": "search_backend_rework_20260205",
+  "type": "fix",
+  "status": "completed",
+  "created_at": "2026-02-05T00:00:00Z",
+  "updated_at": "2026-02-05T00:00:00Z",
+  "description": "Move search filtering from frontend to Rust backend, fix file tree to always display as tree structure, fix gitignore test failures, fix version display, include all test files in vitest config"
+}

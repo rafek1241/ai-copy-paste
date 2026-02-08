@@ -21,6 +21,10 @@ export interface TreeNode extends FileEntry {
   hasChildren?: boolean;
 }
 
+export interface SearchResult extends FileEntry {
+  score: number;
+}
+
 export interface IndexProgress {
   processed: number;
   total_estimate: number;

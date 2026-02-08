@@ -4,6 +4,7 @@ import MainTabs, { ActiveTab } from "./components/MainTabs";
 import { SidebarTab } from "./components/Sidebar";
 import { listen, emit, UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { useToast } from "./components/ui/toast";
 import { useConfirmDialog } from "./components/ui/alert-dialog";
 import { useAppSettings, useAppCustomInstructions } from "./contexts/AppContext";
@@ -46,6 +47,13 @@ function App() {
     setSelectedPaths,
     setCustomInstructions
   );
+
+  // App version from Tauri config
+  const [appVersion, setAppVersion] = useState("0.0.0");
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion("0.0.0"));
+  }, []);
 
   // Token counting state
   const [tokenCount] = useState<number>(0);
@@ -228,7 +236,7 @@ function App() {
           onCopy={handleCopyContext}
           tokenCount={tokenCount}
           tokenLimit={settings.tokenLimit}
-          version="0.1.0"
+          version={appVersion}
         />
 
         <PromptView
@@ -241,7 +249,7 @@ function App() {
           onCopy={handleCopyContext}
           tokenCount={tokenCount}
           tokenLimit={settings.tokenLimit}
-          version="0.1.0"
+          version={appVersion}
         />
 
         <HistoryView

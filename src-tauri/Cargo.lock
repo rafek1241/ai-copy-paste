@@ -39,6 +39,7 @@ dependencies = [
  "ignore",
  "log",
  "rayon",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

@@ -20,6 +20,7 @@ export const Selectors = {
   clearContextBtn: '[data-testid="clear-context-btn"]',
   searchToggleBtn: '[data-testid="search-toggle"]',
   clearSearchBtn: '[data-testid="clear-search-btn"]',
+  searchTooltip: '[data-testid="search-tooltip"]',
 
   // File Tree
   fileTreeContainer: '[data-testid="file-tree-container"]',

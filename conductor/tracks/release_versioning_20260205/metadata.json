@@ -1,0 +1,8 @@
+{
+  "track_id": "release_versioning_20260205",
+  "type": "feature",
+  "status": "in_progress",
+  "created_at": "2026-02-05T00:00:00Z",
+  "updated_at": "2026-02-05T00:00:00Z",
+  "description": "Document and refine release workflow. Version is now read dynamically from tauri.conf.json. Release workflows exist for tag-triggered and manual builds on all 3 platforms."
+}
