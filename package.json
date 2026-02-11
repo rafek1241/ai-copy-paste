@@ -21,8 +21,8 @@
     "test:all": "concurrently \"npm run test\" \"npm run test:rust\" \"npm run e2e-session\"",
     "build:tauri": "cd src-tauri && cargo build",
     "build:tauri:release": "cd src-tauri && cargo build --release",
-    "version:check": "npx ts-node scripts/check-version.ts",
-    "version:bump": "npx ts-node scripts/bump-version.ts",
+    "version:check": "npx tsx scripts/check-version.ts",
+    "version:bump": "npx tsx scripts/bump-version.ts",
     "lint:commit": "commitlint --from HEAD~1 --to HEAD --verbose",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "prepare": "husky"
@@ -79,6 +79,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^1.1.0",

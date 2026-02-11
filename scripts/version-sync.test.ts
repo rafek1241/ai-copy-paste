@@ -13,7 +13,7 @@ import {
   setTauriVersion,
   setVersions,
   isValidVersion,
-} from './version-sync';
+} from './version-sync.js';
 
 describe('Version Sync', () => {
   let tmpDir: string;

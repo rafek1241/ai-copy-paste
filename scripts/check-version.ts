@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import path from 'path';
-import { validateVersions } from './version-sync';
+import { fileURLToPath } from 'url';
+import { validateVersions } from './version-sync.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 console.log('\x1b[34mVersion Sync Check\x1b[0m');

@@ -2,13 +2,16 @@
 import { program } from 'commander';
 import { execSync } from 'child_process';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   getVersions,
   validateVersions,
   setVersions,
   isValidVersion,
-} from './version-sync';
+} from './version-sync.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 function log(message: string): void {
