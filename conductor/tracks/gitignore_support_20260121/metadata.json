@@ -1,8 +1,0 @@
-{
-  "track_id": "gitignore_support_20260121",
-  "type": "feature",
-  "status": "completed",
-  "created_at": "2026-01-21T00:00:00Z",
-  "updated_at": "2026-01-23T00:00:00Z",
-  "description": "Read .gitignore files in indexed directories and automatically ignore matching files. Include a customizable flag in settings to enable/disable this feature."
-}
