@@ -95,16 +95,67 @@ jobs:
           if [ -z "$NOTES" ]; then
             # Auto-generate release notes from commits since last tag
             LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            
+            # Generate categorized changelog
+            echo "## What's Changed" > release_notes.txt
+            echo "" >> release_notes.txt
+            
             if [ -n "$LAST_TAG" ]; then
-              NOTES="## What's Changed"$'\n\n'
-              NOTES+=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD)
+              # Features
+              FEATURES=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD --grep="^feat" 2>/dev/null || echo "")
+              if [ -n "$FEATURES" ]; then
+                echo "### ✨ New Features" >> release_notes.txt
+                echo "$FEATURES" >> release_notes.txt
+                echo "" >> release_notes.txt
+              fi
+              
+              # Bug fixes
+              FIXES=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD --grep="^fix" 2>/dev/null || echo "")
+              if [ -n "$FIXES" ]; then
+                echo "### 🐛 Bug Fixes" >> release_notes.txt
+                echo "$FIXES" >> release_notes.txt
+                echo "" >> release_notes.txt
+              fi
+              
+              # Documentation
+              DOCS=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD --grep="^docs" 2>/dev/null || echo "")
+              if [ -n "$DOCS" ]; then
+                echo "### 📚 Documentation" >> release_notes.txt
+                echo "$DOCS" >> release_notes.txt
+                echo "" >> release_notes.txt
+              fi
+              
+              # Performance
+              PERF=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD --grep="^perf" 2>/dev/null || echo "")
+              if [ -n "$PERF" ]; then
+                echo "### ⚡ Performance" >> release_notes.txt
+                echo "$PERF" >> release_notes.txt
+                echo "" >> release_notes.txt
+              fi
+              
+              # Refactoring
+              REFACTOR=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD --grep="^refactor" 2>/dev/null || echo "")
+              if [ -n "$REFACTOR" ]; then
+                echo "### 🔧 Refactoring" >> release_notes.txt
+                echo "$REFACTOR" >> release_notes.txt
+                echo "" >> release_notes.txt
+              fi
+              
+              # Other changes
+              OTHER=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD --invert-grep --grep="^feat" --grep="^fix" --grep="^docs" --grep="^perf" --grep="^refactor" 2>/dev/null || echo "")
+              if [ -n "$OTHER" ]; then
+                echo "### 📦 Other Changes" >> release_notes.txt
+                echo "$OTHER" >> release_notes.txt
+                echo "" >> release_notes.txt
+              fi
             else
-              NOTES="## AI Context Collector $TAG"$'\n\n'"First release! 🎉"
+              echo "First release! 🎉" >> release_notes.txt
+              echo "" >> release_notes.txt
             fi
+          else
+            echo "$NOTES" > release_notes.txt
+            echo "" >> release_notes.txt
           fi
-
-          # Save to file to preserve newlines
-          echo "$NOTES" > release_notes.txt
 
           # Add download instructions
           cat >> release_notes.txt << 'EOF'

@@ -20,7 +20,12 @@
     "e2e-session": "concurrently --kill-others \"npm run dev\" \"npm run driver\" \"npm run test:e2e:run\"",
     "test:all": "concurrently \"npm run test\" \"npm run test:rust\" \"npm run e2e-session\"",
     "build:tauri": "cd src-tauri && cargo build",
-    "build:tauri:release": "cd src-tauri && cargo build --release"
+    "build:tauri:release": "cd src-tauri && cargo build --release",
+    "version:check": "npx ts-node scripts/check-version.ts",
+    "version:bump": "npx ts-node scripts/bump-version.ts",
+    "lint:commit": "commitlint --from HEAD~1 --to HEAD --verbose",
+    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
+    "prepare": "husky"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -43,6 +48,8 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/cli": "^2",
@@ -63,8 +70,11 @@
     "@wdio/spec-reporter": "^8",
     "@wdio/types": "^8",
     "autoprefixer": "^10.4.23",
+    "commander": "^12.1.0",
     "concurrently": "^9.2.1",
+    "conventional-changelog-cli": "^5.0.0",
     "edgedriver": "^6.3.0",
+    "husky": "^9.1.7",
     "jsdom": "^23.0.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",

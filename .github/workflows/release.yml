@@ -17,10 +17,88 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for changelog
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check version sync
+        run: npm run version:check
 
       - name: Extract version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "Generating changelog from $PREV_TAG to $VERSION"
+            
+            # Generate changelog from conventional commits
+            {
+              echo "## What's Changed"
+              echo ""
+              
+              # Features
+              FEATURES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD --grep="^feat" 2>/dev/null || true)
+              if [ -n "$FEATURES" ]; then
+                echo "### 🚀 Features"
+                echo "$FEATURES"
+                echo ""
+              fi
+              
+              # Bug fixes
+              FIXES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD --grep="^fix" 2>/dev/null || true)
+              if [ -n "$FIXES" ]; then
+                echo "### 🐛 Bug Fixes"
+                echo "$FIXES"
+                echo ""
+              fi
+              
+              # Other changes
+              OTHER=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD --invert-grep --grep="^feat" --grep="^fix" 2>/dev/null | head -20 || true)
+              if [ -n "$OTHER" ]; then
+                echo "### 📝 Other Changes"
+                echo "$OTHER"
+                echo ""
+              fi
+              
+              echo "---"
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...$VERSION"
+            } > changelog.md
+          else
+            echo "First release - generating initial changelog"
+            {
+              echo "## AI Context Collector $VERSION"
+              echo ""
+              echo "### 🎉 Initial Release"
+              echo ""
+              echo "Features:"
+              echo "- File tree view with virtual scrolling"
+              echo "- Token counting with gpt-tokenizer"
+              echo "- .gitignore support"
+              echo "- Advanced search filters"
+              echo "- Browser automation (ChatGPT, Claude, Gemini)"
+              echo "- Session history"
+              echo "- Settings persistence"
+            } > changelog.md
+          fi
+          
+          echo "changelog_file=changelog.md" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         id: create-release
@@ -32,19 +110,7 @@ jobs:
           release_name: Release ${{ steps.get_version.outputs.VERSION }}
           draft: true
           prerelease: false
-          body: |
-            ## AI Copy Paste ${{ steps.get_version.outputs.VERSION }}
-
-            ### Downloads
-            - **Windows**: Download the `.msi` installer
-            - **macOS**: Download the `.dmg` installer
-            - **Linux**: Download the `.AppImage` or `.deb` package
-
-            ### What's Changed
-            <!-- Add release notes here -->
-
-            ---
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.get_version.outputs.VERSION }}
+          body_path: changelog.md
 
   build-tauri:
     needs: create-release
