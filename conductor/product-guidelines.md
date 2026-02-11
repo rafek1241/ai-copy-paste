@@ -18,8 +18,27 @@
 - **Predictability**: Use standard OS-level patterns for buttons, menus, and file trees to ensure a familiar experience for all users.
 
 ## Action & Recovery
-- **Silent Execution**: Execute destructive actions (e.g., removing folders, clearing history) immediately without confirmation dialogs. Assume the user is an expert who understands their intent.
+- **Confirmation for Destructive Actions**: Require confirmation dialogs only for destructive actions that affect multiple items or are irreversible:
+  - Clear history (all entries)
+  - Remove all folders from the workspace
+  - Bulk file/folder deletions
+- **Silent Execution for Single Actions**: Execute single-item actions (e.g., removing a single folder, deleting a single history entry) immediately without confirmation. Assume the user is an expert who understands their intent.
 - **Focus on Utility**: Avoid interrupting the user's workflow with unnecessary prompts or warnings.
+
+## Sensitive Data Protection
+- **Visual Indicators**: Display clear visual indicators (badges, highlights, or icons) when content has been redacted or modified due to sensitive data detection.
+- **Transparency**: Users should always know what was redacted without needing to inspect the output manually.
+- **User Control**: Allow users to customize redaction patterns and rules through settings.
+
+## History Management
+- **Configurable Limits**: Provide a settings option to configure the maximum number of history entries to retain.
+- **Automatic Cleanup**: When the limit is reached, oldest entries are automatically removed.
+- **Metadata Only**: Store only file metadata (name, path, size) and the prompt itself—not the indexed file contents.
+
+## Automation
+- **Seamless Execution**: Browser automation should execute prompts without requiring additional consent dialogs. The user initiates the action explicitly.
+- **Clear Feedback**: Provide immediate visual feedback during automation execution (e.g., progress indicator, success/failure notification).
+- **Error Recovery**: If automation fails, display the error with actionable guidance and offer to copy the prompt to clipboard as a fallback.
 
 ## Advanced Search Functionality
 
