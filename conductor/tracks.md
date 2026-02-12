@@ -12,5 +12,15 @@ This file tracks all major tracks for the project. Each track has its own detail
 *Link: [./tracks/frontend_refactor_20260122/](./tracks/frontend_refactor_20260122/)*
 - [x] **Track: Search & FileTree Backend-Driven Rework**
 *Link: [./tracks/search_backend_rework_20260205/](./tracks/search_backend_rework_20260205/)*
-- [ ] **Track: Release & Versioning**
+- [x] **Track: Release & Versioning**
 *Link: [./tracks/release_versioning_20260205/](./tracks/release_versioning_20260205/)*
+
+---
+
+- [ ] **Track: Auto-update mechanism**
+*Link: [./tracks/auto_update_20260212/](./tracks/auto_update_20260212/)*
+
+---
+
+- [ ] **Track: Sensitive Data Protection**
+*Link: [./tracks/sensitive_data_protection_20260212/](./tracks/sensitive_data_protection_20260212/)*

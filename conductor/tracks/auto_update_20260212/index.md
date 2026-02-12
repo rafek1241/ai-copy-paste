@@ -1,4 +1,4 @@
-# Track release_versioning_20260205 Context
+# Track auto_update_20260212 Context
 
 - [Specification](./spec.md)
 - [Implementation Plan](./plan.md)

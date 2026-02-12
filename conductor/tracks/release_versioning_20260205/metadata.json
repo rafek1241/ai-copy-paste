@@ -3,15 +3,6 @@
   "type": "feature",
   "status": "completed",
   "created_at": "2026-02-05T00:00:00Z",
-  "updated_at": "2026-02-11T23:15:00Z",
-  "description": "Release workflow fully implemented. Version is read dynamically from tauri.conf.json. Version bump script and CI sync check ensure consistency. Conventional commits enforced with auto-generated changelogs.",
-  "completed_tasks": [
-    "Version sync TypeScript module with tests",
-    "CLI bump-version tool with commit/tag/push options",
-    "CI version sync check",
-    "Comprehensive RELEASE.md documentation",
-    "Commitlint with conventional commits config",
-    "Husky hooks for commit-msg and pre-commit",
-    "Auto-generated categorized changelogs in release workflow"
-  ]
+  "updated_at": "2026-02-12T12:00:00Z",
+  "description": "Release workflow fully implemented. Version is read dynamically from tauri.conf.json and displayed in UI footer. Version bump script and CI sync check ensure consistency. Conventional commits enforced with auto-generated changelogs."
 }
