@@ -73,6 +73,7 @@
     "commander": "^12.1.0",
     "concurrently": "^9.2.1",
     "conventional-changelog-cli": "^5.0.0",
+    "conventional-commits-parser": "^6.2.1",
     "edgedriver": "^6.3.0",
     "husky": "^9.1.7",
     "jsdom": "^23.0.1",
