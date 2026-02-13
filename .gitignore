@@ -54,3 +54,4 @@ bin/
 
 # test results
 test-results/
+.grepai/
