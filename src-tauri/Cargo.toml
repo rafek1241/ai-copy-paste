@@ -1,6 +1,6 @@
 [package]
 name = "ai-context-collector"
-version = "0.1.0"
+version = "0.1.1"
 description = "Cross-Platform AI Context Collector"
 authors = ["AI Context Collector Team"]
 edition = "2021"
