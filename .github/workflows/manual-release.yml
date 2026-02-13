@@ -160,62 +160,62 @@ jobs:
           # Add download instructions
           cat >> release_notes.txt << 'EOF'
 
-## Downloads
+          ## Downloads
 
-### Windows
-- **MSI Installer**: Recommended for most users
-- **NSIS Installer**: Alternative installer with context menu integration
+          ### Windows
+          - **MSI Installer**: Recommended for most users
+          - **NSIS Installer**: Alternative installer with context menu integration
 
-### macOS
-- **DMG**: Universal binary (Intel + Apple Silicon)
-- Requires macOS 10.15 or later
+          ### macOS
+          - **DMG**: Universal binary (Intel + Apple Silicon)
+          - Requires macOS 10.15 or later
 
-### Linux
-- **AppImage**: Portable, works on most distributions
-- **DEB**: For Debian/Ubuntu-based systems
-- **RPM**: For Fedora/RHEL-based systems (if available)
+          ### Linux
+          - **AppImage**: Portable, works on most distributions
+          - **DEB**: For Debian/Ubuntu-based systems
+          - **RPM**: For Fedora/RHEL-based systems (if available)
 
-## Installation
+          ## Installation
 
-### Windows
-1. Download the `.msi` installer
-2. Double-click to install
-3. (Optional) Run context menu installer from `installers/windows/`
+          ### Windows
+          1. Download the `.msi` installer
+          2. Double-click to install
+          3. (Optional) Run context menu installer from `installers/windows/`
 
-### macOS
-1. Download the `.dmg` file
-2. Open and drag to Applications folder
-3. (Optional) Install Finder Sync Extension from `installers/macos/`
+          ### macOS
+          1. Download the `.dmg` file
+          2. Open and drag to Applications folder
+          3. (Optional) Install Finder Sync Extension from `installers/macos/`
 
-### Linux
-1. Download the `.AppImage` or `.deb` package
-2. Make executable: `chmod +x AI-Context-Collector.AppImage`
-3. Run the application
-4. (Optional) Run installer script from `installers/linux/`
+          ### Linux
+          1. Download the `.AppImage` or `.deb` package
+          2. Make executable: `chmod +x AI-Context-Collector.AppImage`
+          3. Run the application
+          4. (Optional) Run installer script from `installers/linux/`
 
-## Context Menu Integration
+          ## Context Menu Integration
 
-After installation, you can enable context menu integration:
-- **Windows**: See `installers/windows/README.md`
-- **macOS**: See `installers/macos/README.md`
-- **Linux**: See `installers/linux/README.md`
+          After installation, you can enable context menu integration:
+          - **Windows**: See `installers/windows/README.md`
+          - **macOS**: See `installers/macos/README.md`
+          - **Linux**: See `installers/linux/README.md`
 
-## What's Included
+          ## What's Included
 
-All 8 project phases are complete:
-- ✅ Phase 1: Core Infrastructure
-- ✅ Phase 2: File Traversal Engine
-- ✅ Phase 3: Virtual Tree UI
-- ✅ Phase 4: Text Extraction
-- ✅ Phase 5: Token Counting & Prompt Building
-- ✅ Phase 6: Browser Automation
-- ✅ Phase 7: History & Persistence
-- ✅ Phase 8: Context Menu Installers
+          All 8 project phases are complete:
+          - Phase 1: Core Infrastructure
+          - Phase 2: File Traversal Engine
+          - Phase 3: Virtual Tree UI
+          - Phase 4: Text Extraction
+          - Phase 5: Token Counting & Prompt Building
+          - Phase 6: Browser Automation
+          - Phase 7: History & Persistence
+          - Phase 8: Context Menu Installers
 
----
+          ---
 
-**Full Changelog**: https://github.com/${{ github.repository }}/commits/$TAG
-EOF
+          **Full Changelog**: https://github.com/${{ github.repository }}/commits/$TAG
+          EOF
 
       - name: Create GitHub Release
         id: create-release
