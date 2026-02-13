@@ -8,7 +8,7 @@ import { AppPage, FileTreePage } from "./utils/pages/index.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const __baseDir = path.join(__dirname, "..", "..");
-const __testResultsDir = path.join(__baseDir, "test-results");
+const __testResultsDir = path.join(__dirname, "..", "..", "tests", "e2e");
 
 // Possible binary names (Cargo.toml name vs tauri.conf.json productName)
 const BINARY_NAMES = ["ai-context-collector", "ai-copy-paste-temp"];
