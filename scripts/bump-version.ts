@@ -103,7 +103,7 @@ async function runBump(version: string, options: { tag: boolean; commit: boolean
     console.log(`  \x1b[90mpackage.json\x1b[0m → ${normalizedVersion}`);
     console.log(`  \x1b[90mpackage-lock.json\x1b[0m → (updated via npm install)`);
     console.log(`  \x1b[90msrc-tauri/Cargo.toml\x1b[0m → ${normalizedVersion}`);
-    console.log(`  \x1b[90msrc-tauri/Cargo.lock\x1b[0m → (updated via cargo update)`);
+    console.log(`  \x1b[90msrc-tauri/Cargo.lock\x1b[0m → (updated via cargo check)`);
     console.log(`  \x1b[90msrc-tauri/tauri.conf.json\x1b[0m → ${normalizedVersion}`);
     
     if (options.commit) {
@@ -141,9 +141,9 @@ async function runBump(version: string, options: { tag: boolean; commit: boolean
     process.exit(1);
   }
 
-  logInfo('Updating Cargo.lock...');
+  logInfo('Ensuring Cargo.lock is updated...');
   try {
-    execSync('cargo metadata --format-version 1 --no-deps', { cwd: path.join(PROJECT_ROOT, 'src-tauri'), stdio: 'inherit' });
+    execSync('cargo check', { cwd: path.join(PROJECT_ROOT, 'src-tauri'), stdio: 'inherit' });
     logSuccess('✓ Cargo.lock updated');
   } catch (error) {
     logError('Failed to update Cargo.lock');

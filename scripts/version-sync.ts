@@ -50,10 +50,9 @@ export function getCargoVersion(projectRoot: string): string {
 export function setCargoVersion(projectRoot: string, version: string): void {
   const cargoPath = path.join(projectRoot, 'src-tauri', 'Cargo.toml');
   const content = fs.readFileSync(cargoPath, 'utf-8');
-  // Update version in [package] section
   const updated = content.replace(
-    /^(\[package\]\n(?:.*\n)*?)version\s*=\s*"[^"]+"/m,
-    `$1version = "${version}"`
+    /^version\s*=\s*".*?"$/m,
+    `version = "${version}"`
   );
   fs.writeFileSync(cargoPath, updated);
 }
