@@ -1,6 +1,5 @@
-# Track: Search & FileTree Backend-Driven Rework
+# Track auto_update_20260212 Context
 
-## Context Links
 - [Specification](./spec.md)
 - [Implementation Plan](./plan.md)
 - [Metadata](./metadata.json)

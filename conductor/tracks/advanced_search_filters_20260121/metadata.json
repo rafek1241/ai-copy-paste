@@ -1,8 +1,0 @@
-{
-  "track_id": "advanced_search_filters_20260121",
-  "type": "feature",
-  "status": "completed",
-  "created_at": "2026-01-21T00:00:00Z",
-  "updated_at": "2026-02-05T00:00:00Z",
-  "description": "Add advanced filtering capabilities to the search header textbox including fuzzy file matching (file:), directory filtering (dir:), auto-detected regex patterns, AND logic for combining filters, and context-aware tooltip for help."
-}

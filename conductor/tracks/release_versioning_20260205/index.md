@@ -1,6 +1,5 @@
-# Track: Release & Versioning
+# Track release_versioning_20260205 Context
 
-## Context Links
 - [Specification](./spec.md)
 - [Implementation Plan](./plan.md)
 - [Metadata](./metadata.json)

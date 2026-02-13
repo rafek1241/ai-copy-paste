@@ -201,5 +201,6 @@
     @apply bg-background-dark text-[#c9d1d9] antialiased overflow-hidden;
     font-size: 11px;
     min-height: max(600px, 100dvh);
+    user-select: none;
   }
 }
