@@ -101,7 +101,9 @@ async function runBump(version: string, options: { tag: boolean; commit: boolean
     
     console.log('Would update:');
     console.log(`  \x1b[90mpackage.json\x1b[0m → ${normalizedVersion}`);
+    console.log(`  \x1b[90mpackage-lock.json\x1b[0m → (updated via npm install)`);
     console.log(`  \x1b[90msrc-tauri/Cargo.toml\x1b[0m → ${normalizedVersion}`);
+    console.log(`  \x1b[90msrc-tauri/Cargo.lock\x1b[0m → (updated via cargo update)`);
     console.log(`  \x1b[90msrc-tauri/tauri.conf.json\x1b[0m → ${normalizedVersion}`);
     
     if (options.commit) {
@@ -129,6 +131,26 @@ async function runBump(version: string, options: { tag: boolean; commit: boolean
     process.exit(1);
   }
 
+  logInfo('Running npm install to update lock files...');
+  try {
+    execSync('npm install', { cwd: PROJECT_ROOT, stdio: 'inherit' });
+    logSuccess('✓ npm install completed');
+  } catch (error) {
+    logError('Failed to run npm install');
+    console.error(error);
+    process.exit(1);
+  }
+
+  logInfo('Updating Cargo.lock...');
+  try {
+    execSync('cargo metadata --format-version 1 --no-deps', { cwd: path.join(PROJECT_ROOT, 'src-tauri'), stdio: 'inherit' });
+    logSuccess('✓ Cargo.lock updated');
+  } catch (error) {
+    logError('Failed to update Cargo.lock');
+    console.error(error);
+    process.exit(1);
+  }
+
   const newValidation = validateVersions(PROJECT_ROOT);
   if (!newValidation.valid) {
     logError('Version sync failed after update!');
@@ -141,7 +163,7 @@ async function runBump(version: string, options: { tag: boolean; commit: boolean
   if (options.commit) {
     logInfo('Creating commit...');
     try {
-      execSync('git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json', { cwd: PROJECT_ROOT, stdio: 'inherit' });
+      execSync('git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json', { cwd: PROJECT_ROOT, stdio: 'inherit' });
       execSync(`git commit -m "chore: bump version to ${normalizedVersion}"`, { cwd: PROJECT_ROOT, stdio: 'inherit' });
       logSuccess('✓ Commit created');
     } catch (error) {
