@@ -1,7 +1,10 @@
 use crate::db::DbConnection;
 use crate::error::AppResult;
 use crate::templates::{build_prompt, get_builtin_templates, PromptTemplate};
+use crate::sensitive::detection::compile_patterns;
+use crate::sensitive::redaction::redact_content;
 use rusqlite::params;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -23,6 +26,7 @@ pub struct BuildPromptResponse {
     pub prompt: String,
     pub file_count: usize,
     pub total_chars: usize,
+    pub redaction_count: usize,
 }
 
 /// Get all available prompt templates
@@ -49,16 +53,81 @@ pub async fn build_prompt_from_files(
         request.file_paths.len()
     );
 
+    let (sensitive_enabled, compiled_patterns) = {
+        let conn = db
+            .lock()
+            .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+        let sensitive_enabled: bool = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'sensitive_data_enabled'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(false);
+
+        let compiled_patterns = if sensitive_enabled {
+            let custom_patterns_json: Option<String> = conn
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'sensitive_custom_patterns'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()
+                .ok()
+                .flatten();
+
+            let disabled_builtins_json: Option<String> = conn
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'sensitive_disabled_builtins'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()
+                .ok()
+                .flatten();
+
+            let mut all_patterns = crate::sensitive::patterns::get_builtin_patterns();
+
+            if let Some(json) = disabled_builtins_json {
+                if let Ok(disabled_ids) = serde_json::from_str::<Vec<String>>(&json) {
+                    let disabled_set: std::collections::HashSet<&str> =
+                        disabled_ids.iter().map(|s| s.as_str()).collect();
+                    for p in &mut all_patterns {
+                        if disabled_set.contains(p.id.as_str()) {
+                            p.enabled = false;
+                        }
+                    }
+                }
+            }
+
+            if let Some(json) = custom_patterns_json {
+                if let Ok(custom) = serde_json::from_str::<Vec<crate::sensitive::SensitivePattern>>(&json) {
+                    all_patterns.extend(custom);
+                }
+            }
+
+            compile_patterns(&all_patterns)
+        } else {
+            vec![]
+        };
+
+        (sensitive_enabled, compiled_patterns)
+    };
+
     let conn = db
         .lock()
         .map_err(|e| format!("Failed to lock database: {}", e))?;
 
-    // Verify files exist in database and read content
     let mut file_contents = Vec::new();
     let mut total_chars = 0;
+    let mut redaction_count = 0;
 
     for file_path in &request.file_paths {
-        // Verify file exists in index and is not a directory
         let is_valid: bool = conn
             .query_row(
                 "SELECT 1 FROM files WHERE path = ? AND is_dir = 0",
@@ -74,8 +143,22 @@ pub async fn build_prompt_from_files(
 
         match read_file_content(file_path) {
             Ok(content) => {
-                total_chars += content.len();
-                file_contents.push((file_path.clone(), content));
+                let final_content = if sensitive_enabled && !compiled_patterns.is_empty() {
+                    let result = redact_content(&content, &compiled_patterns);
+                    if result.replacements > 0 {
+                        log::info!(
+                            "Redacted {} sensitive items in {}",
+                            result.replacements,
+                            file_path
+                        );
+                        redaction_count += result.replacements;
+                    }
+                    result.content
+                } else {
+                    content
+                };
+                total_chars += final_content.len();
+                file_contents.push((file_path.clone(), final_content));
             }
             Err(e) => {
                 log::warn!("Failed to read file {}: {}", file_path, e);
@@ -84,7 +167,6 @@ pub async fn build_prompt_from_files(
         }
     }
 
-    // Build the prompt
     let prompt = build_prompt(
         &request.template_id,
         request.custom_instructions.as_deref(),
@@ -95,6 +177,7 @@ pub async fn build_prompt_from_files(
         prompt,
         file_count: file_contents.len(),
         total_chars,
+        redaction_count,
     })
 }
 
@@ -253,6 +336,7 @@ mod tests {
             prompt: "Generated prompt content".to_string(),
             file_count: 3,
             total_chars: 1500,
+            redaction_count: 5,
         };
 
         let json = serde_json::to_string(&response).unwrap();
@@ -261,6 +345,7 @@ mod tests {
         assert_eq!(deserialized.prompt, response.prompt);
         assert_eq!(deserialized.file_count, response.file_count);
         assert_eq!(deserialized.total_chars, response.total_chars);
+        assert_eq!(deserialized.redaction_count, 5);
     }
 
     #[test]
@@ -283,5 +368,51 @@ mod tests {
         let result = read_file_content(temp_file.path().to_str().unwrap());
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), content);
+    }
+
+    #[test]
+    fn test_redact_content_with_github_token() {
+        let mut patterns = crate::sensitive::patterns::get_builtin_patterns();
+        for p in &mut patterns {
+            p.enabled = true;
+        }
+        let compiled = compile_patterns(&patterns);
+
+        let content = "auth: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef1234";
+        let result = redact_content(content, &compiled);
+
+        assert!(result.content.contains("[GITHUB_TOKEN]"));
+        assert!(!result.content.contains("ghp_"));
+        assert!(result.replacements >= 1);
+    }
+
+    #[test]
+    fn test_redact_content_with_sensitive_disabled() {
+        let patterns: Vec<crate::sensitive::SensitivePattern> = vec![];
+        let compiled = compile_patterns(&patterns);
+
+        let content = "token = ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef1234";
+        let result = redact_content(content, &compiled);
+
+        assert_eq!(result.content, content);
+        assert_eq!(result.replacements, 0);
+    }
+
+    #[test]
+    fn test_redact_content_multiple_patterns() {
+        let mut patterns = crate::sensitive::patterns::get_builtin_patterns();
+        for p in &mut patterns {
+            p.enabled = true;
+        }
+        let compiled = compile_patterns(&patterns);
+
+        let content = r#"
+DATABASE_URL=postgresql://admin:secret@localhost:5432/mydb
+API_KEY=sk-proj-test1234567890abcdefghijklmnopqrstuvwxyz1234567890ABCD
+"#;
+        let result = redact_content(content, &compiled);
+
+        assert!(result.replacements >= 1);
+        assert!(!result.content.contains("admin:secret"));
     }
 }
