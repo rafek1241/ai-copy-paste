@@ -71,6 +71,17 @@ pub fn run() {
             commands::settings::import_settings,
             commands::settings::delete_setting,
             commands::settings::reset_settings,
+            commands::sensitive::get_sensitive_patterns,
+            commands::sensitive::get_sensitive_data_enabled,
+            commands::sensitive::set_sensitive_data_enabled,
+            commands::sensitive::get_prevent_selection,
+            commands::sensitive::set_prevent_selection,
+            commands::sensitive::add_custom_pattern,
+            commands::sensitive::delete_custom_pattern,
+            commands::sensitive::toggle_pattern_enabled,
+            commands::sensitive::scan_files_sensitive,
+            commands::sensitive::validate_regex_pattern,
+            commands::sensitive::test_pattern,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

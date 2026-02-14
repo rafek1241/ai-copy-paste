@@ -4,6 +4,7 @@ pub mod browser;
 pub mod prompts;
 pub mod history;
 pub mod settings;
+pub mod sensitive;
 
 // Re-export all commands for easy access
 pub use extraction::{extract_text, get_supported_file_types};
@@ -14,4 +15,10 @@ pub use history::{save_history, load_history, validate_history_paths, delete_his
 pub use settings::{
     save_setting, get_setting, get_all_settings, load_settings, save_settings,
     export_settings, import_settings, delete_setting, reset_settings,
+};
+pub use sensitive::{
+    get_sensitive_patterns, get_sensitive_data_enabled, set_sensitive_data_enabled,
+    get_prevent_selection, set_prevent_selection,
+    add_custom_pattern, delete_custom_pattern, toggle_pattern_enabled,
+    scan_files_sensitive, validate_regex_pattern, test_pattern,
 };

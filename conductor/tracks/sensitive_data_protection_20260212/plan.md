@@ -23,20 +23,24 @@
 
 ## Phase 2: Backend - Custom Patterns & Storage (TDD)
 
-- [ ] Task: Write failing tests for custom pattern CRUD (`src-tauri/src/commands/sensitive_patterns.rs`)
+- [x] Task: Write failing tests for custom pattern CRUD (`src-tauri/src/commands/sensitive.rs`)
   - Test: Add custom pattern
   - Test: Get all patterns
   - Test: Enable/disable pattern
   - Test: Delete custom pattern
   - Test: Invalid regex handling
 
-- [ ] Task: Implement custom pattern storage in settings/SQLite
+- [x] Task: Implement custom pattern storage in settings/SQLite
+  - Custom patterns stored as JSON in settings table
+  - Disabled builtins stored as JSON array of IDs
 
-- [ ] Task: Write failing tests for global enable/disable toggle
+- [x] Task: Write failing tests for global enable/disable toggle
   - Test: Toggle enables/disables all redaction
   - Test: Persists between sessions
 
-- [ ] Task: Implement global toggle in settings
+- [x] Task: Implement global toggle in settings
+  - sensitive_data_enabled setting key
+  - sensitive_prevent_selection setting key
 
 ## Phase 3: Backend - Integration Commands (TDD)
 
