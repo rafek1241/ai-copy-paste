@@ -41,3 +41,8 @@ The FileTree component uses a performance-optimized architecture:
 - Header search input calls `onSearch` with a 300ms debounce
 - FileTree search calls the `search_path` command for indexed results
 - Tests that assert search results should mock `search_path`
+
+## Release CI Notes
+
+- Keep Tauri JS and Rust core on the same **minor** version line (for example, Rust `tauri` `2.9.x` with `@tauri-apps/api` `2.9.x`). A mismatch causes `npm run tauri build` to fail before compilation.
+- In release workflows, prefer `softprops/action-gh-release` over deprecated `actions/create-release` to avoid `set-output` warnings.
