@@ -1,15 +1,16 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Copy } from "lucide-react";
+import { Copy, Shield, AlertTriangle } from "lucide-react";
 
 interface FooterProps {
     onCopy: () => void;
     tokenCount: number;
     tokenLimit: number;
     version: string;
+    redactionCount?: number;
 }
 
-const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version }) => {
+const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version, redactionCount = 0 }) => {
     const percentage = (tokenCount / tokenLimit) * 100;
 
     const statusColor = useMemo(() => {
@@ -37,7 +38,15 @@ const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version
                         {formattedCount} / {formattedLimit} tokens
                     </span>
                 </div>
-                <div className="text-[9px] text-white/20">v{version}</div>
+                <div className="flex items-center gap-3">
+                    {redactionCount > 0 && (
+                        <div className="flex items-center gap-1 text-amber-400" title={`${redactionCount} sensitive items redacted`}>
+                            <Shield size={10} />
+                            <span className="text-[9px]">{redactionCount} redacted</span>
+                        </div>
+                    )}
+                    <div className="text-[9px] text-white/20">v{version}</div>
+                </div>
             </div>
         </footer>
     );

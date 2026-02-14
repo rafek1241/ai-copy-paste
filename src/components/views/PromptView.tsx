@@ -7,12 +7,13 @@ interface PromptViewProps {
     isActive: boolean;
     // PromptBuilder props
     selectedFilePaths: string[];
-    onPromptBuilt: (prompt: string) => void;
+    onPromptBuilt: (prompt: string, redactionCount: number) => void;
     // Footer props
     onCopy: () => void;
     tokenCount: number;
     tokenLimit: number;
     version: string;
+    redactionCount?: number;
 }
 
 export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
@@ -22,7 +23,8 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
     onCopy,
     tokenCount,
     tokenLimit,
-    version
+    version,
+    redactionCount = 0
 }, ref) => {
     const { setFooterContent, setHeaderContent } = useLayout();
 
@@ -40,6 +42,7 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
                     tokenCount={tokenCount}
                     tokenLimit={tokenLimit}
                     version={version}
+                    redactionCount={redactionCount}
                 />
             );
         }
@@ -50,7 +53,8 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
         onCopy, 
         tokenCount, 
         tokenLimit, 
-        version
+        version,
+        redactionCount
     ]);
 
     return (

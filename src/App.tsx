@@ -33,6 +33,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [shouldClearFileTree, setShouldClearFileTree] = useState<boolean>(false);
+  const [redactionCount, setRedactionCount] = useState<number>(0);
   const promptBuilderRef = useRef<PromptBuilderHandle>(null);
 
   const { success, error: showError } = useToast();
@@ -224,7 +225,7 @@ function App() {
           <MainTabs activeTab={activeTab} onTabChange={setActiveTab} />
         )}
 
-        <FilesView
+<FilesView
           isActive={currentView === "main" && activeTab === "files"}
           onSelectionChange={handleSelectionChange}
           searchQuery={searchQuery}
@@ -237,19 +238,22 @@ function App() {
           tokenCount={tokenCount}
           tokenLimit={settings.tokenLimit}
           version={appVersion}
+          redactionCount={redactionCount}
         />
 
         <PromptView
           ref={promptBuilderRef}
           isActive={currentView === "main" && activeTab === "prompt"}
           selectedFilePaths={selectedPaths}
-          onPromptBuilt={(prompt) => {
+          onPromptBuilt={(prompt, redaction) => {
             console.log("Built prompt:", prompt);
+            setRedactionCount(redaction);
           }}
           onCopy={handleCopyContext}
           tokenCount={tokenCount}
           tokenLimit={settings.tokenLimit}
           version={appVersion}
+          redactionCount={redactionCount}
         />
 
         <HistoryView

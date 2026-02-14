@@ -10,7 +10,7 @@ import { PlusCircle, Bot, PencilRuler, Bug, BookOpen, Shield, FileText } from "l
 
 interface PromptBuilderProps {
   selectedFilePaths: string[];
-  onPromptBuilt?: (prompt: string) => void;
+  onPromptBuilt?: (prompt: string, redactionCount: number) => void;
 }
 
 export interface PromptBuilderHandle {
@@ -60,7 +60,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
       if (selectedFilePaths.length === 0 && trimmedInstructions) {
         await navigator.clipboard.writeText(trimmedInstructions);
         if (onPromptBuilt) {
-          onPromptBuilt(trimmedInstructions);
+          onPromptBuilt(trimmedInstructions, 0);
         }
         return;
       }
@@ -87,7 +87,7 @@ export const PromptBuilder = forwardRef<PromptBuilderHandle, PromptBuilderProps>
       await navigator.clipboard.writeText(response.prompt);
 
       if (onPromptBuilt) {
-        onPromptBuilt(response.prompt);
+        onPromptBuilt(response.prompt, response.redaction_count);
       }
     } catch (err) {
       console.log('PromptBuilder error caught:', err);

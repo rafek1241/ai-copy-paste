@@ -20,6 +20,7 @@ interface FilesViewProps {
     tokenCount: number;
     tokenLimit: number;
     version: string;
+    redactionCount?: number;
 }
 
 export const FilesView: React.FC<FilesViewProps> = ({
@@ -34,7 +35,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
     onCopy,
     tokenCount,
     tokenLimit,
-    version
+    version,
+    redactionCount = 0
 }) => {
     const { setHeaderContent, setFooterContent } = useLayout();
 
@@ -53,6 +55,7 @@ export const FilesView: React.FC<FilesViewProps> = ({
                     tokenCount={tokenCount}
                     tokenLimit={tokenLimit}
                     version={version}
+                    redactionCount={redactionCount}
                 />
             );
         }
@@ -66,7 +69,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
         onCopy, 
         tokenCount, 
         tokenLimit, 
-        version
+        version,
+        redactionCount
     ]);
 
     return (
