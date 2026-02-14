@@ -42,17 +42,17 @@
   - sensitive_data_enabled setting key
   - sensitive_prevent_selection setting key
 
-## Phase 3: Backend - Integration Commands (TDD)
+## Phase 3: Backend - Integration Commands (TDD) [checkpoint: 504d3b9]
 
-- [x] Task: Write failing tests for file redaction integration
+- [x] Task: Write failing tests for file redaction integration 504d3b9
   - Test: Redact file content before prompt building
   - Test: Detect sensitive data returns list of detected patterns per file
 
-- [x] Task: Integrate redaction into `build_prompt_from_files` command
+- [x] Task: Integrate redaction into `build_prompt_from_files` command 504d3b9
   - Apply redaction after reading file content, before building prompt
   - Added redaction_count to BuildPromptResponse
 
-- [x] Task: Add Tauri command for detecting sensitive data in files (for UI indicators)
+- [x] Task: Add Tauri command for detecting sensitive data in files (for UI indicators) d58c45b
   - scan_files_sensitive command added in Phase 2
 
 ## Phase 4: Frontend - Settings UI (TDD)
