@@ -1,25 +1,25 @@
 # Sensitive Data Protection - Implementation Plan
 
-## Phase 1: Backend - Core Detection Engine (TDD)
+## Phase 1: Backend - Core Detection Engine (TDD) [checkpoint: f3176fd]
 
-- [x] Task: Write failing tests for sensitive pattern detection (`src-tauri/src/sensitive_data/detection.rs`)
+- [x] Task: Write failing tests for sensitive pattern detection (`src-tauri/src/sensitive_data/detection.rs`) f3176fd
   - Test: Pattern matching for API keys (AWS, GitHub, OpenAI)
   - Test: Pattern matching for PII (email, phone, SSN)
   - Test: Pattern matching for connection strings (MySQL, PostgreSQL, Redis)
   - Test: Edge cases (empty input, no matches, multiple matches)
 
-- [x] Task: Implement built-in pattern definitions (`src-tauri/src/sensitive_data/patterns.rs`)
+- [x] Task: Implement built-in pattern definitions (`src-tauri/src/sensitive_data/patterns.rs`) f3176fd
   - Define regex patterns for API keys, tokens, secrets
   - Define regex patterns for PII (email, phone, SSN, credit cards)
   - Define regex patterns for connection strings
   - Define regex patterns for IP addresses, private keys
 
-- [x] Task: Write failing tests for redaction logic (`src-tauri/src/sensitive_data/redaction.rs`)
+- [x] Task: Write failing tests for redaction logic (`src-tauri/src/sensitive_data/redaction.rs`) f3176fd
   - Test: Single pattern replacement
   - Test: Multiple pattern replacements
   - Test: Custom placeholder format
 
-- [x] Task: Implement redaction engine with placeholder replacement
+- [x] Task: Implement redaction engine with placeholder replacement f3176fd
 
 ## Phase 2: Backend - Custom Patterns & Storage (TDD)
 
