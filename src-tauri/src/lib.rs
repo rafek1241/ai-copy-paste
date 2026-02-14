@@ -3,6 +3,7 @@ mod commands;
 mod db;
 mod error;
 pub mod gitignore;
+mod sensitive;
 mod templates;
 
 use cache::TextCache;

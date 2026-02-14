@@ -2,24 +2,24 @@
 
 ## Phase 1: Backend - Core Detection Engine (TDD)
 
-- [ ] Task: Write failing tests for sensitive pattern detection (`src-tauri/src/sensitive_data/detection.rs`)
+- [x] Task: Write failing tests for sensitive pattern detection (`src-tauri/src/sensitive_data/detection.rs`)
   - Test: Pattern matching for API keys (AWS, GitHub, OpenAI)
   - Test: Pattern matching for PII (email, phone, SSN)
   - Test: Pattern matching for connection strings (MySQL, PostgreSQL, Redis)
   - Test: Edge cases (empty input, no matches, multiple matches)
 
-- [ ] Task: Implement built-in pattern definitions (`src-tauri/src/sensitive_data/patterns.rs`)
+- [x] Task: Implement built-in pattern definitions (`src-tauri/src/sensitive_data/patterns.rs`)
   - Define regex patterns for API keys, tokens, secrets
   - Define regex patterns for PII (email, phone, SSN, credit cards)
   - Define regex patterns for connection strings
   - Define regex patterns for IP addresses, private keys
 
-- [ ] Task: Write failing tests for redaction logic (`src-tauri/src/sensitive_data/redaction.rs`)
+- [x] Task: Write failing tests for redaction logic (`src-tauri/src/sensitive_data/redaction.rs`)
   - Test: Single pattern replacement
   - Test: Multiple pattern replacements
   - Test: Custom placeholder format
 
-- [ ] Task: Implement redaction engine with placeholder replacement
+- [x] Task: Implement redaction engine with placeholder replacement
 
 ## Phase 2: Backend - Custom Patterns & Storage (TDD)
 
