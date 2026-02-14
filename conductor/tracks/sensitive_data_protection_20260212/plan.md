@@ -57,21 +57,21 @@
 
 ## Phase 4: Frontend - Settings UI (TDD)
 
-- [ ] Task: Write failing tests for Sensitive Data Settings component
+- [x] Task: Write failing tests for Sensitive Data Settings component
   - Test: Renders pattern list with checkboxes
   - Test: Add custom pattern form validation
   - Test: Pattern test/validation input
 
-- [ ] Task: Create SensitiveDataSettings component
+- [x] Task: Create SensitiveDataSettings component
   - Pattern list with enable/disable checkboxes
   - Add Custom Pattern form with regex validation
   - Preview section with before/after example
 
-- [ ] Task: Write failing tests for Settings page integration
+- [x] Task: Write failing tests for Settings page integration
   - Test: Load patterns from backend
   - Test: Save pattern changes
 
-- [ ] Task: Integrate with existing Settings page
+- [x] Task: Integrate with existing Settings page
 
 ## Phase 5: Prevention Feature & UI Indicators
 

@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
 import { useAppSettings } from '@/contexts/AppContext';
+import SensitiveDataSettings from './SensitiveDataSettings';
 import { 
   Settings as SettingsIcon, 
   Upload, 
@@ -404,8 +405,12 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                     <div className="text-[9px] text-white/30 leading-relaxed">Persist file selections to history automatically on building prompt.</div>
                   </div>
                 </label>
-              </div>
+</div>
             </section>
+          </div>
+
+          <div className="pt-4 border-t border-white/5">
+            <SensitiveDataSettings onSettingsChange={loadSettings} />
           </div>
 
           <div className="pt-4 mt-4 border-t border-white/5">
