@@ -21,30 +21,30 @@
 
 - [x] Task: Implement redaction engine with placeholder replacement f3176fd
 
-## Phase 2: Backend - Custom Patterns & Storage (TDD)
+## Phase 2: Backend - Custom Patterns & Storage (TDD) [checkpoint: d58c45b]
 
-- [x] Task: Write failing tests for custom pattern CRUD (`src-tauri/src/commands/sensitive.rs`)
+- [x] Task: Write failing tests for custom pattern CRUD (`src-tauri/src/commands/sensitive.rs`) d58c45b
   - Test: Add custom pattern
   - Test: Get all patterns
   - Test: Enable/disable pattern
   - Test: Delete custom pattern
   - Test: Invalid regex handling
 
-- [x] Task: Implement custom pattern storage in settings/SQLite
+- [x] Task: Implement custom pattern storage in settings/SQLite d58c45b
   - Custom patterns stored as JSON in settings table
   - Disabled builtins stored as JSON array of IDs
 
-- [x] Task: Write failing tests for global enable/disable toggle
+- [x] Task: Write failing tests for global enable/disable toggle d58c45b
   - Test: Toggle enables/disables all redaction
   - Test: Persists between sessions
 
-- [x] Task: Implement global toggle in settings
+- [x] Task: Implement global toggle in settings d58c45b
   - sensitive_data_enabled setting key
   - sensitive_prevent_selection setting key
 
 ## Phase 3: Backend - Integration Commands (TDD)
 
-- [ ] Task: Write failing tests for file redaction integration
+- [~] Task: Write failing tests for file redaction integration
   - Test: Redact file content before prompt building
   - Test: Detect sensitive data returns list of detected patterns per file
 
