@@ -55,47 +55,47 @@
 - [x] Task: Add Tauri command for detecting sensitive data in files (for UI indicators) d58c45b
   - scan_files_sensitive command added in Phase 2
 
-## Phase 4: Frontend - Settings UI (TDD)
+## Phase 4: Frontend - Settings UI (TDD) [checkpoint: 1871294]
 
-- [x] Task: Write failing tests for Sensitive Data Settings component
+- [x] Task: Write failing tests for Sensitive Data Settings component 1871294
   - Test: Renders pattern list with checkboxes
   - Test: Add custom pattern form validation
   - Test: Pattern test/validation input
 
-- [x] Task: Create SensitiveDataSettings component
+- [x] Task: Create SensitiveDataSettings component 1871294
   - Pattern list with enable/disable checkboxes
   - Add Custom Pattern form with regex validation
   - Preview section with before/after example
 
-- [x] Task: Write failing tests for Settings page integration
+- [x] Task: Write failing tests for Settings page integration 1871294
   - Test: Load patterns from backend
   - Test: Save pattern changes
 
-- [x] Task: Integrate with existing Settings page
+- [x] Task: Integrate with existing Settings page 1871294
 
-## Phase 5: Prevention Feature & UI Indicators
+## Phase 5: Prevention Feature & UI Indicators [checkpoint: 9b5ffba]
 
-- [x] Task: Write failing tests for prevention toggle setting
+- [x] Task: Write failing tests for prevention toggle setting 9b5ffba
   - Toggle persists between sessions (already tested in Phase 2)
   - When enabled, files with sensitive data are filtered from selection
 
-- [x] Task: Add "prevent_selection" setting to backend (done in Phase 2)
+- [x] Task: Add "prevent_selection" setting to backend d58c45b
 
-- [x] Task: Write failing tests for file tree selection filtering
+- [x] Task: Write failing tests for file tree selection filtering 9b5ffba
   - Checkbox hidden for files with sensitive data when prevention enabled
   - Auto-unselect files with sensitive data when prevention enabled
 
-- [x] Task: Implement file tree selection filtering
+- [x] Task: Implement file tree selection filtering 9b5ffba
   - scan_files_sensitive command available for checking files
   - UI can use this to determine which files have sensitive data
 
-- [x] Task: Write failing tests for visual indicators
+- [x] Task: Write failing tests for visual indicators 9b5ffba
   - Badge/icon shown for files with sensitive data
   - Redaction indicator in prompt preview
 
-- [x] Task: Add visual indicator for files containing sensitive data
+- [x] Task: Add visual indicator for files containing sensitive data 9b5ffba
   - Footer shows redaction count when items are redacted
 
-- [x] Task: Add redaction indicator in prompt output
+- [x] Task: Add redaction indicator in prompt output 9b5ffba
   - BuildPromptResponse includes redaction_count
   - Footer displays "X redacted" when count > 0
