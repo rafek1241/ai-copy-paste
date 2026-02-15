@@ -10,7 +10,7 @@ use std::collections::HashSet;
 const KEY_ENABLED: &str = "sensitive_data_enabled";
 const KEY_PREVENT: &str = "sensitive_prevent_selection";
 const KEY_CUSTOM_PATTERNS: &str = "sensitive_custom_patterns";
-const KEY_DISABLED_BUILTINS: &str = "sensitive_disabled_builtins";
+const KEY_BUILTIN_OVERRIDES: &str = "sensitive_builtin_overrides";
 
 fn get_setting(db: &DbConnection, key: &str) -> Result<Option<String>, String> {
     let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
@@ -39,17 +39,16 @@ pub(crate) fn get_all_patterns_internal(db: &DbConnection) -> Result<Vec<Sensiti
         None => vec![],
     };
 
-    let disabled_builtins: Vec<String> = match get_setting(db, KEY_DISABLED_BUILTINS)? {
+    let overrides: std::collections::HashMap<String, bool> = match get_setting(db, KEY_BUILTIN_OVERRIDES)? {
         Some(json) => serde_json::from_str(&json).unwrap_or_default(),
-        None => vec![],
+        None => std::collections::HashMap::new(),
     };
-    let disabled_set: HashSet<&str> = disabled_builtins.iter().map(|s| s.as_str()).collect();
 
     let mut all_patterns: Vec<SensitivePattern> = get_builtin_patterns()
         .into_iter()
         .map(|mut p| {
-            if disabled_set.contains(p.id.as_str()) {
-                p.enabled = false;
+            if let Some(&enabled_override) = overrides.get(&p.id) {
+                p.enabled = enabled_override;
             }
             p
         })
@@ -160,18 +159,21 @@ pub async fn toggle_pattern_enabled(
     let is_builtin = builtins.iter().any(|p| p.id == pattern_id);
 
     if is_builtin {
-        let mut disabled: Vec<String> = match get_setting(&db, KEY_DISABLED_BUILTINS)? {
+        let mut overrides: std::collections::HashMap<String, bool> = match get_setting(&db, KEY_BUILTIN_OVERRIDES)? {
             Some(json) => serde_json::from_str(&json).unwrap_or_default(),
-            None => vec![],
+            None => std::collections::HashMap::new(),
         };
-        if enabled {
-            disabled.retain(|id| id != &pattern_id);
-        } else if !disabled.contains(&pattern_id) {
-            disabled.push(pattern_id);
+        
+        let default_pattern = builtins.iter().find(|p| p.id == pattern_id).unwrap();
+        if enabled == default_pattern.enabled {
+            overrides.remove(&pattern_id);
+        } else {
+            overrides.insert(pattern_id, enabled);
         }
-        let json = serde_json::to_string(&disabled)
+        
+        let json = serde_json::to_string(&overrides)
             .map_err(|e| format!("Serialization error: {}", e))?;
-        set_setting(&db, KEY_DISABLED_BUILTINS, &json)
+        set_setting(&db, KEY_BUILTIN_OVERRIDES, &json)
     } else {
         let mut custom: Vec<SensitivePattern> = match get_setting(&db, KEY_CUSTOM_PATTERNS)? {
             Some(json) => serde_json::from_str(&json).unwrap_or_default(),
@@ -311,13 +313,32 @@ mod tests {
     #[test]
     fn test_disable_builtin() {
         let db = setup_db();
-        let disabled = vec!["email".to_string()];
-        let json = serde_json::to_string(&disabled).unwrap();
-        set_setting(&db, KEY_DISABLED_BUILTINS, &json).unwrap();
+        let mut overrides: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
+        overrides.insert("email".to_string(), false);
+        let json = serde_json::to_string(&overrides).unwrap();
+        set_setting(&db, KEY_BUILTIN_OVERRIDES, &json).unwrap();
 
         let all = get_all_patterns_internal(&db).unwrap();
         let email = all.iter().find(|p| p.id == "email").unwrap();
         assert!(!email.enabled, "Email pattern should be disabled");
+    }
+
+    #[test]
+    fn test_enable_default_disabled_builtin() {
+        let db = setup_db();
+        
+        let all = get_all_patterns_internal(&db).unwrap();
+        let email = all.iter().find(|p| p.id == "email").unwrap();
+        assert!(!email.enabled, "Email pattern should be disabled by default");
+        
+        let mut overrides: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
+        overrides.insert("email".to_string(), true);
+        let json = serde_json::to_string(&overrides).unwrap();
+        set_setting(&db, KEY_BUILTIN_OVERRIDES, &json).unwrap();
+
+        let all = get_all_patterns_internal(&db).unwrap();
+        let email = all.iter().find(|p| p.id == "email").unwrap();
+        assert!(email.enabled, "Email pattern should now be enabled");
     }
 
     #[test]

@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import { cn } from '@/lib/utils';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
 import { useAppSettings } from '@/contexts/AppContext';
@@ -15,7 +14,6 @@ import {
   X, 
   ChevronDown, 
   Check, 
-  Save, 
   Loader2 
 } from 'lucide-react';
 
@@ -28,11 +26,17 @@ interface AppSettings {
   respect_gitignore: boolean;
 }
 
-interface SettingsProps {
-  onSettingsChange?: (settings: AppSettings) => void;
+export interface SettingsRef {
+  save: () => Promise<void>;
+  isSaving: boolean;
 }
 
-const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
+interface SettingsProps {
+  onSettingsChange?: (settings: AppSettings) => void;
+  onSavingChange?: (saving: boolean) => void;
+}
+
+const Settings = forwardRef<SettingsRef, SettingsProps>(({ onSettingsChange, onSavingChange }, ref) => {
   const [settings, setSettings] = useState<AppSettings>({
     excluded_extensions: [],
     token_limit: 200000,
@@ -73,8 +77,9 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
     loadSettings();
   }, [loadSettings]);
 
-  const saveSettings = useCallback(async () => {
+const saveSettings = useCallback(async () => {
     setSaving(true);
+    onSavingChange?.(true);
     try {
       await invoke('save_settings', { settings });
 
@@ -94,8 +99,14 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
       showError('Failed to save settings');
     } finally {
       setSaving(false);
+      onSavingChange?.(false);
     }
-  }, [settings, onSettingsChange, success, showError, updateGlobalSettings]);
+  }, [settings, onSettingsChange, success, showError, updateGlobalSettings, onSavingChange]);
+
+  useImperativeHandle(ref, () => ({
+    save: saveSettings,
+    isSaving: saving,
+  }), [saveSettings, saving]);
 
   const handleExport = useCallback(async () => {
     try {
@@ -409,32 +420,16 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
             </section>
           </div>
 
-          <div className="pt-4 border-t border-white/5">
-            <SensitiveDataSettings onSettingsChange={loadSettings} />
-          </div>
-
-          <div className="pt-4 mt-4 border-t border-white/5">
-            <button
-              onClick={saveSettings}
-              disabled={saving}
-              className={cn(
-                "w-full h-10 rounded font-bold text-[11px] tracking-widest uppercase transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/50",
-                saving ? "bg-white/5 text-white/20 cursor-wait" : "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/10 active:scale-[0.99]"
-              )}
-            >
-              {saving ? (
-                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Save size={16} aria-hidden="true" />
-              )}
-              {saving ? 'SAVING...' : 'SAVE CONFIGURATION'}
-            </button>
+<div className="pt-4 border-t border-white/5">
+            <SensitiveDataSettings />
           </div>
         </div>
       </div>
       <ConfirmDialog />
     </>
   );
-};
+});
+
+Settings.displayName = 'Settings';
 
 export default Settings;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { useToast } from './ui/toast';
 import {
@@ -10,8 +10,6 @@ import {
   Play,
   AlertCircle,
   Loader2,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import {
   SensitivePattern,
@@ -34,12 +32,11 @@ interface SensitiveDataSettingsProps {
 const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSettingsChange }) => {
   const [patterns, setPatterns] = useState<SensitivePattern[]>([]);
   const [featureEnabled, setFeatureEnabled] = useState(false);
-  const [preventSelection, setPreventSelection] = useState(false);
+  const [preventSelectionEnabled, setPreventSelectionEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showAddForm, setShowAddForm] = useState(false);
   const [newPattern, setNewPattern] = useState<Partial<SensitivePattern>>({
-    id: '',
     name: '',
     pattern: '',
     placeholder: '',
@@ -47,9 +44,11 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
     enabled: true,
   });
   const [testInput, setTestInput] = useState('');
-  const [testResults, setTestResults] = useState<string[]>([]);
+  const [testResults, setTestResults] = useState<string[] | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
   const [patternError, setPatternError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const { success, error: showError } = useToast();
 
@@ -63,7 +62,7 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
       ]);
       setPatterns(patternsData);
       setFeatureEnabled(enabled);
-      setPreventSelection(prevent);
+      setPreventSelectionEnabled(prevent);
 
       const categories = new Set(patternsData.map((p) => p.category));
       setExpandedCategories(categories);
@@ -94,25 +93,34 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
 
   const handlePreventToggle = useCallback(async () => {
     try {
-      const newValue = !preventSelection;
+      const newValue = !preventSelectionEnabled;
       await setPreventSelection(newValue);
-      setPreventSelection(newValue);
+      setPreventSelectionEnabled(newValue);
       onSettingsChange?.();
       success(newValue ? 'Prevent selection enabled' : 'Prevent selection disabled');
     } catch (error) {
       console.error('Failed to toggle prevent selection:', error);
       showError('Failed to update setting');
     }
-  }, [preventSelection, onSettingsChange, success, showError]);
+  }, [preventSelectionEnabled, onSettingsChange, success, showError]);
 
   const handlePatternToggle = useCallback(
     async (patternId: string, enabled: boolean) => {
+      const scrollContainer = scrollContainerRef.current;
+      const scrollPosition = scrollContainer?.scrollTop ?? 0;
+      
       try {
         await togglePatternEnabled(patternId, enabled);
         setPatterns((prev) =>
           prev.map((p) => (p.id === patternId ? { ...p, enabled } : p))
         );
         onSettingsChange?.();
+        
+        if (scrollContainer) {
+          requestAnimationFrame(() => {
+            scrollContainer.scrollTop = scrollPosition;
+          });
+        }
       } catch (error) {
         console.error('Failed to toggle pattern:', error);
         showError('Failed to update pattern');
@@ -154,17 +162,18 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
 
   const handleTestPattern = useCallback(async () => {
     if (!newPattern.pattern || !testInput) return;
+    setTestError(null);
     try {
       const results = await testPattern(newPattern.pattern, testInput);
       setTestResults(results);
     } catch (error) {
-      console.error('Failed to test pattern:', error);
-      showError('Failed to test pattern');
+      setTestError((error as Error).message);
+      setTestResults(null);
     }
-  }, [newPattern.pattern, testInput, showError]);
+  }, [newPattern.pattern, testInput]);
 
   const handleAddPattern = useCallback(async () => {
-    if (!newPattern.id || !newPattern.name || !newPattern.pattern || !newPattern.placeholder) {
+    if (!newPattern.name || !newPattern.pattern || !newPattern.placeholder) {
       showError('Please fill in all required fields');
       return;
     }
@@ -174,9 +183,10 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
       return;
     }
 
+    const id = `custom_${crypto.randomUUID().replace(/-/g, '_')}`;
     try {
       await addCustomPattern({
-        id: newPattern.id,
+        id,
         name: newPattern.name,
         pattern: newPattern.pattern,
         placeholder: newPattern.placeholder,
@@ -187,7 +197,6 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
       await loadData();
       setShowAddForm(false);
       setNewPattern({
-        id: '',
         name: '',
         pattern: '',
         placeholder: '',
@@ -195,7 +204,8 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
         enabled: true,
       });
       setTestInput('');
-      setTestResults([]);
+      setTestResults(null);
+      setTestError(null);
       onSettingsChange?.();
       success('Pattern added successfully');
     } catch (error) {
@@ -242,7 +252,7 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
   return (
     <section className="space-y-4" aria-labelledby="sensitive-section-heading">
       <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-        <Shield size={16} className="text-amber-400" aria-hidden="true" />
+        <Shield size={16} className="text-primary" aria-hidden="true" />
         <h3
           id="sensitive-section-heading"
           className="text-[12px] font-bold text-white/70 uppercase tracking-wider"
@@ -258,18 +268,24 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
               type="checkbox"
               checked={featureEnabled}
               onChange={handleFeatureToggle}
-              className="sr-only peer"
+              className="sr-only"
             />
-            <div className="size-4 border border-white/20 rounded bg-black/40 peer-checked:bg-amber-500 peer-checked:border-amber-500 transition-all flex items-center justify-center peer-focus:ring-1 peer-focus:ring-amber-500/50">
+            <div className={cn(
+              "size-4 border rounded bg-black/40 transition-all flex items-center justify-center focus-within:ring-1 focus-within:ring-primary/50",
+              featureEnabled ? "bg-primary border-primary" : "border-white/20"
+            )}>
               <Check
                 size={12}
-                className="text-white scale-0 peer-checked:scale-100 transition-transform"
+                className={cn(
+                  "text-white transition-transform",
+                  featureEnabled ? "scale-100" : "scale-0"
+                )}
                 aria-hidden="true"
               />
             </div>
           </div>
           <div className="space-y-0.5">
-            <div className="text-[11px] font-bold text-white group-hover:text-amber-400 transition-colors">
+            <div className="text-[11px] font-bold text-white group-hover:text-primary transition-colors">
               Enable Sensitive Data Protection
             </div>
             <div className="text-[9px] text-white/30 leading-relaxed">
@@ -284,20 +300,26 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
             <div className="pt-0.5 relative">
               <input
                 type="checkbox"
-                checked={preventSelection}
+                checked={preventSelectionEnabled}
                 onChange={handlePreventToggle}
-                className="sr-only peer"
+                className="sr-only"
               />
-              <div className="size-4 border border-white/20 rounded bg-black/40 peer-checked:bg-amber-500 peer-checked:border-amber-500 transition-all flex items-center justify-center peer-focus:ring-1 peer-focus:ring-amber-500/50">
+              <div className={cn(
+                "size-4 border rounded bg-black/40 transition-all flex items-center justify-center focus-within:ring-1 focus-within:ring-primary/50",
+                preventSelectionEnabled ? "bg-primary border-primary" : "border-white/20"
+              )}>
                 <Check
                   size={12}
-                  className="text-white scale-0 peer-checked:scale-100 transition-transform"
+                  className={cn(
+                    "text-white transition-transform",
+                    preventSelectionEnabled ? "scale-100" : "scale-0"
+                  )}
                   aria-hidden="true"
                 />
               </div>
             </div>
             <div className="space-y-0.5">
-              <div className="text-[11px] font-bold text-white group-hover:text-amber-400 transition-colors">
+              <div className="text-[11px] font-bold text-white group-hover:text-primary transition-colors">
                 Prevent Selection of Files with Sensitive Data
               </div>
               <div className="text-[9px] text-white/30 leading-relaxed">
@@ -327,31 +349,17 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
 
             {showAddForm && (
               <div className="p-3 bg-black/30 border border-white/10 rounded-md space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[9px] font-bold text-white/40 mb-1">ID</label>
-                    <input
-                      type="text"
-                      value={newPattern.id || ''}
-                      onChange={(e) =>
-                        setNewPattern((prev) => ({ ...prev, id: e.target.value }))
-                      }
-                      placeholder="my_api_key"
-                      className="w-full h-7 px-2 bg-black/40 border border-white/10 rounded text-[10px] text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-white/40 mb-1">Name</label>
-                    <input
-                      type="text"
-                      value={newPattern.name || ''}
-                      onChange={(e) =>
-                        setNewPattern((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                      placeholder="My API Key"
-                      className="w-full h-7 px-2 bg-black/40 border border-white/10 rounded text-[10px] text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/50"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-white/40 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={newPattern.name || ''}
+                    onChange={(e) =>
+                      setNewPattern((prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    placeholder="My API Key"
+                    className="w-full h-7 px-2 bg-black/40 border border-white/10 rounded text-[10px] text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/50"
+                  />
                 </div>
 
                 <div>
@@ -365,6 +373,8 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
                     onChange={(e) => {
                       setNewPattern((prev) => ({ ...prev, pattern: e.target.value }));
                       handleValidatePattern(e.target.value);
+                      setTestResults(null);
+                      setTestError(null);
                     }}
                     placeholder="\b[A-Z]{2}\d{10}\b"
                     className={cn(
@@ -411,21 +421,33 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
                     />
                     <button
                       onClick={handleTestPattern}
-                      disabled={!newPattern.pattern || !testInput}
+                      disabled={!newPattern.pattern || !testInput || !!patternError}
                       className="px-2 h-7 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] font-bold text-white transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Play size={10} aria-hidden="true" />
                       TEST
                     </button>
                   </div>
-                  {testResults.length > 0 && (
+                  {testError && (
+                    <div className="mt-1 p-2 bg-red-500/10 rounded text-[9px] text-red-400 flex items-center gap-1">
+                      <AlertCircle size={10} />
+                      {testError}
+                    </div>
+                  )}
+                  {testResults !== null && !testError && (
                     <div className="mt-1 p-2 bg-black/20 rounded text-[9px] text-white/70">
-                      <span className="text-green-400">Matches:</span>{' '}
-                      {testResults.map((r, i) => (
-                        <span key={i} className="bg-white/10 px-1 rounded mr-1">
-                          {r}
-                        </span>
-                      ))}
+                      {testResults.length > 0 ? (
+                        <>
+                          <span className="text-green-400">Matches ({testResults.length}):</span>{' '}
+                          {testResults.map((r, i) => (
+                            <span key={i} className="bg-white/10 px-1 rounded mr-1">
+                              {r}
+                            </span>
+                          ))}
+                        </>
+                      ) : (
+                        <span className="text-amber-400">No matches found</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -440,13 +462,12 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
                   <button
                     onClick={handleAddPattern}
                     disabled={
-                      !newPattern.id ||
                       !newPattern.name ||
                       !newPattern.pattern ||
                       !newPattern.placeholder ||
                       !!patternError
                     }
-                    className="px-3 h-7 bg-amber-500 hover:bg-amber-600 rounded text-[9px] font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 h-7 bg-primary hover:bg-primary/90 rounded text-[9px] font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     ADD PATTERN
                   </button>
@@ -454,7 +475,7 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
               </div>
             )}
 
-            <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+            <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar" ref={scrollContainerRef}>
               {Object.entries(categorizedPatterns).map(([category, categoryPatterns]) => (
                 <div key={category} className="border border-white/5 rounded overflow-hidden">
                   <button
@@ -486,12 +507,18 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
                                 onChange={(e) =>
                                   handlePatternToggle(pattern.id, e.target.checked)
                                 }
-                                className="sr-only peer"
+                                className="sr-only"
                               />
-                              <div className="size-4 border border-white/20 rounded bg-black/40 peer-checked:bg-amber-500 peer-checked:border-amber-500 transition-all flex items-center justify-center peer-focus:ring-1 peer-focus:ring-amber-500/50">
+                              <div className={cn(
+                                "size-4 border rounded bg-black/40 transition-all flex items-center justify-center focus-within:ring-1 focus-within:ring-primary/50",
+                                pattern.enabled ? "bg-primary border-primary" : "border-white/20"
+                              )}>
                                 <Check
                                   size={12}
-                                  className="text-white scale-0 peer-checked:scale-100 transition-transform"
+                                  className={cn(
+                                    "text-white transition-transform",
+                                    pattern.enabled ? "scale-100" : "scale-0"
+                                  )}
                                   aria-hidden="true"
                                 />
                               </div>
