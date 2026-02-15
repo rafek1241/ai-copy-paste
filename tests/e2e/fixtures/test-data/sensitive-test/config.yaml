@@ -1,0 +1,21 @@
+# Application Configuration
+app:
+  name: MyApp
+  version: 1.0.0
+  
+database:
+  host: localhost
+  port: 5432
+  username: dbuser
+  password: db_password_123
+  name: myapp_db
+
+api:
+  key: sk_live_API_KEY_EXAMPLE_123456789
+  secret: super_secret_api_key_abc
+
+s3:
+  bucket: my-bucket
+  region: us-east-1
+  access_key: AKIAIOSFODNN7EXAMPLE
+  secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY

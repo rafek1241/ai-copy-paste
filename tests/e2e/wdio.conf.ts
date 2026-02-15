@@ -72,9 +72,9 @@ export const config: Options.Testrunner = {
     },
   },
 
-  // Connect to tauri-driver (WebDriver server on port 4444)
+  // Connect to tauri-driver (WebDriver server on port 4445)
   hostname: "localhost",
-  port: 4444,
+  port: 4445,
   path: "/",
 
   // Framework
@@ -208,6 +208,143 @@ export const config: Options.Testrunner = {
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, file.content);
       }
+    }
+
+    // Create sensitive data test fixture files
+    const sensitiveDir = path.join(fixturesDir, "sensitive-test");
+    if (fs.existsSync(sensitiveDir)) {
+      fs.rmSync(sensitiveDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(sensitiveDir, { recursive: true });
+
+    // Files with various types of sensitive data
+    const sensitiveFiles = [
+      {
+        name: ".env",
+        content: `# Database configuration
+DB_HOST=localhost
+DB_USER=admin
+DB_PASSWORD=super_secret_password_123
+DB_NAME=myapp
+
+# API Keys
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+GITHUB_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef123456
+OPENAI_API_KEY=sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890
+GOOGLE_API_KEY=AIzaSyDExample1234567890abcdefghij
+
+# JWT Token
+JWT_SECRET=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+`,
+      },
+      {
+        name: "api-config.ts",
+        content: `// API configuration with bearer tokens
+const API_CONFIG = {
+  baseUrl: "https://api.example.com",
+  headers: {
+    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+    "X-API-Key": "sk_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+  },
+  timeout: 30000,
+};
+
+export default API_CONFIG;
+`,
+      },
+      {
+        name: "database.ts",
+        content: `// Database connection strings
+const DB_CONNECTION = {
+  // PostgreSQL connection
+  postgres: "postgresql://admin:secret_password_123@db.example.com:5432/production",
+  // MySQL connection  
+  mysql: "mysql://root:another_password@mysql.example.com:3306/mydb",
+  // MongoDB connection
+  mongodb: "mongodb+srv://mongouser:mongopass@cluster.mongodb.net/test?retryWrites=true",
+  // Redis connection
+  redis: "redis://:redispass@redis.example.com:6379/0",
+};
+
+export default DB_CONNECTION;
+`,
+      },
+      {
+        name: "credentials.json",
+        content: `{
+  "client_id": "1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com",
+  "client_secret": "GOCSPX-abcdefghijklmnopqrstuvwxyz",
+  "refresh_token": "1//0gabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTU",
+  "azure_key": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+}
+`,
+      },
+      {
+        name: "auth-service.js",
+        content: `// Authentication with Basic Auth
+const AUTH_CONFIG = {
+  basic: {
+    username: "admin",
+    password: "admin_secret_password_xyz",
+  },
+  bearer: "Bearer ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop",
+  jwt: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+};
+
+export default AUTH_CONFIG;
+`,
+      },
+      {
+        name: "config.yaml",
+        content: `# Application Configuration
+app:
+  name: MyApp
+  version: 1.0.0
+  
+database:
+  host: localhost
+  port: 5432
+  username: dbuser
+  password: db_password_123
+  name: myapp_db
+
+api:
+  key: sk_live_API_KEY_EXAMPLE_123456789
+  secret: super_secret_api_key_abc
+
+s3:
+  bucket: my-bucket
+  region: us-east-1
+  access_key: AKIAIOSFODNN7EXAMPLE
+  secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+`,
+      },
+      // Regular non-sensitive file for comparison
+      {
+        name: "safe-code.ts",
+        content: `// This is a safe file without sensitive data
+export function calculateSum(a: number, b: number): number {
+  return a + b;
+}
+
+export function calculateProduct(a: number, b: number): number {
+  return a * b;
+}
+
+const config = {
+  debug: true,
+  timeout: 5000,
+};
+
+export default config;
+`,
+      },
+    ];
+
+    for (const file of sensitiveFiles) {
+      const filePath = path.join(sensitiveDir, file.name);
+      fs.writeFileSync(filePath, file.content);
     }
   },
 
