@@ -31,6 +31,13 @@ interface FlatTreeItem {
   level: number;
 }
 
+interface SensitiveScanResult {
+  path: string;
+  has_sensitive_data: boolean;
+  matched_patterns: string[];
+  match_count: number;
+}
+
 type FileTreeAction =
   | { type: "SET_NODES"; payload: { map: Record<string, TreeNode>; rootPaths: string[] } }
   | { type: "UPDATE_NODE"; payload: TreeNode }
@@ -796,6 +803,66 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     []
   );
 
+  const isSensitivePreventionEnabled = useCallback(async (): Promise<boolean> => {
+    try {
+      const [sensitiveEnabled, preventSelectionEnabled] = await Promise.all([
+        invoke<boolean>("get_sensitive_data_enabled"),
+        invoke<boolean>("get_prevent_selection"),
+      ]);
+      return sensitiveEnabled && preventSelectionEnabled;
+    } catch (error) {
+      console.warn("Failed to resolve sensitive prevention settings:", error);
+      return false;
+    }
+  }, []);
+
+  const collectDescendantFilePaths = useCallback(
+    (map: Record<string, TreeNode>, startPath: string): string[] => {
+      const rootNode = map[startPath];
+      if (!rootNode) return [];
+      if (!rootNode.is_dir) return [startPath];
+
+      const result: string[] = [];
+      const stack: string[] = [...(rootNode.childPaths ?? [])];
+
+      while (stack.length > 0) {
+        const currentPath = stack.pop()!;
+        const currentNode = map[currentPath];
+        if (!currentNode) continue;
+        if (currentNode.is_dir) {
+          if (currentNode.childPaths?.length) {
+            stack.push(...currentNode.childPaths);
+          }
+        } else {
+          result.push(currentPath);
+        }
+      }
+
+      return result;
+    },
+    []
+  );
+
+  const getSensitivePathSet = useCallback(
+    async (paths: string[]): Promise<Set<string>> => {
+      if (paths.length === 0) return new Set<string>();
+      try {
+        const scanResults = await invoke<SensitiveScanResult[]>("scan_files_sensitive", {
+          filePaths: paths,
+        });
+        return new Set(
+          scanResults
+            .filter((result) => result.has_sensitive_data)
+            .map((result) => normalizePath(result.path))
+        );
+      } catch (error) {
+        console.warn("Failed to scan files for sensitive data:", error);
+        return new Set<string>();
+      }
+    },
+    [normalizePath]
+  );
+
   // Toggle checkbox
   const toggleCheck = useCallback(
     async (nodePath: string, checked: boolean) => {
@@ -804,12 +871,37 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       const node = newMap[nodePath];
       if (!node) return;
 
+      const shouldPreventSensitive = checked && (await isSensitivePreventionEnabled());
+
       if (node.is_dir && checked && (!node.childPaths || node.childPaths.length === 0)) {
         const childPaths = await loadAllChildrenRecursively(nodePath, newMap);
         const expanded = isSearchMode ? node.expanded : true;
         newMap[nodePath] = { ...node, checked, indeterminate: false, childPaths, expanded };
       } else {
         updateChildrenSelection(newMap, nodePath, checked);
+      }
+
+      if (shouldPreventSensitive) {
+        const targetFilePaths = node.is_dir
+          ? collectDescendantFilePaths(newMap, nodePath)
+          : [nodePath];
+
+        const sensitivePaths = await getSensitivePathSet(targetFilePaths);
+        if (sensitivePaths.size > 0) {
+          for (const path of targetFilePaths) {
+            if (!sensitivePaths.has(path)) continue;
+            const sensitiveNode = newMap[path];
+            if (!sensitiveNode || sensitiveNode.is_dir) continue;
+            if (!sensitiveNode.checked) continue;
+
+            newMap[path] = {
+              ...sensitiveNode,
+              checked: false,
+              indeterminate: false,
+            };
+            updateParentSelection(newMap, sensitiveNode.parent_path);
+          }
+        }
       }
 
       updateParentSelection(newMap, node.parent_path);
@@ -820,7 +912,17 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
         onSelectionChange(selected);
       }
     },
-    [onSelectionChange, loadAllChildrenRecursively, updateChildrenSelection, updateParentSelection, collectSelected, isSearchMode]
+    [
+      onSelectionChange,
+      loadAllChildrenRecursively,
+      updateChildrenSelection,
+      updateParentSelection,
+      collectSelected,
+      isSearchMode,
+      isSensitivePreventionEnabled,
+      collectDescendantFilePaths,
+      getSensitivePathSet,
+    ]
   );
 
   const clearSelection = useCallback(() => {
