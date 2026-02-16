@@ -15,6 +15,7 @@ import {
   Folder,
   FolderOpen,
   HardDrive,
+  Lock,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -70,6 +71,7 @@ type FileTreeRowCheckboxProps = {
   onClick: (e: React.MouseEvent) => void
   checkboxRef: (el: HTMLInputElement | null) => void
   ariaLabel: string
+  hidden?: boolean
 }
 
 type FileTreeRowIconProps = {
@@ -224,7 +226,12 @@ const FileTreeRowCheckbox = React.memo(function FileTreeRowCheckbox({
   onClick,
   checkboxRef,
   ariaLabel,
+  hidden = false,
 }: FileTreeRowCheckboxProps) {
+  if (hidden) {
+    return <div className="w-5 flex justify-center mr-1" data-testid="tree-checkbox-hidden" />
+  }
+
   return (
     <div className="w-5 flex justify-center mr-1" onClick={onClick}>
       <input
@@ -265,6 +272,9 @@ export interface FileTreeRowViewProps {
   showFullPath?: boolean
   disambiguationPath?: string
   highlightQuery?: string
+  hasSensitiveData?: boolean
+  showSensitiveIndicator?: boolean
+  hideSelectionCheckbox?: boolean
 }
 
 const FileTreeRowView = React.memo(function FileTreeRowView({
@@ -280,6 +290,9 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
   showFullPath = false,
   disambiguationPath,
   highlightQuery = "",
+  hasSensitiveData = false,
+  showSensitiveIndicator = false,
+  hideSelectionCheckbox = false,
 }: FileTreeRowViewProps) {
   const isFolder = node.is_dir
   const paddingLeft = React.useMemo(() => level * 12 + 8, [level])
@@ -313,6 +326,7 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
         onClick={onRowClick}
         data-testid="tree-node"
         data-node-type="folder"
+        data-sensitive="false"
         data-level={level}
         role="treeitem"
         aria-expanded={node.expanded}
@@ -348,6 +362,7 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
           onClick={stopPropagation}
           checkboxRef={checkboxRef}
           ariaLabel={`Select ${node.name}`}
+          hidden={false}
         />
 
         <div
@@ -388,6 +403,8 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
       onClick={onRowClick}
       data-testid="tree-node"
       data-node-type="file"
+      data-sensitive={hasSensitiveData ? "true" : "false"}
+      data-selection-blocked={hideSelectionCheckbox ? "true" : "false"}
       data-level={level}
       role="treeitem"
       aria-selected={node.checked}
@@ -406,6 +423,7 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
         onClick={stopPropagation}
         checkboxRef={checkboxRef}
         ariaLabel={`Select ${node.name}`}
+        hidden={hideSelectionCheckbox}
       />
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -416,6 +434,17 @@ const FileTreeRowView = React.memo(function FileTreeRowView({
           className="text-white text-xs shrink-0 whitespace-nowrap"
           segmentKeyPrefix={`${node.path}-file`}
         />
+
+        {showSensitiveIndicator && hasSensitiveData && (
+          <span
+            className="inline-flex items-center text-amber-400"
+            data-testid="sensitive-indicator"
+            aria-label="Sensitive data detected"
+            title="Sensitive data detected"
+          >
+            <Lock size={12} aria-hidden="true" />
+          </span>
+        )}
 
         {disambiguationPath ? (
           <span className="text-[10px] text-white/25 truncate min-w-0 flex-1 select-none" title={disambiguationPath}>

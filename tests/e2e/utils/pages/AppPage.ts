@@ -259,4 +259,32 @@ export class AppPage extends BasePage {
       return false;
     }
   }
+
+  /**
+   * Click the Copy Context button in footer
+   */
+  async clickCopyContext(): Promise<void> {
+    try {
+      await this.safeClick(Selectors.copyToClipboardBtn);
+    } catch {
+      await this.safeClick('button*=Copy Context');
+    }
+    await browser.pause(300);
+  }
+
+  /**
+   * Attempt to read clipboard text from the browser context
+   */
+  async getClipboardText(): Promise<string> {
+    return browser.execute(async () => {
+      try {
+        if (navigator?.clipboard?.readText) {
+          return await navigator.clipboard.readText();
+        }
+      } catch {
+        // Clipboard read may be blocked in some WebDriver environments
+      }
+      return "";
+    });
+  }
 }

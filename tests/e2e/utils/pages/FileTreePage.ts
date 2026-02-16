@@ -266,6 +266,45 @@ export class FileTreePage extends BasePage {
   }
 
   /**
+   * Check whether a node shows a sensitive indicator icon
+   */
+  async hasSensitiveIndicator(name: string): Promise<boolean> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      return false;
+    }
+
+    const indicator = await node.$(Selectors.sensitiveIndicator);
+    return indicator.isExisting();
+  }
+
+  /**
+   * Check whether a node currently has a selectable checkbox input
+   */
+  async hasSelectionCheckbox(name: string): Promise<boolean> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      return false;
+    }
+
+    const checkbox = await node.$(Selectors.treeCheckbox);
+    return checkbox.isExisting();
+  }
+
+  /**
+   * Check whether selection is blocked for a file node
+   */
+  async isSelectionBlocked(name: string): Promise<boolean> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      return false;
+    }
+
+    const blocked = await node.getAttribute("data-selection-blocked");
+    return blocked === "true";
+  }
+
+  /**
    * Check if a folder is expanded
    */
   async isFolderExpanded(name: string): Promise<boolean> {

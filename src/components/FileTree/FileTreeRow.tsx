@@ -11,6 +11,9 @@ interface FileTreeRowProps {
   showFullPath?: boolean;
   disambiguationPath?: string;
   highlightQuery?: string;
+  hasSensitiveData?: boolean;
+  showSensitiveIndicator?: boolean;
+  hideSelectionCheckbox?: boolean;
 }
 
 export const FileTreeRow = memo(function FileTreeRow({
@@ -21,13 +24,19 @@ export const FileTreeRow = memo(function FileTreeRow({
   showFullPath = false,
   disambiguationPath,
   highlightQuery = "",
+  hasSensitiveData = false,
+  showSensitiveIndicator = false,
+  hideSelectionCheckbox = false,
 }: FileTreeRowProps) {
   const { toggleExpand, toggleCheck } = useFileTreeActions();
   const isFolder = node.is_dir;
 
   const handleRowClick = useCallback(() => {
+    if (hideSelectionCheckbox) {
+      return;
+    }
     toggleCheck(node.path, !node.checked);
-  }, [node.path, node.checked, toggleCheck]);
+  }, [hideSelectionCheckbox, node.path, node.checked, toggleCheck]);
 
   const handleExpandClick = useCallback(
     (e: React.MouseEvent) => {
@@ -38,8 +47,11 @@ export const FileTreeRow = memo(function FileTreeRow({
   );
 
   const handleCheckboxChange = useCallback(() => {
+    if (hideSelectionCheckbox) {
+      return;
+    }
     toggleCheck(node.path, !node.checked);
-  }, [node.path, node.checked, toggleCheck]);
+  }, [hideSelectionCheckbox, node.path, node.checked, toggleCheck]);
 
   const handlePathClick = useCallback(
     (e: React.MouseEvent) => {
@@ -100,6 +112,9 @@ export const FileTreeRow = memo(function FileTreeRow({
       showFullPath={showFullPath}
       disambiguationPath={disambiguationPath}
       highlightQuery={highlightQuery}
+      hasSensitiveData={hasSensitiveData}
+      showSensitiveIndicator={showSensitiveIndicator}
+      hideSelectionCheckbox={hideSelectionCheckbox}
     />
   );
 });

@@ -42,6 +42,18 @@ The FileTree component uses a performance-optimized architecture:
 - FileTree search calls the `search_path` command for indexed results
 - Tests that assert search results should mock `search_path`
 
+## Sensitive Data E2E Conventions
+
+- The Copy Context footer button uses `data-testid="copy-btn"`.
+- Sensitive settings controls are exposed with deterministic test ids (for example `sensitive-feature-toggle`, `sensitive-prevent-selection-toggle`, and custom pattern form controls under `SensitiveDataSettings`).
+- File tree sensitive state uses row markers and attributes:
+	- `data-testid="sensitive-indicator"` on sensitive file rows when protection is enabled.
+	- `data-selection-blocked="true"` and hidden checkbox placeholder `data-testid="tree-checkbox-hidden"` when prevention blocks selection.
+- E2E fixture data includes `tests/e2e/fixtures/test-data/sensitive-test/example-dir/` with:
+	- `safe-example.ts` (non-sensitive)
+	- `sensitive-example.ts` (built-in sensitive)
+	- `custom-rule.ts` (initially non-sensitive; used for custom regex rule scenario)
+
 ## Release CI Notes
 
 - Keep Tauri JS and Rust core on the same **minor** version line (for example, Rust `tauri` `2.9.x` with `@tauri-apps/api` `2.9.x`). A mismatch causes `npm run tauri build` to fail before compilation.

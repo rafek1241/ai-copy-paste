@@ -11,7 +11,14 @@ export class SettingsPage extends BasePage {
   async waitForReady(): Promise<void> {
     await browser.waitUntil(
       async () => {
+        const container = await $(Selectors.settingsContainer);
+        if (!(await container.isExisting())) {
+          return false;
+        }
         const heading = await $("h2");
+        if (!(await heading.isExisting())) {
+          return false;
+        }
         const text = await heading.getText();
         return text.includes("Settings");
       },
@@ -27,12 +34,139 @@ export class SettingsPage extends BasePage {
    */
   async isDisplayed(): Promise<boolean> {
     try {
+      const container = await $(Selectors.settingsContainer);
+      if (!(await container.isExisting())) {
+        return false;
+      }
       const heading = await $("h2");
       const text = await heading.getText();
       return text.includes("Settings");
     } catch {
       return false;
     }
+  }
+
+  private async setCheckboxState(selector: string, desiredState: boolean): Promise<void> {
+    const checkbox = await $(selector);
+    await checkbox.waitForExist({ timeout: 5000 });
+
+    const isChecked = await checkbox.isSelected();
+    if (isChecked === desiredState) {
+      return;
+    }
+
+    await checkbox.click();
+    await browser.waitUntil(
+      async () => (await checkbox.isSelected()) === desiredState,
+      {
+        timeout: 3000,
+        interval: 100,
+        timeoutMsg: `Checkbox state did not update for selector: ${selector}`,
+      }
+    );
+  }
+
+  async setSensitiveProtectionEnabled(enabled: boolean): Promise<void> {
+    await this.setCheckboxState(Selectors.sensitiveFeatureToggle, enabled);
+    await browser.pause(200);
+  }
+
+  async isSensitiveProtectionEnabled(): Promise<boolean> {
+    const checkbox = await $(Selectors.sensitiveFeatureToggle);
+    if (!(await checkbox.isExisting())) {
+      return false;
+    }
+    return checkbox.isSelected();
+  }
+
+  async setPreventSelectionEnabled(enabled: boolean): Promise<void> {
+    const checkbox = await $(Selectors.sensitivePreventSelectionToggle);
+    await checkbox.waitForExist({ timeout: 5000 });
+    await this.setCheckboxState(Selectors.sensitivePreventSelectionToggle, enabled);
+    await browser.pause(200);
+  }
+
+  async isPreventSelectionEnabled(): Promise<boolean> {
+    const checkbox = await $(Selectors.sensitivePreventSelectionToggle);
+    if (!(await checkbox.isExisting())) {
+      return false;
+    }
+    return checkbox.isSelected();
+  }
+
+  async openAddCustomPatternForm(): Promise<void> {
+    const form = await $(Selectors.sensitiveCustomForm);
+    if (await form.isExisting()) {
+      return;
+    }
+
+    await this.safeClick(Selectors.sensitiveAddCustomBtn);
+    await (await $(Selectors.sensitiveCustomForm)).waitForExist({ timeout: 5000 });
+  }
+
+  async addCustomSensitivePattern(pattern: {
+    name: string;
+    regex: string;
+    placeholder: string;
+    testInput: string;
+  }): Promise<void> {
+    await this.openAddCustomPatternForm();
+
+    await this.safeSetValue(Selectors.sensitivePatternNameInput, pattern.name);
+    await this.safeSetValue(Selectors.sensitivePatternRegexInput, pattern.regex);
+    await this.safeSetValue(Selectors.sensitivePatternPlaceholderInput, pattern.placeholder);
+    await this.safeSetValue(Selectors.sensitivePatternTestInput, pattern.testInput);
+
+    await this.safeClick(Selectors.sensitivePatternTestBtn);
+    await (await $(Selectors.sensitivePatternTestResults)).waitForExist({ timeout: 5000 });
+
+    await this.safeClick(Selectors.sensitivePatternSaveBtn);
+    await browser.pause(500);
+  }
+
+  private async findPatternRowByName(patternName: string): Promise<WebdriverIO.Element | null> {
+    const rows = await $$(Selectors.sensitivePatternRow);
+    for (const row of rows) {
+      const attrName = await row.getAttribute("data-pattern-name");
+      if (attrName === patternName) {
+        return row;
+      }
+      const text = await row.getText();
+      if (text.includes(patternName)) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  async isPatternEnabled(patternName: string): Promise<boolean> {
+    const row = await this.findPatternRowByName(patternName);
+    if (!row) {
+      return false;
+    }
+
+    const toggle = await row.$(Selectors.sensitivePatternToggle);
+    if (!(await toggle.isExisting())) {
+      return false;
+    }
+
+    return toggle.isSelected();
+  }
+
+  async deleteCustomPatternByName(patternName: string): Promise<boolean> {
+    const row = await this.findPatternRowByName(patternName);
+    if (!row) {
+      return false;
+    }
+
+    const deleteBtn = await row.$('[data-testid="sensitive-pattern-delete-btn"]');
+    if (!(await deleteBtn.isExisting())) {
+      return false;
+    }
+
+    await deleteBtn.click();
+    await browser.pause(300);
+    return true;
   }
 
   /**

@@ -245,7 +245,7 @@ const API_CONFIG = {
   baseUrl: "https://api.example.com",
   headers: {
     "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-    "X-API-Key": "sk_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+    "X-API-Key": "api_key_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
   },
   timeout: 30000,
 };
@@ -310,7 +310,7 @@ database:
   name: myapp_db
 
 api:
-  key: sk_live_API_KEY_EXAMPLE_123456789
+  key: api_key_live_example_123456789
   secret: super_secret_api_key_abc
 
 s3:
@@ -344,6 +344,36 @@ export default config;
 
     for (const file of sensitiveFiles) {
       const filePath = path.join(sensitiveDir, file.name);
+      fs.writeFileSync(filePath, file.content);
+    }
+
+    const sensitiveExampleDir = path.join(sensitiveDir, "example-dir");
+    fs.mkdirSync(sensitiveExampleDir, { recursive: true });
+
+    const sensitiveExampleFiles = [
+      {
+        name: "safe-example.ts",
+        content: `export const greeting = "hello";
+export const retries = 3;
+`,
+      },
+      {
+        name: "sensitive-example.ts",
+        content: `export const apiConfig = {
+  apiKey: "api_key_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+};
+`,
+      },
+      {
+        name: "custom-rule.ts",
+        content: `export const markerValue = "CUSTOM_MARKER_ABC123XYZ";
+export const note = "This value should become sensitive after adding a custom regex rule.";
+`,
+      },
+    ];
+
+    for (const file of sensitiveExampleFiles) {
+      const filePath = path.join(sensitiveExampleDir, file.name);
       fs.writeFileSync(filePath, file.content);
     }
   },

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Copy, Shield, AlertTriangle } from "lucide-react";
+import { Copy, Shield } from "lucide-react";
 
 interface FooterProps {
     onCopy: () => void;
@@ -26,6 +26,7 @@ const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version
         <footer className="p-2 border-t border-border-dark bg-[#0d1117] z-30" role="contentinfo">
             <button
                 onClick={onCopy}
+                data-testid="copy-btn"
                 className="w-full h-9 bg-primary hover:bg-primary/90 text-white font-bold rounded flex items-center justify-center gap-2 shadow-lg shadow-primary/10 transition-all active:scale-[0.98]"
             >
                 <Copy size={16} />

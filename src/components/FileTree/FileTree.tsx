@@ -1,11 +1,17 @@
 import React, { useRef, useEffect, useCallback, useMemo, memo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { FileTreeProvider, useFileTreeActions, useFileTreeState } from "./FileTreeContext";
 import { FileTreeFilters } from "./FileTreeFilters";
 import { FileTreeRow } from "./FileTreeRow";
 import { FileTreeEmpty } from "./FileTreeEmpty";
 import { useToast } from "../ui/toast";
+
+interface SensitiveScanResult {
+  path: string;
+  has_sensitive_data: boolean;
+}
 
 interface FileTreeProps {
   onSelectionChange?: (selectedPaths: string[]) => void;
@@ -24,7 +30,68 @@ const FileTreeInner = memo(function FileTreeInner({
   const { loadRootEntries, clearSelection, applyInitialSelection } = useFileTreeActions();
   const parentRef = useRef<HTMLDivElement>(null);
   const previousClearSelection = useRef(false);
+  const sensitiveScanRequestRef = useRef(0);
+  const [sensitiveDataEnabled, setSensitiveDataEnabled] = React.useState(false);
+  const [preventSelectionEnabled, setPreventSelectionEnabled] = React.useState(false);
+  const [sensitiveByPath, setSensitiveByPath] = React.useState<Record<string, boolean>>({});
   const { success } = useToast();
+
+  const refreshSensitiveState = useCallback(async () => {
+    const requestId = sensitiveScanRequestRef.current + 1;
+    sensitiveScanRequestRef.current = requestId;
+
+    try {
+      const [enabled, preventSelection] = await Promise.all([
+        invoke<boolean>("get_sensitive_data_enabled"),
+        invoke<boolean>("get_prevent_selection"),
+      ]);
+
+      if (sensitiveScanRequestRef.current !== requestId) {
+        return;
+      }
+
+      setSensitiveDataEnabled(enabled);
+      setPreventSelectionEnabled(enabled && preventSelection);
+
+      if (!enabled) {
+        setSensitiveByPath({});
+        return;
+      }
+
+      const filePaths = Object.values(state.nodesMap)
+        .filter((node) => !node.is_dir)
+        .map((node) => node.path);
+
+      if (filePaths.length === 0) {
+        setSensitiveByPath({});
+        return;
+      }
+
+      const scanResults = await invoke<SensitiveScanResult[]>("scan_files_sensitive", {
+        filePaths,
+      });
+
+      if (sensitiveScanRequestRef.current !== requestId) {
+        return;
+      }
+
+      const nextSensitiveByPath: Record<string, boolean> = {};
+      for (const result of scanResults || []) {
+        if (!result?.has_sensitive_data) {
+          continue;
+        }
+        const normalizedPath = result.path.replace(/\\/g, "/");
+        nextSensitiveByPath[normalizedPath] = true;
+      }
+
+      setSensitiveByPath(nextSensitiveByPath);
+    } catch (error) {
+      console.warn("Failed to refresh sensitive scan state:", error);
+      setSensitiveByPath({});
+      setSensitiveDataEnabled(false);
+      setPreventSelectionEnabled(false);
+    }
+  }, [state.nodesMap]);
 
   // Virtual scrolling setup
   const rowVirtualizer = useVirtualizer({
@@ -61,6 +128,22 @@ const FileTreeInner = memo(function FileTreeInner({
       unlisten?.();
     };
   }, [loadRootEntries]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    const setupSensitiveSettingsListener = async () => {
+      unlisten = await listen("sensitive-settings-changed", () => {
+        void refreshSensitiveState();
+      });
+    };
+
+    setupSensitiveSettingsListener();
+
+    return () => {
+      unlisten?.();
+    };
+  }, [refreshSensitiveState]);
 
   // Listen to indexing progress
   useEffect(() => {
@@ -101,6 +184,10 @@ const FileTreeInner = memo(function FileTreeInner({
   useEffect(() => {
     loadRootEntries();
   }, [loadRootEntries]);
+
+  useEffect(() => {
+    void refreshSensitiveState();
+  }, [refreshSensitiveState]);
 
   // Extract highlight query from search string for UI highlighting
   const isSearchMode = !!searchQuery;
@@ -169,6 +256,9 @@ const FileTreeInner = memo(function FileTreeInner({
 
               // In search mode, show disambiguation path for level-0 items with duplicate names
               const needsDisambiguation = isSearchMode && flatNode.level === 0 && duplicateNames.has(node.name);
+              const hasSensitiveData = !!sensitiveByPath[node.path];
+              const hideSelectionCheckbox =
+                !!hasSensitiveData && sensitiveDataEnabled && preventSelectionEnabled;
 
               return (
                 <FileTreeRow
@@ -180,6 +270,9 @@ const FileTreeInner = memo(function FileTreeInner({
                   showFullPath={false}
                   disambiguationPath={needsDisambiguation ? node.parent_path ?? undefined : undefined}
                   highlightQuery={highlightQuery}
+                  hasSensitiveData={hasSensitiveData}
+                  showSensitiveIndicator={sensitiveDataEnabled}
+                  hideSelectionCheckbox={hideSelectionCheckbox}
                 />
               );
             })}
