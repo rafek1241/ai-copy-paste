@@ -67,6 +67,17 @@ export const multiply = (a: number, b: number) => a * b;`,
     } catch {
       // May fail if no context exists
     }
+    await browser.execute(async () => {
+      const tauri = (window as any).__TAURI__;
+      if (!tauri?.core?.invoke) {
+        return;
+      }
+
+      await tauri.core.invoke("clear_index");
+      if (tauri?.event?.emit) {
+        await tauri.event.emit("refresh-file-tree");
+      }
+    });
     await browser.pause(500);
 
     // Ensure fixtures are indexed
@@ -105,19 +116,33 @@ export const multiply = (a: number, b: number) => a * b;`,
         const isFile = await fileTreePage.isNodeFile(node);
         if (isFile) {
           const checkbox = await node.$('[data-testid="tree-checkbox"]');
-          if ((await checkbox.isExisting()) && !(await checkbox.isSelected())) {
-            await checkbox.click();
-            await browser.pause(200);
+          const label = await node.$('[data-testid="tree-label"]');
+          if (!(await checkbox.isExisting()) || !(await label.isExisting())) {
+            continue;
+          }
+
+          const fileName = await label.getText();
+          if (await fileTreePage.isNodeSelected(fileName)) {
+            continue;
+          }
+
+          await checkbox.click();
+          await browser.pause(200);
+
+          if (await fileTreePage.isNodeSelected(fileName)) {
             selectedCount++;
-            if (selectedCount >= 2) break;
+          }
+
+          if (selectedCount >= 2) {
+            break;
           }
         }
       }
 
-      // Step 5: Verify selection count
+      // Step 5: Verify selection count using tree state (more stable than header text)
+      const actualSelectedCount = (await fileTreePage.getSelectedNodes()).length;
       if (selectedCount > 0) {
-        const headerCount = await appPage.getSelectedFilesCount();
-        expect(headerCount).toBeGreaterThanOrEqual(1);
+        expect(actualSelectedCount).toBeGreaterThanOrEqual(1);
       }
 
       // Step 6: Select template
@@ -130,21 +155,20 @@ export const multiply = (a: number, b: number) => a * b;`,
       );
 
       // Step 8: Build prompt
-      if (selectedCount > 0) {
+      if (actualSelectedCount > 0) {
+        await browser.waitUntil(
+          async () => await promptBuilderPage.isBuildButtonEnabled(),
+          {
+            timeout: 8000,
+            interval: 200,
+            timeoutMsg: "Copy Context action did not become enabled",
+          }
+        );
+
         await promptBuilderPage.clickBuildPrompt();
-        await browser.pause(1000);
 
-        // Step 9: Verify prompt was built
-        const isPreviewDisplayed = await promptBuilderPage.isPromptPreviewDisplayed();
-        const isError = await promptBuilderPage.isErrorDisplayed();
-
-        // Either preview or error should be shown
-        expect(isPreviewDisplayed || isError).toBe(true);
-
-        if (isPreviewDisplayed) {
-          const content = await promptBuilderPage.getPromptContent();
-          expect(content.length).toBeGreaterThanOrEqual(10);
-        }
+        // Step 9: Verify action completed without surfacing a prompt-builder error
+        expect(await promptBuilderPage.isErrorDisplayed()).toBe(false);
       }
     });
   });

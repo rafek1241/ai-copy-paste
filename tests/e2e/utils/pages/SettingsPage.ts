@@ -311,19 +311,86 @@ export class SettingsPage extends BasePage {
    * Click Save Settings button
    */
   async clickSaveSettings(): Promise<void> {
-    try {
-      await this.safeClick(Selectors.saveSettingsBtn);
-    } catch {
+    const findSaveButton = async (): Promise<WebdriverIO.Element | null> => {
       const buttons = await $$("button");
       for (const button of buttons) {
-        const text = await button.getText();
-        if (text.includes("Save")) {
-          await button.click();
-          return;
+        const text = (await button.getText()).trim().toUpperCase();
+        const ariaLabel = ((await button.getAttribute("aria-label")) ?? "").trim().toUpperCase();
+
+        if (
+          text.includes("SAVE CONFIGURATION") ||
+          text === "SAVE" ||
+          text.includes("SAVING") ||
+          ariaLabel.includes("SAVE")
+        ) {
+          return button;
         }
       }
+
+      return null;
+    };
+
+    await browser.waitUntil(
+      async () => (await findSaveButton()) !== null,
+      {
+        timeout: 5000,
+        interval: 200,
+        timeoutMsg: "Save settings button was not rendered",
+      }
+    );
+
+    const saveButton = await findSaveButton();
+    let clicked = false;
+    if (saveButton) {
+      try {
+        await saveButton.click();
+        clicked = true;
+      } catch {
+        // Fallback: DOM click handles edge cases where webdriver click fails on layout overlays.
+        clicked = await browser.execute(() => {
+          const buttons = Array.from(document.querySelectorAll("button"));
+          const target = buttons.find((button) => {
+            const text = (button.textContent ?? "").trim().toUpperCase();
+            const label = (button.getAttribute("aria-label") ?? "").trim().toUpperCase();
+            return (
+              text.includes("SAVE CONFIGURATION") ||
+              text === "SAVE" ||
+              text.includes("SAVING") ||
+              label.includes("SAVE")
+            );
+          }) as HTMLButtonElement | undefined;
+
+          if (!target) {
+            return false;
+          }
+
+          target.click();
+          return true;
+        });
+      }
     }
-    await browser.pause(500);
+
+    if (!clicked) {
+      throw new Error("Save settings button not found");
+    }
+
+    await browser.waitUntil(
+      async () => {
+        const saveButton = await findSaveButton();
+        if (!saveButton) {
+          return false;
+        }
+
+        const text = (await saveButton.getText()).trim().toUpperCase();
+        const disabled = await saveButton.getAttribute("disabled");
+        return !text.includes("SAVING") && disabled === null;
+      },
+      {
+        timeout: 10000,
+        interval: 200,
+        timeoutMsg: "Settings save did not complete within 10 seconds",
+      }
+    );
   }
 
   /**

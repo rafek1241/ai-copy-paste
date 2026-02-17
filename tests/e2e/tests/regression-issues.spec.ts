@@ -354,18 +354,17 @@ describe("Regression Tests", () => {
       try {
         await fileTreePage.indexFolder(fixturesPath);
         await fileTreePage.waitForNodes(1, 5000);
-        // Expand folders to make files visible
-        const nodes = await fileTreePage.getVisibleNodes();
-        for (const node of nodes) {
-          const isFolder = await fileTreePage.isNodeFolder(node);
-          if (isFolder) {
-            const label = await node.$(Selectors.treeLabel);
+        // Expand only the indexed root folder to expose direct children.
+        const rootFolderName = path.basename(fixturesPath);
+        try {
+          await fileTreePage.expandFolderIfCollapsed(rootFolderName);
+        } catch {
+          // Fallback: expand first visible folder once.
+          const folders = await fileTreePage.getFolderNodes();
+          if (folders.length > 0) {
+            const label = await folders[0].$(Selectors.treeLabel);
             if (await label.isExisting()) {
-              const nodeText = await label.getText();
-              if (nodeText) {
-                await fileTreePage.expandFolder(nodeText);
-                await browser.pause(300);
-              }
+              await fileTreePage.expandFolderIfCollapsed(await label.getText());
             }
           }
         }
