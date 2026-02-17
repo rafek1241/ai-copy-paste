@@ -1,12 +1,17 @@
 use crate::db::DbConnection;
 use crate::error::AppResult;
-use crate::commands::sensitive::get_all_patterns_internal;
+use crate::commands::sensitive::{
+    get_all_patterns_internal,
+    get_sensitive_marked_paths_internal,
+    normalize_path_for_sensitive,
+};
 use crate::templates::{build_prompt, get_builtin_templates, PromptTemplate};
 use crate::sensitive::detection::compile_patterns;
 use crate::sensitive::redaction::redact_content;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,6 +84,34 @@ pub async fn build_prompt_from_files(
         vec![]
     };
 
+    let prevent_selection_enabled = if sensitive_enabled {
+        let conn = db
+            .lock()
+            .map_err(|e| format!("Failed to lock database: {}", e))?;
+
+        conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'sensitive_prevent_selection'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    let sensitive_marked_paths: HashSet<String> = if sensitive_enabled && prevent_selection_enabled {
+        get_sensitive_marked_paths_internal(&db, &request.file_paths)?
+            .into_iter()
+            .collect()
+    } else {
+        HashSet::new()
+    };
+
     let conn = db
         .lock()
         .map_err(|e| format!("Failed to lock database: {}", e))?;
@@ -88,6 +121,17 @@ pub async fn build_prompt_from_files(
     let mut redaction_count = 0;
 
     for file_path in &request.file_paths {
+        if sensitive_enabled && prevent_selection_enabled {
+            let normalized_path = normalize_path_for_sensitive(file_path);
+            if sensitive_marked_paths.contains(&normalized_path) {
+                log::info!(
+                    "Skipping sensitive file '{}' because prevent selection is enabled",
+                    file_path
+                );
+                continue;
+            }
+        }
+
         let is_valid: bool = conn
             .query_row(
                 "SELECT 1 FROM files WHERE path = ? AND is_dir = 0",

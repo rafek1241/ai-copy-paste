@@ -182,8 +182,8 @@ const SensitiveDataSettings = forwardRef<SensitiveDataSettingsRef, SensitiveData
     let changed = false;
 
     try {
-      if (previousSnapshot.featureEnabled && !featureEnabled) {
-        await setSensitiveDataEnabled(false);
+      if (!previousSnapshot.featureEnabled && featureEnabled) {
+        await setSensitiveDataEnabled(true);
         changed = true;
       }
 
@@ -225,8 +225,8 @@ const SensitiveDataSettings = forwardRef<SensitiveDataSettingsRef, SensitiveData
         changed = true;
       }
 
-      if (!previousSnapshot.featureEnabled && featureEnabled) {
-        await setSensitiveDataEnabled(true);
+      if (previousSnapshot.featureEnabled && !featureEnabled) {
+        await setSensitiveDataEnabled(false);
         changed = true;
       }
 
@@ -259,7 +259,13 @@ const SensitiveDataSettings = forwardRef<SensitiveDataSettingsRef, SensitiveData
   );
 
   const handleFeatureToggle = useCallback(async () => {
-    setFeatureEnabled((previous) => !previous);
+    setFeatureEnabled((previous) => {
+      const nextValue = !previous;
+      if (!nextValue) {
+        setPreventSelectionEnabled(false);
+      }
+      return nextValue;
+    });
   }, []);
 
   const handlePreventToggle = useCallback(async () => {

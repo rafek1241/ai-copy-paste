@@ -33,6 +33,10 @@ fn normalize_path(path: &str) -> String {
     normalized
 }
 
+pub(crate) fn normalize_path_for_sensitive(path: &str) -> String {
+    normalize_path(path)
+}
+
 fn get_parent_path(path: &str) -> Option<String> {
     let normalized = normalize_path(path);
     let last_slash = normalized.rfind('/')?;
@@ -259,6 +263,14 @@ fn is_prevent_selection_enabled(db: &DbConnection) -> Result<bool, String> {
         .unwrap_or(false))
 }
 
+fn set_prevent_selection_internal(db: &DbConnection, enabled: bool) -> Result<(), String> {
+    if enabled && !is_feature_enabled(db)? {
+        return Err("Sensitive data protection must be enabled before enabling prevent selection".to_string());
+    }
+
+    set_setting(db, KEY_PREVENT, &enabled.to_string())
+}
+
 #[tauri::command]
 pub async fn get_sensitive_patterns(
     db: tauri::State<'_, DbConnection>,
@@ -301,7 +313,40 @@ pub async fn set_prevent_selection(
     db: tauri::State<'_, DbConnection>,
     enabled: bool,
 ) -> Result<(), String> {
-    set_setting(&db, KEY_PREVENT, &enabled.to_string())
+    set_prevent_selection_internal(&db, enabled)
+}
+
+pub(crate) fn get_sensitive_marked_paths_internal(
+    db: &DbConnection,
+    paths: &[String],
+) -> Result<Vec<String>, String> {
+    if paths.is_empty() {
+        return Ok(vec![]);
+    }
+
+    if !is_feature_enabled(db)? {
+        return Ok(vec![]);
+    }
+
+    let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let mut marked_paths = Vec::new();
+
+    for path in paths {
+        let normalized_path = normalize_path(path);
+        let is_marked = conn
+            .query_row(
+                "SELECT 1 FROM sensitive_paths WHERE path = ?1",
+                params![&normalized_path],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+
+        if is_marked {
+            marked_paths.push(normalized_path);
+        }
+    }
+
+    Ok(marked_paths)
 }
 
 #[tauri::command]
@@ -401,33 +446,7 @@ pub async fn get_sensitive_marked_paths(
     db: tauri::State<'_, DbConnection>,
     paths: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    if paths.is_empty() {
-        return Ok(vec![]);
-    }
-
-    if !is_feature_enabled(&db)? {
-        return Ok(vec![]);
-    }
-
-    let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
-    let mut marked_paths = Vec::new();
-
-    for path in paths {
-        let normalized_path = normalize_path(&path);
-        let is_marked = conn
-            .query_row(
-                "SELECT 1 FROM sensitive_paths WHERE path = ?1",
-                params![&normalized_path],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
-
-        if is_marked {
-            marked_paths.push(normalized_path);
-        }
-    }
-
-    Ok(marked_paths)
+    get_sensitive_marked_paths_internal(&db, &paths)
 }
 
 #[tauri::command]
@@ -585,6 +604,13 @@ mod tests {
     fn test_prevent_selection_disabled_by_default() {
         let db = setup_db();
         assert!(!is_prevent_selection_enabled(&db).unwrap());
+    }
+
+    #[test]
+    fn test_set_prevent_selection_requires_sensitive_enabled() {
+        let db = setup_db();
+        let result = set_prevent_selection_internal(&db, true);
+        assert!(result.is_err());
     }
 
     #[test]

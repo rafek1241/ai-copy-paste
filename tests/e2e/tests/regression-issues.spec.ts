@@ -15,7 +15,8 @@ describe("Regression Tests", () => {
   const promptBuilderPage = new PromptBuilderPage();
   const fixturesPath = path.join(process.cwd(), "tests", "e2e", "fixtures", "test-data");
 
-  before(async () => {
+  before(async function () {
+    this.timeout(60000);
     await appPage.waitForLoad();
     await appPage.navigateToMain();
 
@@ -40,7 +41,8 @@ describe("Regression Tests", () => {
   });
 
   describe("Issue 1: Clipboard Formatting", () => {
-    before(async () => {
+    before(async function () {
+      this.timeout(60000);
       if (!fs.existsSync(fixturesPath)) {
         fs.mkdirSync(fixturesPath, { recursive: true });
       }
@@ -201,7 +203,8 @@ describe("Regression Tests", () => {
     const subfolder = path.join(fixturesPath, "subfolder");
     const nestedFile = path.join(subfolder, "nested.ts");
 
-    before(async () => {
+    before(async function () {
+      this.timeout(60000);
       // Create subfolder structure
       if (!fs.existsSync(subfolder)) {
         fs.mkdirSync(subfolder, { recursive: true });
@@ -331,7 +334,8 @@ describe("Regression Tests", () => {
   });
 
   describe("Issue 3: State Persistence on Tab Switch", () => {
-    before(async () => {
+    before(async function () {
+      this.timeout(60000);
       // Ensure test files exist and are indexed
       if (!fs.existsSync(fixturesPath)) {
         fs.mkdirSync(fixturesPath, { recursive: true });

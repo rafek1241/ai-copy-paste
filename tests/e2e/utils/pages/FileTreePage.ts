@@ -585,6 +585,69 @@ export class FileTreePage extends BasePage {
     );
   }
 
+  private async emitDragDropAndWaitForComplete(
+    paths: string[],
+    timeout: number = 8000
+  ): Promise<boolean> {
+    return browser.executeAsync(
+      (dragDropPaths: string[], timeoutMs: number, done: (result: boolean) => void) => {
+        const tauri = (window as any).__TAURI__;
+        if (!tauri?.event?.listen || !tauri?.event?.emit) {
+          done(false);
+          return;
+        }
+
+        let finished = false;
+        let unlisten: (() => void) | undefined;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+        const finalize = (result: boolean) => {
+          if (finished) {
+            return;
+          }
+
+          finished = true;
+
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+
+          if (unlisten) {
+            unlisten();
+          }
+
+          done(result);
+        };
+
+        timeoutId = setTimeout(() => finalize(false), timeoutMs);
+
+        tauri.event
+          .listen("indexing-progress", (event: { payload?: { current_path?: string } }) => {
+            if (event?.payload?.current_path === "Complete") {
+              finalize(true);
+            }
+          })
+          .then(async (cleanup: () => void) => {
+            unlisten = cleanup;
+
+            try {
+              await tauri.event.emit("tauri://drag-drop", {
+                paths: dragDropPaths,
+                position: { x: 0, y: 0 },
+              });
+            } catch {
+              finalize(false);
+            }
+          })
+          .catch(() => {
+            finalize(false);
+          });
+      },
+      paths,
+      timeout
+    );
+  }
+
   /**
    * Index multiple files/folders at once via drag-drop
    */
@@ -594,28 +657,17 @@ export class FileTreePage extends BasePage {
     const countBefore = await this.getVisibleNodeCount();
     const normalizedPaths = paths.map(p => p.replace(/\\/g, '/'));
 
-    await browser.execute((filePaths: string[]) => {
-      const tauri = (window as any).__TAURI__;
-      if (!tauri?.event?.emit) {
-        throw new Error("Tauri API not available");
+    const indexingCompleted = await this.emitDragDropAndWaitForComplete(normalizedPaths);
+
+    if (!indexingCompleted) {
+      try {
+        await browser.waitUntil(
+          async () => (await this.getVisibleNodeCount()) !== countBefore,
+          { timeout: 3000, interval: 200 }
+        );
+      } catch {
+        // Count may not change if re-indexing the same content.
       }
-      void tauri.event.emit("tauri://drag-drop", {
-        paths: filePaths,
-        position: { x: 0, y: 0 }
-      });
-      return true;
-    }, normalizedPaths);
-
-    await this.waitForIndexingComplete();
-
-    // Wait for indexing to complete: poll for node count change, then stabilize
-    try {
-      await browser.waitUntil(
-        async () => (await this.getVisibleNodeCount()) !== countBefore,
-        { timeout: 10000, interval: 300 }
-      );
-    } catch {
-      // Count may not change - fall through
     }
 
     // Stabilization: wait until node count stops changing
@@ -645,28 +697,17 @@ export class FileTreePage extends BasePage {
     // Normalize path for Windows to avoid escaping issues
     const normalizedPath = folderPath.replace(/\\/g, '/');
 
-    await browser.execute((path) => {
-      const tauri = (window as any).__TAURI__;
-      if (!tauri?.event?.emit) {
-        throw new Error("Tauri API not available");
+    const indexingCompleted = await this.emitDragDropAndWaitForComplete([normalizedPath]);
+
+    if (!indexingCompleted) {
+      try {
+        await browser.waitUntil(
+          async () => (await this.getVisibleNodeCount()) !== countBefore,
+          { timeout: 3000, interval: 200 }
+        );
+      } catch {
+        // Count may not change if re-indexing same content.
       }
-      void tauri.event.emit("tauri://drag-drop", {
-        paths: [path],
-        position: { x: 0, y: 0 }
-      });
-      return true;
-    }, normalizedPath);
-
-    await this.waitForIndexingComplete();
-
-    // Wait for indexing to complete: poll for node count change, then stabilize
-    try {
-      await browser.waitUntil(
-        async () => (await this.getVisibleNodeCount()) !== countBefore,
-        { timeout: 10000, interval: 300 }
-      );
-    } catch {
-      // Count may not change if re-indexing same content - fall through
     }
 
     // Stabilization: wait until node count stops changing

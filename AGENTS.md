@@ -51,6 +51,8 @@ The FileTree component uses a performance-optimized architecture:
 - Sensitive Data settings in the Settings view are staged locally and are only persisted when the Settings footer action `SAVE CONFIGURATION` is clicked.
 - The Settings save path emits `sensitive-settings-changed` after successful sensitive-settings persistence so FileTree marker state refreshes immediately.
 - Sensitive settings controls are exposed with deterministic test ids (for example `sensitive-feature-toggle`, `sensitive-prevent-selection-toggle`, and custom pattern form controls under `SensitiveDataSettings`).
+- Prompt assembly enforces `sensitive_prevent_selection` as a backend safety net: when both sensitive protection and prevention are enabled, sensitive files are skipped even if they remained selected in UI state.
+- Clipboard writes should use plugin-first with navigator fallback even in Tauri runtime; if both fail, include both error causes to aid debugging (`tests/ui/services/clipboard.test.ts`).
 - Sensitive marker state in FileTree depends on canonicalized paths; normalize to forward slashes and full lowercase for Windows-style paths before comparing scan result paths to tree node paths.
 - Keep the `sensitive-settings-changed` listener registration stable in `FileTree` (register once and invoke latest refresh callback via refs) to avoid dropped events during listener re-registration churn.
 - Persisted sensitive marks (`sensitive_paths.path`) must use the same canonicalized format (forward slashes) as lookup paths; mixed slash styles on Windows can mark parent folders while missing file-level markers.
