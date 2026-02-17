@@ -55,7 +55,26 @@ export class SettingsPage extends BasePage {
       return;
     }
 
-    await checkbox.click();
+    const clicked = await browser.execute((sel: string) => {
+      const input = document.querySelector(sel) as HTMLInputElement | null;
+      if (!input) {
+        return false;
+      }
+
+      const label = input.closest("label") as HTMLElement | null;
+      if (label) {
+        label.click();
+        return true;
+      }
+
+      input.click();
+      return true;
+    }, selector);
+
+    if (!clicked) {
+      throw new Error(`Unable to click checkbox or label for selector: ${selector}`);
+    }
+
     await browser.waitUntil(
       async () => (await checkbox.isSelected()) === desiredState,
       {
@@ -125,6 +144,13 @@ export class SettingsPage extends BasePage {
   }
 
   private async findPatternRowByName(patternName: string): Promise<WebdriverIO.Element | null> {
+    const escapedName = patternName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const directSelector = `${Selectors.sensitivePatternRow}[data-pattern-name="${escapedName}"]`;
+    const directMatch = await $(directSelector);
+    if (await directMatch.isExisting()) {
+      return directMatch;
+    }
+
     const rows = await $$(Selectors.sensitivePatternRow);
     for (const row of rows) {
       const attrName = await row.getAttribute("data-pattern-name");
@@ -140,17 +166,42 @@ export class SettingsPage extends BasePage {
   }
 
   async isPatternEnabled(patternName: string): Promise<boolean> {
-    const row = await this.findPatternRowByName(patternName);
-    if (!row) {
+    const escapedName = patternName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const directSelector = `${Selectors.sensitivePatternRow}[data-pattern-name="${escapedName}"]`;
+
+    await browser.waitUntil(
+      async () => {
+        const rows = await $$(directSelector);
+        return rows.length > 0;
+      },
+      {
+        timeout: 8000,
+        interval: 200,
+      }
+    );
+
+    const rows = await $$(directSelector);
+    if (rows.length === 0) {
       return false;
     }
 
-    const toggle = await row.$(Selectors.sensitivePatternToggle);
-    if (!(await toggle.isExisting())) {
-      return false;
+    for (const row of rows) {
+      const toggle = await row.$(Selectors.sensitivePatternToggle);
+      if (!(await toggle.isExisting())) {
+        continue;
+      }
+
+      const checked = await browser.execute((element) => {
+        const input = element as HTMLInputElement;
+        return !!input.checked;
+      }, toggle);
+
+      if (checked) {
+        return true;
+      }
     }
 
-    return toggle.isSelected();
+    return false;
   }
 
   async deleteCustomPatternByName(patternName: string): Promise<boolean> {

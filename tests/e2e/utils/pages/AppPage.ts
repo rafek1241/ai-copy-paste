@@ -277,13 +277,30 @@ export class AppPage extends BasePage {
    */
   async getClipboardText(): Promise<string> {
     return browser.execute(async () => {
+      const tauri = (window as any).__TAURI__;
+
       try {
-        if (navigator?.clipboard?.readText) {
-          return await navigator.clipboard.readText();
+        if (tauri?.core?.invoke) {
+          const text = await tauri.core.invoke("plugin:clipboard-manager|read_text");
+          if (typeof text === "string") {
+            return text;
+          }
         }
       } catch {
-        // Clipboard read may be blocked in some WebDriver environments
+        // Continue with other clipboard fallbacks.
       }
+
+      try {
+        if (tauri?.clipboardManager?.readText) {
+          const text = await tauri.clipboardManager.readText();
+          if (typeof text === "string") {
+            return text;
+          }
+        }
+      } catch {
+        // Continue with browser API fallback.
+      }
+
       return "";
     });
   }

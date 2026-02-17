@@ -133,17 +133,53 @@ export class FileTreePage extends BasePage {
    * Find a tree node by name
    */
   async findNodeByName(name: string): Promise<WebdriverIO.Element | null> {
-    const nodes = await this.getVisibleNodes();
+    const findInVisibleNodes = async (): Promise<WebdriverIO.Element | null> => {
+      const nodes = await this.getVisibleNodes();
+      for (const node of nodes) {
+        const label = await node.$(Selectors.treeLabel);
+        if (!(await label.isExisting())) {
+          continue;
+        }
 
-    for (const node of nodes) {
-      const labels = await node.$$(Selectors.treeLabel);
-      for (const label of labels) {
         const text = await label.getText();
         if (text === name) {
           return node;
         }
       }
+
+      return null;
+    };
+
+    const scrollContainer = await $(Selectors.fileTreeScroll);
+    if (!(await scrollContainer.isExisting())) {
+      return findInVisibleNodes();
     }
+
+    const maxScrollTop = await browser.execute((element) => {
+      const htmlElement = element as HTMLElement;
+      return Math.max(0, htmlElement.scrollHeight - htmlElement.clientHeight);
+    }, scrollContainer);
+
+    const step = 160;
+    for (let scrollTop = 0; scrollTop <= maxScrollTop; scrollTop += step) {
+      await browser.execute(
+        (element, nextScrollTop) => {
+          (element as HTMLElement).scrollTop = nextScrollTop;
+        },
+        scrollContainer,
+        scrollTop
+      );
+      await browser.pause(40);
+
+      const match = await findInVisibleNodes();
+      if (match) {
+        return match;
+      }
+    }
+
+    await browser.execute((element) => {
+      (element as HTMLElement).scrollTop = 0;
+    }, scrollContainer);
 
     return null;
   }
@@ -174,6 +210,37 @@ export class FileTreePage extends BasePage {
           await browser.pause(500);
         }
       }
+    }
+  }
+
+  /**
+   * Expand a folder only when currently collapsed
+   */
+  async expandFolderIfCollapsed(name: string): Promise<void> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      throw new Error(`Node "${name}" not found`);
+    }
+
+    const expandIcon = await node.$(Selectors.expandIcon);
+    if (!(await expandIcon.isExisting())) {
+      return;
+    }
+
+    const isExpanded = await expandIcon.getAttribute("data-expanded");
+    if (isExpanded === "true") {
+      return;
+    }
+
+    const beforeCount = await this.getVisibleNodeCount();
+    await expandIcon.click();
+    try {
+      await browser.waitUntil(
+        async () => (await this.getVisibleNodeCount()) > beforeCount,
+        { timeout: 5000, interval: 200 }
+      );
+    } catch {
+      await browser.pause(500);
     }
   }
 
@@ -276,6 +343,46 @@ export class FileTreePage extends BasePage {
 
     const indicator = await node.$(Selectors.sensitiveIndicator);
     return indicator.isExisting();
+  }
+
+  /**
+   * Wait for a file node's sensitive indicator to match expected state
+   */
+  async waitForSensitiveIndicatorState(
+    name: string,
+    expected: boolean,
+    timeout: number = 15000
+  ): Promise<void> {
+    let node = await this.findNodeByName(name);
+    if (!node) {
+      throw new Error(`Node "${name}" not found`);
+    }
+
+    await browser.waitUntil(
+      async () => {
+        try {
+          const indicator = await node.$(Selectors.sensitiveIndicator);
+          return (await indicator.isExisting()) === expected;
+        } catch {
+          node = await this.findNodeByName(name);
+          if (!node) {
+            return false;
+          }
+
+          try {
+            const indicator = await node.$(Selectors.sensitiveIndicator);
+            return (await indicator.isExisting()) === expected;
+          } catch {
+            return false;
+          }
+        }
+      },
+      {
+        timeout,
+        interval: 200,
+        timeoutMsg: `Sensitive indicator for ${name} did not become ${expected}`,
+      }
+    );
   }
 
   /**

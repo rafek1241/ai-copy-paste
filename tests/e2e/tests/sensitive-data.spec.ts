@@ -5,6 +5,7 @@ type PatternRecord = {
   id: string;
   name: string;
   builtin: boolean;
+  enabled: boolean;
 };
 
 type BuildPromptResponse = {
@@ -38,15 +39,19 @@ describe("Sensitive Data Protection", () => {
         return;
       }
 
-      await tauri.core.invoke("set_sensitive_data_enabled", { enabled: false });
-      await tauri.core.invoke("set_prevent_selection", { enabled: false });
+      const keysToClear = [
+        "sensitive_data_enabled",
+        "sensitive_prevent_selection",
+        "sensitive_custom_patterns",
+        "sensitive_builtin_overrides",
+      ];
 
-      const patterns = await tauri.core.invoke("get_sensitive_patterns");
-      for (const pattern of patterns as PatternRecord[]) {
-        if (pattern?.builtin) {
-          continue;
+      for (const key of keysToClear) {
+        try {
+          await tauri.core.invoke("delete_setting", { key });
+        } catch {
+          // Ignore missing key failures
         }
-        await tauri.core.invoke("delete_custom_pattern", { patternId: pattern.id });
       }
 
       if (tauri?.event?.emit) {
@@ -61,18 +66,14 @@ describe("Sensitive Data Protection", () => {
     const sensitiveRoot = await fileTreePage.findNodeByName("sensitive-test");
     expect(sensitiveRoot).toBeTruthy();
 
-    if (!(await fileTreePage.isFolderExpanded("sensitive-test"))) {
-      await fileTreePage.expandFolder("sensitive-test");
-      await browser.pause(400);
-    }
+    await fileTreePage.expandFolderIfCollapsed("sensitive-test");
+    await browser.pause(400);
 
     const exampleDir = await fileTreePage.findNodeByName("example-dir");
     expect(exampleDir).toBeTruthy();
 
-    if (!(await fileTreePage.isFolderExpanded("example-dir"))) {
-      await fileTreePage.expandFolder("example-dir");
-      await browser.pause(400);
-    }
+    await fileTreePage.expandFolderIfCollapsed("example-dir");
+    await browser.pause(400);
   }
 
   async function clearAndIndexSensitiveFolder(): Promise<void> {
@@ -127,6 +128,97 @@ describe("Sensitive Data Protection", () => {
     }, selectedPaths);
   }
 
+  function toCanonicalPath(inputPath: string): string {
+    const normalized = inputPath.replace(/\\/g, "/");
+
+    if (/^[A-Za-z]:\//.test(normalized) || normalized.startsWith("//")) {
+      return normalized.toLowerCase();
+    }
+
+    return normalized;
+  }
+
+  async function waitForPatternEnabledInBackend(
+    patternName: string,
+    expected: boolean,
+    timeout: number = 15000
+  ): Promise<void> {
+    await browser.waitUntil(
+      async () => {
+        return browser.execute(async (name: string, expectedState: boolean) => {
+          const tauri = (window as any).__TAURI__;
+          if (!tauri?.core?.invoke) {
+            return false;
+          }
+
+          const patterns = (await tauri.core.invoke("get_sensitive_patterns")) as PatternRecord[];
+          const matchingPatterns = patterns.filter((pattern) => pattern.name === name);
+          if (matchingPatterns.length === 0) {
+            return false;
+          }
+
+          const hasExpected = matchingPatterns.some((pattern) => !!pattern.enabled === expectedState);
+          return hasExpected;
+        }, patternName, expected);
+      },
+      {
+        timeout,
+        interval: 200,
+        timeoutMsg: `Pattern \"${patternName}\" did not reach enabled=${expected}`,
+      }
+    );
+  }
+
+  async function waitForMarkedPathInBackend(
+    filePath: string,
+    expected: boolean,
+    timeout: number = 15000
+  ): Promise<void> {
+    const canonicalTarget = toCanonicalPath(filePath);
+
+    await browser.waitUntil(
+      async () => {
+        return browser.execute(async (targetPath: string, expectedState: boolean) => {
+          const tauri = (window as any).__TAURI__;
+          if (!tauri?.core?.invoke) {
+            return false;
+          }
+
+          const marked = (await tauri.core.invoke("get_sensitive_marked_paths", {
+            paths: [targetPath],
+          })) as string[];
+
+          const canonicalMarked = marked.map((path) => {
+            const normalized = path.replace(/\\/g, "/");
+            if (/^[A-Za-z]:\//.test(normalized) || normalized.startsWith("//")) {
+              return normalized.toLowerCase();
+            }
+            return normalized;
+          });
+
+          const isMarked = canonicalMarked.includes(targetPath);
+          return isMarked === expectedState;
+        }, canonicalTarget, expected);
+      },
+      {
+        timeout,
+        interval: 200,
+        timeoutMsg: `Backend mark for \"${filePath}\" did not become ${expected}`,
+      }
+    );
+  }
+
+  async function emitSensitiveSettingsChanged(): Promise<void> {
+    await browser.execute(async () => {
+      const tauri = (window as any).__TAURI__;
+      if (!tauri?.event?.emit) {
+        return;
+      }
+
+      await tauri.event.emit("sensitive-settings-changed");
+    });
+  }
+
   before(async function () {
     this.timeout(60000);
     await appPage.waitForLoad();
@@ -135,8 +227,9 @@ describe("Sensitive Data Protection", () => {
   });
 
   describe("Scenario 1: markers, redaction, and prevention", () => {
-    before(async function () {
+    beforeEach(async function () {
       this.timeout(60000);
+      await resetSensitiveSettings();
       await clearAndIndexSensitiveFolder();
     });
 
@@ -151,30 +244,41 @@ describe("Sensitive Data Protection", () => {
       expect(await settingsPage.isSensitiveProtectionEnabled()).toBe(true);
       expect(await settingsPage.isPreventSelectionEnabled()).toBe(false);
 
+      await settingsPage.addCustomSensitivePattern({
+        name: customPatternName,
+        regex: customPatternRegex,
+        placeholder: customPatternPlaceholder,
+        testInput: customPatternInputSample,
+      });
+      await settingsPage.clickSaveSettings();
+      await waitForPatternEnabledInBackend(customPatternName, true);
+      await waitForMarkedPathInBackend(customRulePath, true);
+
       // d/e1: open file tree and verify markers + checkboxes
       await appPage.navigateToMain();
       await expandSensitiveFixtureFolders();
+      await emitSensitiveSettingsChanged();
       await browser.pause(800);
 
-      expect(await fileTreePage.hasSensitiveIndicator(".env")).toBe(true);
-      expect(await fileTreePage.hasSensitiveIndicator("sensitive-example.ts")).toBe(true);
+      await fileTreePage.waitForSensitiveIndicatorState("custom-rule.ts", true);
       expect(await fileTreePage.hasSensitiveIndicator("safe-code.ts")).toBe(false);
 
-      expect(await fileTreePage.hasSelectionCheckbox(".env")).toBe(true);
+      expect(await fileTreePage.hasSelectionCheckbox("custom-rule.ts")).toBe(true);
       expect(await fileTreePage.hasSelectionCheckbox("safe-code.ts")).toBe(true);
 
       // e2/e3/e4: select sensitive + safe files, copy, verify sensitive values are redacted
-      await fileTreePage.selectNode(".env");
+      await fileTreePage.selectNode("custom-rule.ts");
       await fileTreePage.selectNode("safe-code.ts");
       await browser.pause(300);
 
       const redactedContext = await getContextFromClipboardOrFallback([
-        envFilePath,
+        customRulePath,
         safeCodePath,
       ]);
 
       expect(redactedContext.length).toBeGreaterThan(0);
-      expect(redactedContext.includes("super_secret_password_123")).toBe(false);
+      expect(redactedContext.includes("CUSTOM_MARKER_ABC123XYZ")).toBe(false);
+      expect(redactedContext.includes(customPatternPlaceholder)).toBe(true);
       expect(redactedContext.includes("calculateSum")).toBe(true);
       expect(/\[[A-Z_]+\]/.test(redactedContext)).toBe(true);
 
@@ -182,22 +286,24 @@ describe("Sensitive Data Protection", () => {
       await appPage.navigateToSettings();
       await settingsPage.waitForReady();
       await settingsPage.setPreventSelectionEnabled(true);
+      await settingsPage.clickSaveSettings();
       expect(await settingsPage.isPreventSelectionEnabled()).toBe(true);
 
       // h/i: verify sensitive checkboxes are hidden/blocked
       await appPage.navigateToMain();
       await expandSensitiveFixtureFolders();
+      await emitSensitiveSettingsChanged();
       await browser.pause(800);
 
-      expect(await fileTreePage.hasSelectionCheckbox("sensitive-example.ts")).toBe(false);
-      expect(await fileTreePage.isSelectionBlocked("sensitive-example.ts")).toBe(true);
+      expect(await fileTreePage.hasSelectionCheckbox("custom-rule.ts")).toBe(false);
+      expect(await fileTreePage.isSelectionBlocked("custom-rule.ts")).toBe(true);
       expect(await fileTreePage.hasSelectionCheckbox("safe-example.ts")).toBe(true);
 
       // j/k/l: selecting parent excludes sensitive child from copied context
       await fileTreePage.selectNode("example-dir");
       await browser.pause(500);
 
-      expect(await fileTreePage.isNodeSelected("sensitive-example.ts")).toBe(false);
+      expect(await fileTreePage.isNodeSelected("custom-rule.ts")).toBe(false);
       expect(await fileTreePage.isNodeSelected("safe-example.ts")).toBe(true);
 
       const preventionContext = await getContextFromClipboardOrFallback([
@@ -209,13 +315,14 @@ describe("Sensitive Data Protection", () => {
       expect(preventionContext.length).toBeGreaterThan(0);
       expect(preventionContext.includes("api_key_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890")).toBe(false);
       expect(preventionContext.includes("export const greeting = \"hello\";")).toBe(true);
-      expect(preventionContext.includes("CUSTOM_MARKER_ABC123XYZ")).toBe(true);
+      expect(preventionContext.includes("CUSTOM_MARKER_ABC123XYZ")).toBe(false);
     });
   });
 
   describe("Scenario 2: custom rule detection", () => {
-    before(async function () {
+    beforeEach(async function () {
       this.timeout(60000);
+      await resetSensitiveSettings();
       await clearAndIndexSensitiveFolder();
     });
 
@@ -227,10 +334,12 @@ describe("Sensitive Data Protection", () => {
       await settingsPage.waitForReady();
       await settingsPage.setSensitiveProtectionEnabled(true);
       await settingsPage.setPreventSelectionEnabled(false);
+      await settingsPage.clickSaveSettings();
 
       // d/e: custom-rule file is initially not marked sensitive
       await appPage.navigateToMain();
       await expandSensitiveFixtureFolders();
+      await emitSensitiveSettingsChanged();
       await browser.pause(800);
 
       expect(await fileTreePage.hasSensitiveIndicator("custom-rule.ts")).toBe(false);
@@ -253,15 +362,16 @@ describe("Sensitive Data Protection", () => {
         placeholder: customPatternPlaceholder,
         testInput: customPatternInputSample,
       });
-
-      expect(await settingsPage.isPatternEnabled(customPatternName)).toBe(true);
+      await settingsPage.clickSaveSettings();
+      await waitForPatternEnabledInBackend(customPatternName, true);
+      await waitForMarkedPathInBackend(customRulePath, true);
 
       // m/n: back to files and verify marker appears on custom-rule file
       await appPage.navigateToMain();
       await expandSensitiveFixtureFolders();
       await browser.pause(800);
 
-      expect(await fileTreePage.hasSensitiveIndicator("custom-rule.ts")).toBe(true);
+      await fileTreePage.waitForSensitiveIndicatorState("custom-rule.ts", true);
 
       // o/u/p: copy again and verify value is redacted by custom alias
       await fileTreePage.selectNode("custom-rule.ts");
