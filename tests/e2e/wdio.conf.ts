@@ -360,7 +360,7 @@ export const retries = 3;
       {
         name: "sensitive-example.ts",
         content: `export const apiConfig = {
-  apiKey: "api_key_live_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+  awsAccessKeyId: "AKIAIOSFODNN7EXAMPLE",
 };
 `,
       },
