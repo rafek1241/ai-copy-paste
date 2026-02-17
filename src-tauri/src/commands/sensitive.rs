@@ -1,16 +1,205 @@
 use crate::db::DbConnection;
 use crate::sensitive::patterns::get_builtin_patterns;
-use crate::sensitive::detection::{compile_patterns, detect_sensitive_data, has_sensitive_data};
-use crate::sensitive::redaction::redact_content;
-use crate::sensitive::{SensitivePattern, ScanResult, RedactionResult};
+use crate::sensitive::detection::{compile_patterns, detect_sensitive_data};
+use crate::sensitive::{SensitivePattern, ScanResult};
 use rusqlite::{params, OptionalExtension};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const KEY_ENABLED: &str = "sensitive_data_enabled";
 const KEY_PREVENT: &str = "sensitive_prevent_selection";
 const KEY_CUSTOM_PATTERNS: &str = "sensitive_custom_patterns";
 const KEY_BUILTIN_OVERRIDES: &str = "sensitive_builtin_overrides";
+
+#[derive(Debug, Clone)]
+struct SensitivePathMark {
+    path: String,
+    is_sensitive_file: bool,
+    matched_patterns: Vec<String>,
+    match_count: usize,
+}
+
+fn normalize_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+
+    if normalized.len() >= 2 && normalized.as_bytes()[1] == b':' {
+        return normalized.to_ascii_lowercase();
+    }
+
+    if normalized.starts_with("//") {
+        return normalized.to_ascii_lowercase();
+    }
+
+    normalized
+}
+
+fn get_parent_path(path: &str) -> Option<String> {
+    let normalized = normalize_path(path);
+    let last_slash = normalized.rfind('/')?;
+    if last_slash == 0 {
+        return None;
+    }
+
+    let parent = normalized[..last_slash].to_string();
+    if parent.is_empty() {
+        None
+    } else {
+        Some(parent)
+    }
+}
+
+fn get_indexed_file_paths_internal(db: &DbConnection) -> Result<Vec<String>, String> {
+    let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let mut stmt = conn
+        .prepare("SELECT path FROM files WHERE is_dir = 0")
+        .map_err(|e| format!("Failed to prepare indexed file query: {}", e))?;
+
+    let paths = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("Failed to query indexed files: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to collect indexed files: {}", e))?;
+
+    Ok(paths)
+}
+
+fn get_indexed_dir_paths_internal(db: &DbConnection) -> Result<HashSet<String>, String> {
+    let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let mut stmt = conn
+        .prepare("SELECT path FROM files WHERE is_dir = 1")
+        .map_err(|e| format!("Failed to prepare indexed directory query: {}", e))?;
+
+    let paths = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("Failed to query indexed directories: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to collect indexed directories: {}", e))?;
+
+    Ok(paths.into_iter().map(|path| normalize_path(&path)).collect())
+}
+
+fn clear_sensitive_marks_internal(db: &DbConnection) -> Result<(), String> {
+    let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    conn.execute("DELETE FROM sensitive_paths", [])
+        .map_err(|e| format!("Failed to clear sensitive path marks: {}", e))?;
+    Ok(())
+}
+
+fn persist_sensitive_marks_internal(
+    db: &DbConnection,
+    marks: &[SensitivePathMark],
+) -> Result<(), String> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("Failed to resolve timestamp: {}", e))?
+        .as_secs() as i64;
+
+    let mut conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("Failed to start sensitive mark transaction: {}", e))?;
+
+    tx.execute("DELETE FROM sensitive_paths", [])
+        .map_err(|e| format!("Failed to clear existing sensitive marks: {}", e))?;
+
+    for mark in marks {
+        let matched_patterns = serde_json::to_string(&mark.matched_patterns)
+            .map_err(|e| format!("Failed to serialize matched patterns: {}", e))?;
+
+        tx.execute(
+            "INSERT INTO sensitive_paths (path, is_sensitive_file, matched_patterns, match_count, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                &mark.path,
+                if mark.is_sensitive_file { 1 } else { 0 },
+                matched_patterns,
+                mark.match_count as i64,
+                timestamp,
+            ],
+        )
+        .map_err(|e| format!("Failed to persist sensitive mark for '{}': {}", mark.path, e))?;
+    }
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit sensitive mark transaction: {}", e))?;
+
+    Ok(())
+}
+
+fn build_sensitive_marks_internal(db: &DbConnection) -> Result<Vec<SensitivePathMark>, String> {
+    let all_patterns = get_all_patterns_internal(db)?;
+    let compiled = compile_patterns(&all_patterns);
+
+    if compiled.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let indexed_file_paths = get_indexed_file_paths_internal(db)?;
+    if indexed_file_paths.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let indexed_dir_paths = get_indexed_dir_paths_internal(db)?;
+    let mut marks = Vec::new();
+    let mut marked_paths = HashSet::new();
+
+    for path in indexed_file_paths {
+        let content = match std::fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(_) => continue,
+        };
+
+        let matches = detect_sensitive_data(&content, &compiled);
+        if matches.is_empty() {
+            continue;
+        }
+
+        let matched_ids: Vec<String> = {
+            let mut seen = HashSet::new();
+            matches
+                .iter()
+                .filter(|m| seen.insert(m.pattern_id.clone()))
+                .map(|m| m.pattern_id.clone())
+                .collect()
+        };
+
+        let normalized_path = normalize_path(&path);
+
+        if marked_paths.insert(normalized_path.clone()) {
+            marks.push(SensitivePathMark {
+                path: normalized_path.clone(),
+                is_sensitive_file: true,
+                matched_patterns: matched_ids,
+                match_count: matches.len(),
+            });
+        }
+
+        let mut parent_path = get_parent_path(&normalized_path);
+        while let Some(parent) = parent_path {
+            if indexed_dir_paths.contains(&parent) && marked_paths.insert(parent.clone()) {
+                marks.push(SensitivePathMark {
+                    path: parent.clone(),
+                    is_sensitive_file: false,
+                    matched_patterns: vec![],
+                    match_count: 0,
+                });
+            }
+            parent_path = get_parent_path(&parent);
+        }
+    }
+
+    Ok(marks)
+}
+
+pub(crate) fn reprocess_sensitive_marks_if_enabled(db: &DbConnection) -> Result<(), String> {
+    if !is_feature_enabled(db)? {
+        clear_sensitive_marks_internal(db)?;
+        return Ok(());
+    }
+
+    let marks = build_sensitive_marks_internal(db)?;
+    persist_sensitive_marks_internal(db, &marks)
+}
 
 fn get_setting(db: &DbConnection, key: &str) -> Result<Option<String>, String> {
     let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
@@ -89,7 +278,15 @@ pub async fn set_sensitive_data_enabled(
     db: tauri::State<'_, DbConnection>,
     enabled: bool,
 ) -> Result<(), String> {
-    set_setting(&db, KEY_ENABLED, &enabled.to_string())
+    set_setting(&db, KEY_ENABLED, &enabled.to_string())?;
+
+    if enabled {
+        reprocess_sensitive_marks_if_enabled(&db)?;
+    } else {
+        clear_sensitive_marks_internal(&db)?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -127,7 +324,10 @@ pub async fn add_custom_pattern(
     custom.push(SensitivePattern { builtin: false, ..pattern });
     let json = serde_json::to_string(&custom)
         .map_err(|e| format!("Serialization error: {}", e))?;
-    set_setting(&db, KEY_CUSTOM_PATTERNS, &json)
+    set_setting(&db, KEY_CUSTOM_PATTERNS, &json)?;
+
+    reprocess_sensitive_marks_if_enabled(&db)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -146,7 +346,10 @@ pub async fn delete_custom_pattern(
     }
     let json = serde_json::to_string(&custom)
         .map_err(|e| format!("Serialization error: {}", e))?;
-    set_setting(&db, KEY_CUSTOM_PATTERNS, &json)
+    set_setting(&db, KEY_CUSTOM_PATTERNS, &json)?;
+
+    reprocess_sensitive_marks_if_enabled(&db)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -173,7 +376,7 @@ pub async fn toggle_pattern_enabled(
         
         let json = serde_json::to_string(&overrides)
             .map_err(|e| format!("Serialization error: {}", e))?;
-        set_setting(&db, KEY_BUILTIN_OVERRIDES, &json)
+        set_setting(&db, KEY_BUILTIN_OVERRIDES, &json)?;
     } else {
         let mut custom: Vec<SensitivePattern> = match get_setting(&db, KEY_CUSTOM_PATTERNS)? {
             Some(json) => serde_json::from_str(&json).unwrap_or_default(),
@@ -186,8 +389,45 @@ pub async fn toggle_pattern_enabled(
         }
         let json = serde_json::to_string(&custom)
             .map_err(|e| format!("Serialization error: {}", e))?;
-        set_setting(&db, KEY_CUSTOM_PATTERNS, &json)
+        set_setting(&db, KEY_CUSTOM_PATTERNS, &json)?;
     }
+
+    reprocess_sensitive_marks_if_enabled(&db)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_sensitive_marked_paths(
+    db: tauri::State<'_, DbConnection>,
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if paths.is_empty() {
+        return Ok(vec![]);
+    }
+
+    if !is_feature_enabled(&db)? {
+        return Ok(vec![]);
+    }
+
+    let conn = db.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let mut marked_paths = Vec::new();
+
+    for path in paths {
+        let normalized_path = normalize_path(&path);
+        let is_marked = conn
+            .query_row(
+                "SELECT 1 FROM sensitive_paths WHERE path = ?1",
+                params![&normalized_path],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+
+        if is_marked {
+            marked_paths.push(normalized_path);
+        }
+    }
+
+    Ok(marked_paths)
 }
 
 #[tauri::command]

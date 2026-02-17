@@ -53,6 +53,10 @@ export async function scanFilesSensitive(filePaths: string[]): Promise<ScanResul
   return invoke<ScanResult[]>('scan_files_sensitive', { filePaths });
 }
 
+export async function getSensitiveMarkedPaths(paths: string[]): Promise<string[]> {
+  return invoke<string[]>('get_sensitive_marked_paths', { paths });
+}
+
 export async function validateRegexPattern(pattern: string): Promise<boolean> {
   return invoke<boolean>('validate_regex_pattern', { pattern });
 }

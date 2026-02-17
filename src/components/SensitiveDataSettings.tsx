@@ -1,4 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import { emit } from '@tauri-apps/api/event';
 import { cn } from '@/lib/utils';
 import { useToast } from './ui/toast';
@@ -30,10 +38,69 @@ interface SensitiveDataSettingsProps {
   onSettingsChange?: () => void;
 }
 
-const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSettingsChange }) => {
+export interface SensitiveDataSettingsRef {
+  save: () => Promise<void>;
+  hasPendingChanges: () => boolean;
+}
+
+interface SensitiveSettingsSnapshot {
+  featureEnabled: boolean;
+  preventSelectionEnabled: boolean;
+  patterns: SensitivePattern[];
+}
+
+const clonePatterns = (patterns: SensitivePattern[]): SensitivePattern[] =>
+  patterns.map((pattern) => ({ ...pattern }));
+
+const normalizePatternsForCompare = (patterns: SensitivePattern[]): SensitivePattern[] =>
+  clonePatterns(patterns).sort((left, right) => left.id.localeCompare(right.id));
+
+const arePatternsEqual = (left: SensitivePattern[], right: SensitivePattern[]): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const normalizedLeft = normalizePatternsForCompare(left);
+  const normalizedRight = normalizePatternsForCompare(right);
+
+  for (let index = 0; index < normalizedLeft.length; index += 1) {
+    const currentLeft = normalizedLeft[index];
+    const currentRight = normalizedRight[index];
+
+    if (
+      currentLeft.id !== currentRight.id ||
+      currentLeft.name !== currentRight.name ||
+      currentLeft.pattern !== currentRight.pattern ||
+      currentLeft.placeholder !== currentRight.placeholder ||
+      currentLeft.enabled !== currentRight.enabled ||
+      currentLeft.builtin !== currentRight.builtin ||
+      currentLeft.category !== currentRight.category
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const createSnapshot = (
+  featureEnabled: boolean,
+  preventSelectionEnabled: boolean,
+  patterns: SensitivePattern[]
+): SensitiveSettingsSnapshot => ({
+  featureEnabled,
+  preventSelectionEnabled,
+  patterns: clonePatterns(patterns),
+});
+
+const SensitiveDataSettings = forwardRef<SensitiveDataSettingsRef, SensitiveDataSettingsProps>(
+  ({ onSettingsChange }, ref) => {
   const [patterns, setPatterns] = useState<SensitivePattern[]>([]);
   const [featureEnabled, setFeatureEnabled] = useState(false);
   const [preventSelectionEnabled, setPreventSelectionEnabled] = useState(false);
+  const [persistedSnapshot, setPersistedSnapshot] = useState<SensitiveSettingsSnapshot | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showAddForm, setShowAddForm] = useState(false);
@@ -51,12 +118,7 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
   const [isValidating, setIsValidating] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const { success, error: showError } = useToast();
-
-  const notifySensitiveSettingsChanged = useCallback(() => {
-    onSettingsChange?.();
-    void emit('sensitive-settings-changed');
-  }, [onSettingsChange]);
+  const { error: showError } = useToast();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -66,11 +128,22 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
         getSensitiveDataEnabled(),
         getPreventSelection(),
       ]);
-      setPatterns(patternsData);
-      setFeatureEnabled(enabled);
-      setPreventSelectionEnabled(prevent);
+      const normalizedPatterns = Array.isArray(patternsData) ? patternsData : [];
+      const normalizedFeatureEnabled = !!enabled;
+      const normalizedPreventSelectionEnabled = !!prevent;
 
-      const categories = new Set(patternsData.map((p) => p.category));
+      setPatterns(normalizedPatterns);
+      setFeatureEnabled(normalizedFeatureEnabled);
+      setPreventSelectionEnabled(normalizedPreventSelectionEnabled);
+      setPersistedSnapshot(
+        createSnapshot(
+          normalizedFeatureEnabled,
+          normalizedPreventSelectionEnabled,
+          normalizedPatterns
+        )
+      );
+
+      const categories = new Set(normalizedPatterns.map((p) => p.category));
       setExpandedCategories(categories);
     } catch (error) {
       console.error('Failed to load sensitive data settings:', error);
@@ -84,31 +157,114 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
     loadData();
   }, [loadData]);
 
-  const handleFeatureToggle = useCallback(async () => {
-    try {
-      const newValue = !featureEnabled;
-      await setSensitiveDataEnabled(newValue);
-      setFeatureEnabled(newValue);
-      notifySensitiveSettingsChanged();
-      success(newValue ? 'Sensitive data protection enabled' : 'Sensitive data protection disabled');
-    } catch (error) {
-      console.error('Failed to toggle feature:', error);
-      showError('Failed to update setting');
+  const hasPendingChanges = useMemo(() => {
+    if (!persistedSnapshot) {
+      return false;
     }
-  }, [featureEnabled, notifySensitiveSettingsChanged, success, showError]);
+
+    if (featureEnabled !== persistedSnapshot.featureEnabled) {
+      return true;
+    }
+
+    if (preventSelectionEnabled !== persistedSnapshot.preventSelectionEnabled) {
+      return true;
+    }
+
+    return !arePatternsEqual(patterns, persistedSnapshot.patterns);
+  }, [featureEnabled, patterns, persistedSnapshot, preventSelectionEnabled]);
+
+  const savePendingChanges = useCallback(async () => {
+    if (!persistedSnapshot || !hasPendingChanges) {
+      return;
+    }
+
+    const previousSnapshot = persistedSnapshot;
+    let changed = false;
+
+    try {
+      if (previousSnapshot.featureEnabled && !featureEnabled) {
+        await setSensitiveDataEnabled(false);
+        changed = true;
+      }
+
+      const previousPatternsById = new Map(
+        previousSnapshot.patterns.map((pattern) => [pattern.id, pattern])
+      );
+      const currentPatternsById = new Map(patterns.map((pattern) => [pattern.id, pattern]));
+
+      for (const previousPattern of previousSnapshot.patterns) {
+        if (previousPattern.builtin) {
+          continue;
+        }
+
+        if (!currentPatternsById.has(previousPattern.id)) {
+          await deleteCustomPattern(previousPattern.id);
+          changed = true;
+        }
+      }
+
+      for (const currentPattern of patterns) {
+        const previousPattern = previousPatternsById.get(currentPattern.id);
+
+        if (!previousPattern) {
+          if (!currentPattern.builtin) {
+            await addCustomPattern(currentPattern);
+            changed = true;
+          }
+          continue;
+        }
+
+        if (previousPattern.enabled !== currentPattern.enabled) {
+          await togglePatternEnabled(currentPattern.id, currentPattern.enabled);
+          changed = true;
+        }
+      }
+
+      if (previousSnapshot.preventSelectionEnabled !== preventSelectionEnabled) {
+        await setPreventSelection(preventSelectionEnabled);
+        changed = true;
+      }
+
+      if (!previousSnapshot.featureEnabled && featureEnabled) {
+        await setSensitiveDataEnabled(true);
+        changed = true;
+      }
+
+      setPersistedSnapshot(createSnapshot(featureEnabled, preventSelectionEnabled, patterns));
+
+      if (changed) {
+        onSettingsChange?.();
+        await emit('sensitive-settings-changed');
+      }
+    } catch (error) {
+      console.error('Failed to save sensitive data settings:', error);
+      throw error;
+    }
+  }, [
+    featureEnabled,
+    hasPendingChanges,
+    onSettingsChange,
+    patterns,
+    persistedSnapshot,
+    preventSelectionEnabled,
+  ]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      save: savePendingChanges,
+      hasPendingChanges: () => hasPendingChanges,
+    }),
+    [hasPendingChanges, savePendingChanges]
+  );
+
+  const handleFeatureToggle = useCallback(async () => {
+    setFeatureEnabled((previous) => !previous);
+  }, []);
 
   const handlePreventToggle = useCallback(async () => {
-    try {
-      const newValue = !preventSelectionEnabled;
-      await setPreventSelection(newValue);
-      setPreventSelectionEnabled(newValue);
-      notifySensitiveSettingsChanged();
-      success(newValue ? 'Prevent selection enabled' : 'Prevent selection disabled');
-    } catch (error) {
-      console.error('Failed to toggle prevent selection:', error);
-      showError('Failed to update setting');
-    }
-  }, [preventSelectionEnabled, notifySensitiveSettingsChanged, success, showError]);
+    setPreventSelectionEnabled((previous) => !previous);
+  }, []);
 
   const handlePatternToggle = useCallback(
     async (patternId: string, enabled: boolean) => {
@@ -116,12 +272,10 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
       const scrollPosition = scrollContainer?.scrollTop ?? 0;
       
       try {
-        await togglePatternEnabled(patternId, enabled);
         setPatterns((prev) =>
           prev.map((p) => (p.id === patternId ? { ...p, enabled } : p))
         );
-        notifySensitiveSettingsChanged();
-        
+
         if (scrollContainer) {
           requestAnimationFrame(() => {
             scrollContainer.scrollTop = scrollPosition;
@@ -132,22 +286,19 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
         showError('Failed to update pattern');
       }
     },
-    [notifySensitiveSettingsChanged, showError]
+    [showError]
   );
 
   const handleDeletePattern = useCallback(
     async (patternId: string) => {
       try {
-        await deleteCustomPattern(patternId);
         setPatterns((prev) => prev.filter((p) => p.id !== patternId));
-        notifySensitiveSettingsChanged();
-        success('Pattern deleted');
       } catch (error) {
         console.error('Failed to delete pattern:', error);
-        showError('Failed to delete pattern');
+        showError('Failed to update pattern');
       }
     },
-    [notifySensitiveSettingsChanged, success, showError]
+    [showError]
   );
 
   const handleValidatePattern = useCallback(async (pattern: string) => {
@@ -191,7 +342,7 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
 
     const id = `custom_${crypto.randomUUID().replace(/-/g, '_')}`;
     try {
-      await addCustomPattern({
+      const pattern: SensitivePattern = {
         id,
         name: newPattern.name,
         pattern: newPattern.pattern,
@@ -199,8 +350,14 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
         enabled: true,
         builtin: false,
         category: newPattern.category || 'Custom',
+      };
+
+      setPatterns((previous) => [...previous, pattern]);
+      setExpandedCategories((previous) => {
+        const next = new Set(previous);
+        next.add(pattern.category);
+        return next;
       });
-      await loadData();
       setShowAddForm(false);
       setNewPattern({
         name: '',
@@ -212,13 +369,11 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
       setTestInput('');
       setTestResults(null);
       setTestError(null);
-      notifySensitiveSettingsChanged();
-      success('Pattern added successfully');
     } catch (error) {
       console.error('Failed to add pattern:', error);
       showError('Failed to add pattern');
     }
-  }, [newPattern, patternError, loadData, notifySensitiveSettingsChanged, success, showError]);
+  }, [newPattern, patternError, showError]);
 
   const toggleCategory = useCallback((category: string) => {
     setExpandedCategories((prev) => {
@@ -499,7 +654,7 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
             )}
 
             <div
-              className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar"
+              className="space-y-2 max-h-75 overflow-y-auto custom-scrollbar"
               ref={scrollContainerRef}
               data-testid="sensitive-patterns-list"
             >
@@ -586,6 +741,9 @@ const SensitiveDataSettings: React.FC<SensitiveDataSettingsProps> = ({ onSetting
       )}
     </section>
   );
-};
+}
+);
+
+SensitiveDataSettings.displayName = 'SensitiveDataSettings';
 
 export default SensitiveDataSettings;

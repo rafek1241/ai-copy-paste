@@ -7,11 +7,7 @@ import { FileTreeFilters } from "./FileTreeFilters";
 import { FileTreeRow } from "./FileTreeRow";
 import { FileTreeEmpty } from "./FileTreeEmpty";
 import { useToast } from "../ui/toast";
-
-interface SensitiveScanResult {
-  path: string;
-  has_sensitive_data: boolean;
-}
+import { copyToClipboard } from "@/services/clipboard";
 
 interface FileTreeProps {
   onSelectionChange?: (selectedPaths: string[]) => void;
@@ -19,6 +15,16 @@ interface FileTreeProps {
   initialSelectedPaths?: string[];
   shouldClearSelection?: boolean;
 }
+
+const toCanonicalPath = (path: string): string => {
+  const normalized = path.replace(/\\/g, "/");
+
+  if (/^[A-Za-z]:\//.test(normalized) || normalized.startsWith("//")) {
+    return normalized.toLowerCase();
+  }
+
+  return normalized;
+};
 
 // Inner component that uses the context
 const FileTreeInner = memo(function FileTreeInner({
@@ -29,12 +35,18 @@ const FileTreeInner = memo(function FileTreeInner({
   const { state, flatTree } = useFileTreeState();
   const { loadRootEntries, clearSelection, applyInitialSelection } = useFileTreeActions();
   const parentRef = useRef<HTMLDivElement>(null);
+  const nodesMapRef = useRef(state.nodesMap);
+  const refreshSensitiveStateRef = useRef<() => Promise<void>>(async () => {});
   const previousClearSelection = useRef(false);
   const sensitiveScanRequestRef = useRef(0);
   const [sensitiveDataEnabled, setSensitiveDataEnabled] = React.useState(false);
   const [preventSelectionEnabled, setPreventSelectionEnabled] = React.useState(false);
   const [sensitiveByPath, setSensitiveByPath] = React.useState<Record<string, boolean>>({});
   const { success } = useToast();
+
+  useEffect(() => {
+    nodesMapRef.current = state.nodesMap;
+  }, [state.nodesMap]);
 
   const refreshSensitiveState = useCallback(async () => {
     const requestId = sensitiveScanRequestRef.current + 1;
@@ -58,17 +70,24 @@ const FileTreeInner = memo(function FileTreeInner({
         return;
       }
 
-      const filePaths = Object.values(state.nodesMap)
-        .filter((node) => !node.is_dir)
-        .map((node) => node.path);
+      const pathSet = new Set<string>();
+      for (const node of Object.values(nodesMapRef.current)) {
+        pathSet.add(node.path);
 
-      if (filePaths.length === 0) {
+        if (!node.is_dir && node.parent_path) {
+          pathSet.add(`${node.parent_path}/${node.name}`);
+        }
+      }
+
+      const paths = Array.from(pathSet);
+
+      if (paths.length === 0) {
         setSensitiveByPath({});
         return;
       }
 
-      const scanResults = await invoke<SensitiveScanResult[]>("scan_files_sensitive", {
-        filePaths,
+      const markedPaths = await invoke<string[]>("get_sensitive_marked_paths", {
+        paths,
       });
 
       if (sensitiveScanRequestRef.current !== requestId) {
@@ -76,12 +95,9 @@ const FileTreeInner = memo(function FileTreeInner({
       }
 
       const nextSensitiveByPath: Record<string, boolean> = {};
-      for (const result of scanResults || []) {
-        if (!result?.has_sensitive_data) {
-          continue;
-        }
-        const normalizedPath = result.path.replace(/\\/g, "/");
-        nextSensitiveByPath[normalizedPath] = true;
+      for (const path of markedPaths || []) {
+        const canonicalPath = toCanonicalPath(path);
+        nextSensitiveByPath[canonicalPath] = true;
       }
 
       setSensitiveByPath(nextSensitiveByPath);
@@ -91,7 +107,11 @@ const FileTreeInner = memo(function FileTreeInner({
       setSensitiveDataEnabled(false);
       setPreventSelectionEnabled(false);
     }
-  }, [state.nodesMap]);
+  }, []);
+
+  useEffect(() => {
+    refreshSensitiveStateRef.current = refreshSensitiveState;
+  }, [refreshSensitiveState]);
 
   // Virtual scrolling setup
   const rowVirtualizer = useVirtualizer({
@@ -103,10 +123,13 @@ const FileTreeInner = memo(function FileTreeInner({
 
   // Copy path to clipboard
   const handleCopyPath = useCallback(
-    (path: string) => {
-      navigator.clipboard.writeText(path).then(() => {
+    async (path: string) => {
+      try {
+        await copyToClipboard(path);
         success("Path copied to clipboard");
-      });
+      } catch (error) {
+        console.warn("Failed to copy path:", error);
+      }
     },
     [success]
   );
@@ -131,19 +154,28 @@ const FileTreeInner = memo(function FileTreeInner({
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
+    let isDisposed = false;
 
     const setupSensitiveSettingsListener = async () => {
-      unlisten = await listen("sensitive-settings-changed", () => {
-        void refreshSensitiveState();
+      const dispose = await listen("sensitive-settings-changed", () => {
+        void refreshSensitiveStateRef.current();
       });
+
+      if (isDisposed) {
+        dispose();
+        return;
+      }
+
+      unlisten = dispose;
     };
 
     setupSensitiveSettingsListener();
 
     return () => {
+      isDisposed = true;
       unlisten?.();
     };
-  }, [refreshSensitiveState]);
+  }, []);
 
   // Listen to indexing progress
   useEffect(() => {
@@ -186,8 +218,8 @@ const FileTreeInner = memo(function FileTreeInner({
   }, [loadRootEntries]);
 
   useEffect(() => {
-    void refreshSensitiveState();
-  }, [refreshSensitiveState]);
+    void refreshSensitiveStateRef.current();
+  }, [flatTree.length]);
 
   // Extract highlight query from search string for UI highlighting
   const isSearchMode = !!searchQuery;
@@ -256,7 +288,15 @@ const FileTreeInner = memo(function FileTreeInner({
 
               // In search mode, show disambiguation path for level-0 items with duplicate names
               const needsDisambiguation = isSearchMode && flatNode.level === 0 && duplicateNames.has(node.name);
-              const hasSensitiveData = !!sensitiveByPath[node.path];
+              const nodePathCanonical = toCanonicalPath(node.path);
+              const reconstructedPathCanonical =
+                !node.is_dir && node.parent_path
+                  ? toCanonicalPath(`${node.parent_path}/${node.name}`)
+                  : null;
+
+              const hasSensitiveData =
+                !!sensitiveByPath[nodePathCanonical] ||
+                (!!reconstructedPathCanonical && !!sensitiveByPath[reconstructedPathCanonical]);
               const hideSelectionCheckbox =
                 !!hasSensitiveData && sensitiveDataEnabled && preventSelectionEnabled;
 

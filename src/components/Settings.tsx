@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
 import { useAppSettings } from '@/contexts/AppContext';
-import SensitiveDataSettings from './SensitiveDataSettings';
+import SensitiveDataSettings, { SensitiveDataSettingsRef } from './SensitiveDataSettings';
 import { 
   Settings as SettingsIcon, 
   Upload, 
@@ -49,6 +49,7 @@ const Settings = forwardRef<SettingsRef, SettingsProps>(({ onSettingsChange, onS
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newExtension, setNewExtension] = useState('');
+  const sensitiveSettingsRef = useRef<SensitiveDataSettingsRef>(null);
 
   const { success, error: showError, warning } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
@@ -82,6 +83,7 @@ const saveSettings = useCallback(async () => {
     onSavingChange?.(true);
     try {
       await invoke('save_settings', { settings });
+      await sensitiveSettingsRef.current?.save();
 
       // Update global context
       updateGlobalSettings({
@@ -421,7 +423,7 @@ const saveSettings = useCallback(async () => {
           </div>
 
 <div className="pt-4 border-t border-white/5">
-            <SensitiveDataSettings />
+            <SensitiveDataSettings ref={sensitiveSettingsRef} />
           </div>
         </div>
       </div>

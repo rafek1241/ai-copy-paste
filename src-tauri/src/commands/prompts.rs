@@ -1,5 +1,6 @@
 use crate::db::DbConnection;
 use crate::error::AppResult;
+use crate::commands::sensitive::get_all_patterns_internal;
 use crate::templates::{build_prompt, get_builtin_templates, PromptTemplate};
 use crate::sensitive::detection::compile_patterns;
 use crate::sensitive::redaction::redact_content;
@@ -53,12 +54,12 @@ pub async fn build_prompt_from_files(
         request.file_paths.len()
     );
 
-    let (sensitive_enabled, compiled_patterns) = {
+    let sensitive_enabled = {
         let conn = db
             .lock()
             .map_err(|e| format!("Failed to lock database: {}", e))?;
 
-        let sensitive_enabled: bool = conn
+        conn
             .query_row(
                 "SELECT value FROM settings WHERE key = 'sensitive_data_enabled'",
                 [],
@@ -68,55 +69,14 @@ pub async fn build_prompt_from_files(
             .ok()
             .flatten()
             .map(|v| v == "true")
-            .unwrap_or(false);
+            .unwrap_or(false)
+    };
 
-        let compiled_patterns = if sensitive_enabled {
-            let custom_patterns_json: Option<String> = conn
-                .query_row(
-                    "SELECT value FROM settings WHERE key = 'sensitive_custom_patterns'",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()
-                .ok()
-                .flatten();
-
-            let disabled_builtins_json: Option<String> = conn
-                .query_row(
-                    "SELECT value FROM settings WHERE key = 'sensitive_disabled_builtins'",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()
-                .ok()
-                .flatten();
-
-            let mut all_patterns = crate::sensitive::patterns::get_builtin_patterns();
-
-            if let Some(json) = disabled_builtins_json {
-                if let Ok(disabled_ids) = serde_json::from_str::<Vec<String>>(&json) {
-                    let disabled_set: std::collections::HashSet<&str> =
-                        disabled_ids.iter().map(|s| s.as_str()).collect();
-                    for p in &mut all_patterns {
-                        if disabled_set.contains(p.id.as_str()) {
-                            p.enabled = false;
-                        }
-                    }
-                }
-            }
-
-            if let Some(json) = custom_patterns_json {
-                if let Ok(custom) = serde_json::from_str::<Vec<crate::sensitive::SensitivePattern>>(&json) {
-                    all_patterns.extend(custom);
-                }
-            }
-
-            compile_patterns(&all_patterns)
-        } else {
-            vec![]
-        };
-
-        (sensitive_enabled, compiled_patterns)
+    let compiled_patterns = if sensitive_enabled {
+        let all_patterns = get_all_patterns_internal(&db)?;
+        compile_patterns(&all_patterns)
+    } else {
+        vec![]
     };
 
     let conn = db

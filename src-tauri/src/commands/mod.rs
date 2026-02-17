@@ -20,5 +20,5 @@ pub use sensitive::{
     get_sensitive_patterns, get_sensitive_data_enabled, set_sensitive_data_enabled,
     get_prevent_selection, set_prevent_selection,
     add_custom_pattern, delete_custom_pattern, toggle_pattern_enabled,
-    scan_files_sensitive, validate_regex_pattern, test_pattern,
+    scan_files_sensitive, get_sensitive_marked_paths, validate_regex_pattern, test_pattern,
 };

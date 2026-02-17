@@ -7,7 +7,6 @@ mod sensitive;
 mod templates;
 
 use cache::TextCache;
-use db::DbConnection;
 use std::sync::Mutex;
 use tauri::Manager;
 
@@ -24,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             // Initialize database
             let db = db::init_db(app.handle())?;
@@ -80,6 +80,7 @@ pub fn run() {
             commands::sensitive::delete_custom_pattern,
             commands::sensitive::toggle_pattern_enabled,
             commands::sensitive::scan_files_sensitive,
+            commands::sensitive::get_sensitive_marked_paths,
             commands::sensitive::validate_regex_pattern,
             commands::sensitive::test_pattern,
         ])

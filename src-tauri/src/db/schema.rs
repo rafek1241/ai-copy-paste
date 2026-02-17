@@ -53,6 +53,23 @@ pub fn init_database(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Sensitive path marks table (files and ancestor directories)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sensitive_paths (
+            path TEXT PRIMARY KEY,
+            is_sensitive_file INTEGER NOT NULL DEFAULT 0,
+            matched_patterns TEXT NOT NULL DEFAULT '[]',
+            match_count INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sensitive_paths_file ON sensitive_paths(is_sensitive_file)",
+        [],
+    )?;
+
     Ok(())
 }
 
@@ -74,7 +91,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(table_count, 3); // files, history, settings
+        assert_eq!(table_count, 4); // files, history, settings, sensitive_paths
 
         // Verify path is primary key
         let pk_info: String = conn

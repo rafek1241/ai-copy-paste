@@ -31,13 +31,6 @@ interface FlatTreeItem {
   level: number;
 }
 
-interface SensitiveScanResult {
-  path: string;
-  has_sensitive_data: boolean;
-  matched_patterns: string[];
-  match_count: number;
-}
-
 type FileTreeAction =
   | { type: "SET_NODES"; payload: { map: Record<string, TreeNode>; rootPaths: string[] } }
   | { type: "UPDATE_NODE"; payload: TreeNode }
@@ -847,16 +840,14 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
     async (paths: string[]): Promise<Set<string>> => {
       if (paths.length === 0) return new Set<string>();
       try {
-        const scanResults = await invoke<SensitiveScanResult[]>("scan_files_sensitive", {
-          filePaths: paths,
+        const markedPaths = await invoke<string[]>("get_sensitive_marked_paths", {
+          paths,
         });
         return new Set(
-          scanResults
-            .filter((result) => result.has_sensitive_data)
-            .map((result) => normalizePath(result.path))
+          (markedPaths || []).map((markedPath) => normalizePath(markedPath))
         );
       } catch (error) {
-        console.warn("Failed to scan files for sensitive data:", error);
+        console.warn("Failed to load sensitive path marks:", error);
         return new Set<string>();
       }
     },

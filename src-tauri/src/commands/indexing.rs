@@ -12,6 +12,7 @@ use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 // NOTE: Race condition fixed by always storing true parent_path and updating orphaned children when parent is indexed.
+use super::sensitive::reprocess_sensitive_marks_if_enabled;
 
 use super::settings::load_settings_internal;
 
@@ -169,6 +170,9 @@ pub async fn index_folder(
     // Use parallel traversal and batch inserts
     let count = parallel_index_folder(&path_buf, &app, &db)
         .map_err(|e| format!("Failed to index folder: {}", e))?;
+
+    reprocess_sensitive_marks_if_enabled(&db)
+        .map_err(|e| format!("Failed to refresh sensitive marks after indexing: {}", e))?;
 
     log::info!("Indexed {} entries from {}", count, path);
     Ok(count)
@@ -505,6 +509,9 @@ pub async fn clear_index(
     conn.execute("DELETE FROM files", [])
         .map_err(|e| format!("Failed to clear index: {}", e))?;
 
+    conn.execute("DELETE FROM sensitive_paths", [])
+        .map_err(|e| format!("Failed to clear sensitive marks: {}", e))?;
+
     Ok(())
 }
 
@@ -834,7 +841,6 @@ mod tests {
     fn test_traverse_and_insert() {
         let temp_dir = create_test_directory();
         let conn = create_test_db();
-        let root_path = temp_dir.path().to_str().unwrap().to_string();
 
         let count = traverse_and_insert(&conn, temp_dir.path(), None).unwrap();
 
