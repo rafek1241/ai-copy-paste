@@ -86,18 +86,7 @@ export const config: Options.Testrunner = {
   },
 
   // Reporters
-  reporters: [
-    "spec",
-    [
-      "junit",
-      {
-        outputDir: path.join(__testResultsDir, "reports"),
-        outputFileFormat: function (options: any) {
-          return `e2e-results-${options.cid}.xml`;
-        },
-      },
-    ],
-  ],
+  reporters: ["spec"],
 
   // Logging
   logLevel: "warn",
