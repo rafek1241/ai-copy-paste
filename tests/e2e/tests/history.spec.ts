@@ -14,7 +14,6 @@ describe("History Panel", () => {
     // Ensure we're on history page
     if (!(await historyPage.isDisplayed())) {
       await appPage.navigateToHistory();
-      await browser.pause(300);
     }
   });
 
@@ -120,10 +119,8 @@ describe("History Panel", () => {
   describe("History Integration", () => {
     it("should navigate from History to Main", async () => {
       await appPage.navigateToHistory();
-      await browser.pause(200);
 
       await appPage.navigateToMain();
-      await browser.pause(200);
 
       const isFileTreeDisplayed = await appPage.isFileTreeDisplayed();
       expect(isFileTreeDisplayed).toBe(true);
@@ -134,7 +131,6 @@ describe("History Panel", () => {
       const initialCount = await historyPage.getHistoryCount();
 
       await appPage.navigateToMain();
-      await browser.pause(200);
 
       await appPage.navigateToHistory();
       const newCount = await historyPage.getHistoryCount();

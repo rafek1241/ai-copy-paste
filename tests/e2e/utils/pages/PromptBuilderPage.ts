@@ -148,8 +148,14 @@ export class PromptBuilderPage extends BasePage {
 
       throw new Error("Unable to click Copy Context button");
     }
-
-    await browser.pause(500);
+    try {
+      await browser.waitUntil(
+        async () => (await this.isPromptPreviewDisplayed()) || !(await this.isBuildButtonEnabled()),
+        { timeout: 5000, interval: 100 }
+      );
+    } catch {
+      // Copy can succeed without visible prompt preview changes.
+    }
   }
 
   /**

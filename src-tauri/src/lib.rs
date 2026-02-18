@@ -7,8 +7,22 @@ mod sensitive;
 mod templates;
 
 use cache::TextCache;
+use std::env;
 use std::sync::Mutex;
 use tauri::Manager;
+
+fn env_flag(name: &str) -> bool {
+    env::var(name)
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on"
+        })
+        .unwrap_or(false)
+}
+
+fn e2e_background_mode() -> bool {
+    env_flag("E2E_BACKGROUND") && !env_flag("E2E_VISIBLE")
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -41,6 +55,21 @@ pub fn run() {
                 .map_err(|e| format!("Failed to initialize text cache: {}", e))?;
             app.manage(Mutex::new(text_cache));
             log::info!("Text cache initialized successfully");
+
+            if e2e_background_mode() {
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(error) = window.set_skip_taskbar(true) {
+                        log::warn!("E2E background mode: failed to hide taskbar icon: {}", error);
+                    }
+                    if let Err(error) = window.hide() {
+                        log::warn!("E2E background mode: failed to hide main window: {}", error);
+                    } else {
+                        log::info!("E2E background mode enabled: main window hidden");
+                    }
+                } else {
+                    log::warn!("E2E background mode enabled but main window was not found");
+                }
+            }
 
             Ok(())
         })

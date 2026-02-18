@@ -14,7 +14,6 @@ describe("Settings", () => {
     // Ensure we're on settings page
     if (!(await settingsPage.isDisplayed())) {
       await appPage.navigateToSettings();
-      await browser.pause(300);
     }
   });
 
@@ -99,7 +98,6 @@ describe("Settings", () => {
 
       if (await saveBtn.isExisting()) {
         await saveBtn.click();
-        await browser.pause(500);
 
         // Check for success feedback (alert, toast, or visual change)
         // Implementation dependent
@@ -115,7 +113,6 @@ describe("Settings", () => {
 
       if (await resetBtn.isExisting()) {
         await resetBtn.click();
-        await browser.pause(500);
 
         // Settings should be reset to defaults
         // Implementation dependent
@@ -137,17 +134,14 @@ describe("Settings", () => {
         const saveBtn = await $('button*=Save');
         if (await saveBtn.isExisting()) {
           await saveBtn.click();
-          await browser.pause(500);
         }
       }
 
       // Navigate away
       await appPage.navigateToMain();
-      await browser.pause(300);
 
       // Navigate back
       await appPage.navigateToSettings();
-      await browser.pause(300);
 
       // Value might be persisted
       if (testValue && inputs.length > 0) {
@@ -166,7 +160,6 @@ describe("Settings", () => {
         // Click export - this usually opens a file dialog
         // In E2E we can just verify no errors occur
         await exportBtn.click();
-        await browser.pause(500);
 
         // Dialog may have opened - can't interact with native dialogs
         expect(true).toBe(true);
@@ -178,7 +171,6 @@ describe("Settings", () => {
 
       if (await importBtn.isExisting()) {
         await importBtn.click();
-        await browser.pause(500);
 
         // Dialog may have opened
         expect(true).toBe(true);
@@ -206,10 +198,8 @@ describe("Settings Integration", () => {
 
   it("should return to previous view after Settings", async () => {
     await appPage.navigateToSettings();
-    await browser.pause(200);
 
     await appPage.navigateToMain();
-    await browser.pause(200);
 
     const isFileTreeDisplayed = await appPage.isFileTreeDisplayed();
     expect(isFileTreeDisplayed).toBe(true);

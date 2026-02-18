@@ -41,13 +41,10 @@ export class BasePage {
       },
       {
         timeout,
-        interval: 1000,
+        interval: 200,
         timeoutMsg: `Application did not load within ${timeout / 1000} seconds`,
       }
     );
-
-    // Give React a moment to fully hydrate
-    await browser.pause(500);
   }
 
   async waitForTauriReady(timeout: number = 10000): Promise<void> {
@@ -107,7 +104,7 @@ export class BasePage {
         return;
       } catch (error) {
         lastError = error as Error;
-        await browser.pause(500);
+        await browser.pause(100);
       }
     }
 
@@ -200,5 +197,14 @@ export class BasePage {
    */
   async executeScript<T>(script: string | ((...args: any[]) => T), ...args: any[]): Promise<T> {
     return browser.execute(script, ...args);
+  }
+
+  /**
+   * Wait for debounced UI updates without relying on browser.pause caps.
+   */
+  async waitForDebounce(ms: number = 300): Promise<void> {
+    await browser.executeAsync((delay: number, done: (result: boolean) => void) => {
+      setTimeout(() => done(true), delay);
+    }, ms);
   }
 }

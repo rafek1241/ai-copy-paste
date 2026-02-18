@@ -87,7 +87,6 @@ export class SettingsPage extends BasePage {
 
   async setSensitiveProtectionEnabled(enabled: boolean): Promise<void> {
     await this.setCheckboxState(Selectors.sensitiveFeatureToggle, enabled);
-    await browser.pause(200);
   }
 
   async isSensitiveProtectionEnabled(): Promise<boolean> {
@@ -102,7 +101,6 @@ export class SettingsPage extends BasePage {
     const checkbox = await $(Selectors.sensitivePreventSelectionToggle);
     await checkbox.waitForExist({ timeout: 5000 });
     await this.setCheckboxState(Selectors.sensitivePreventSelectionToggle, enabled);
-    await browser.pause(200);
   }
 
   async isPreventSelectionEnabled(): Promise<boolean> {
@@ -140,7 +138,10 @@ export class SettingsPage extends BasePage {
     await (await $(Selectors.sensitivePatternTestResults)).waitForExist({ timeout: 5000 });
 
     await this.safeClick(Selectors.sensitivePatternSaveBtn);
-    await browser.pause(500);
+    await browser.waitUntil(async () => (await this.findPatternRowByName(pattern.name)) !== null, {
+      timeout: 5000,
+      interval: 100,
+    });
   }
 
   private async findPatternRowByName(patternName: string): Promise<WebdriverIO.Element | null> {
@@ -192,7 +193,7 @@ export class SettingsPage extends BasePage {
       }
 
       const checked = await browser.execute((element) => {
-        const input = element as HTMLInputElement;
+        const input = element as unknown as HTMLInputElement;
         return !!input.checked;
       }, toggle);
 
@@ -216,7 +217,10 @@ export class SettingsPage extends BasePage {
     }
 
     await deleteBtn.click();
-    await browser.pause(300);
+    await browser.waitUntil(async () => (await this.findPatternRowByName(patternName)) === null, {
+      timeout: 5000,
+      interval: 100,
+    });
     return true;
   }
 

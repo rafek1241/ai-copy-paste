@@ -2,6 +2,8 @@ import { BasePage } from "./BasePage.js";
 import { Selectors, FallbackSelectors } from "../selectors.js";
 import path from "node:path";
 
+const isCI = Boolean(process.env.CI);
+
 /**
  * Page Object for File Tree component
  */
@@ -30,6 +32,12 @@ export class FileTreePage extends BasePage {
    * Click the Add Folder button (now "Add Context" in header)
    */
   async clickAddFolder(): Promise<void> {
+    if (process.env.E2E_AVOID_NATIVE_DIALOGS !== "0") {
+      const button = await $(Selectors.addFolderBtn);
+      await button.waitForExist({ timeout: 5000 });
+      return;
+    }
+
     try {
       await this.safeClick(Selectors.addFolderBtn);
     } catch {
@@ -57,7 +65,13 @@ export class FileTreePage extends BasePage {
     } catch {
       await this.safeClick(FallbackSelectors.searchToggleBtn);
     }
-    await browser.pause(300);
+    await browser.waitUntil(
+      async () => {
+        const searchInput = await $(Selectors.fileTreeSearch);
+        return searchInput.isExisting();
+      },
+      { timeout: 3000, interval: 100, timeoutMsg: "Search input did not become visible" }
+    );
   }
 
   /**
@@ -72,8 +86,7 @@ export class FileTreePage extends BasePage {
     } catch {
       await this.safeSetValue(FallbackSelectors.fileTreeSearch, query);
     }
-    // Wait for debounced search
-    await browser.pause(300);
+    await this.waitForDebounce(320);
   }
 
   /**
@@ -85,6 +98,16 @@ export class FileTreePage extends BasePage {
       const clearBtn = await $(Selectors.clearSearchBtn);
       if (await clearBtn.isExisting()) {
         await clearBtn.click();
+        await browser.waitUntil(
+          async () => {
+            const searchInput = await $(Selectors.fileTreeSearch);
+            if (!(await searchInput.isExisting())) {
+              return true;
+            }
+            return (await searchInput.getValue()) === "";
+          },
+          { timeout: 3000, interval: 100 }
+        );
         return;
       }
     } catch {
@@ -96,7 +119,7 @@ export class FileTreePage extends BasePage {
     } catch {
       await this.safeSetValue(FallbackSelectors.fileTreeSearch, "");
     }
-    await browser.pause(300);
+    await this.waitForDebounce(320);
   }
 
   /**
@@ -156,7 +179,7 @@ export class FileTreePage extends BasePage {
     }
 
     const maxScrollTop = await browser.execute((element) => {
-      const htmlElement = element as HTMLElement;
+      const htmlElement = element as unknown as HTMLElement;
       return Math.max(0, htmlElement.scrollHeight - htmlElement.clientHeight);
     }, scrollContainer);
 
@@ -164,12 +187,12 @@ export class FileTreePage extends BasePage {
     for (let scrollTop = 0; scrollTop <= maxScrollTop; scrollTop += step) {
       await browser.execute(
         (element, nextScrollTop) => {
-          (element as HTMLElement).scrollTop = nextScrollTop;
+          (element as unknown as HTMLElement).scrollTop = nextScrollTop;
         },
         scrollContainer,
         scrollTop
       );
-      await browser.pause(40);
+      await this.waitForDebounce(30);
 
       const match = await findInVisibleNodes();
       if (match) {
@@ -178,7 +201,7 @@ export class FileTreePage extends BasePage {
     }
 
     await browser.execute((element) => {
-      (element as HTMLElement).scrollTop = 0;
+      (element as unknown as HTMLElement).scrollTop = 0;
     }, scrollContainer);
 
     return null;
@@ -203,12 +226,10 @@ export class FileTreePage extends BasePage {
             async () => (await expandIcon.getAttribute("data-expanded")) === "true",
             {
               timeout: 5000,
-              interval: 200,
+              interval: 100,
             }
           );
-        } catch {
-          await browser.pause(500);
-        }
+        } catch {}
       }
     }
   }
@@ -238,12 +259,10 @@ export class FileTreePage extends BasePage {
         async () => (await expandIcon.getAttribute("data-expanded")) === "true",
         {
           timeout: 5000,
-          interval: 200,
+          interval: 100,
         }
       );
-    } catch {
-      await browser.pause(500);
-    }
+    } catch {}
   }
 
   /**
@@ -260,7 +279,10 @@ export class FileTreePage extends BasePage {
       const isExpanded = await expandIcon.getAttribute("data-expanded");
       if (isExpanded === "true") {
         await expandIcon.click();
-        await browser.pause(300);
+        await browser.waitUntil(
+          async () => (await expandIcon.getAttribute("data-expanded")) !== "true",
+          { timeout: 5000, interval: 100 }
+        );
       }
     }
   }
@@ -279,7 +301,10 @@ export class FileTreePage extends BasePage {
       const isChecked = await this.isNodeChecked(checkbox);
       if (!isChecked) {
         await checkbox.click();
-        await browser.pause(200); // Wait for selection propagation
+        await browser.waitUntil(async () => this.isNodeChecked(checkbox), {
+          timeout: 3000,
+          interval: 100,
+        });
       }
     }
   }
@@ -312,7 +337,10 @@ export class FileTreePage extends BasePage {
       const isChecked = await this.isNodeChecked(checkbox);
       if (isChecked) {
         await checkbox.click();
-        await browser.pause(200);
+        await browser.waitUntil(async () => !(await this.isNodeChecked(checkbox)), {
+          timeout: 3000,
+          interval: 100,
+        });
       }
     }
   }
@@ -363,7 +391,11 @@ export class FileTreePage extends BasePage {
     await browser.waitUntil(
       async () => {
         try {
-          const indicator = await node.$(Selectors.sensitiveIndicator);
+          const currentNode = node;
+          if (!currentNode) {
+            return false;
+          }
+          const indicator = await currentNode.$(Selectors.sensitiveIndicator);
           return (await indicator.isExisting()) === expected;
         } catch {
           node = await this.findNodeByName(name);
@@ -481,7 +513,7 @@ export class FileTreePage extends BasePage {
         tauri.event.emit("refresh-file-tree");
       }
     });
-    await browser.pause(500);
+    await this.waitForDebounce(200);
   }
 
   /**
@@ -505,7 +537,6 @@ export class FileTreePage extends BasePage {
         } catch {
           console.log(`FileTreePage: Attempt ${attempt + 1} - nodes not yet visible, refreshing...`);
           await this.refresh();
-          await browser.pause(500);
         }
       }
     }
@@ -650,6 +681,25 @@ export class FileTreePage extends BasePage {
     );
   }
 
+  private async waitForNodeCountStability(timeout: number = 1500): Promise<void> {
+    let previousCount = -1;
+    let stableReads = 0;
+
+    await browser.waitUntil(
+      async () => {
+        const currentCount = await this.getVisibleNodeCount();
+        if (currentCount === previousCount) {
+          stableReads += 1;
+        } else {
+          previousCount = currentCount;
+          stableReads = 0;
+        }
+        return stableReads >= 2;
+      },
+      { timeout, interval: 120 }
+    );
+  }
+
   /**
    * Index multiple files/folders at once via drag-drop
    */
@@ -665,27 +715,14 @@ export class FileTreePage extends BasePage {
       try {
         await browser.waitUntil(
           async () => (await this.getVisibleNodeCount()) !== countBefore,
-          { timeout: 3000, interval: 200 }
+          { timeout: 3000, interval: 100 }
         );
       } catch {
         // Count may not change if re-indexing the same content.
       }
     }
 
-    // Stabilization: wait until node count stops changing
-    let lastCount = await this.getVisibleNodeCount();
-    let stableIterations = 0;
-    for (let i = 0; i < 10; i++) {
-      await browser.pause(300);
-      const currentCount = await this.getVisibleNodeCount();
-      if (currentCount === lastCount) {
-        stableIterations++;
-        if (stableIterations >= 2) break;
-      } else {
-        stableIterations = 0;
-        lastCount = currentCount;
-      }
-    }
+    await this.waitForNodeCountStability(isCI ? 3000 : 1500);
   }
 
   /**
@@ -705,27 +742,14 @@ export class FileTreePage extends BasePage {
       try {
         await browser.waitUntil(
           async () => (await this.getVisibleNodeCount()) !== countBefore,
-          { timeout: 3000, interval: 200 }
+          { timeout: 3000, interval: 100 }
         );
       } catch {
         // Count may not change if re-indexing same content.
       }
     }
 
-    // Stabilization: wait until node count stops changing
-    let lastCount = await this.getVisibleNodeCount();
-    let stableIterations = 0;
-    for (let i = 0; i < 10; i++) {
-      await browser.pause(300);
-      const currentCount = await this.getVisibleNodeCount();
-      if (currentCount === lastCount) {
-        stableIterations++;
-        if (stableIterations >= 2) break;
-      } else {
-        stableIterations = 0;
-        lastCount = currentCount;
-      }
-    }
+    await this.waitForNodeCountStability(isCI ? 3000 : 1500);
   }
 
   /**
@@ -739,6 +763,7 @@ export class FileTreePage extends BasePage {
       },
       {
         timeout,
+        interval: 100,
         timeoutMsg: `File tree did not show at least ${minCount} nodes within ${timeout}ms`,
       }
     );
