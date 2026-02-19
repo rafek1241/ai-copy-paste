@@ -76,3 +76,29 @@ The FileTree component uses a performance-optimized architecture:
 
 - Keep Tauri JS and Rust core on the same **minor** version line (for example, Rust `tauri` `2.9.x` with `@tauri-apps/api` `2.9.x`). A mismatch causes `npm run tauri build` to fail before compilation.
 - In release workflows, prefer `softprops/action-gh-release` over deprecated `actions/create-release` to avoid `set-output` warnings.
+
+## Auto-Update Architecture
+
+### Standard Flow (MSI/DMG/AppImage)
+- Uses `tauri-plugin-updater` with signed bundles
+- Checks GitHub Releases for `latest.json` manifest
+- Download + install handled by the Tauri runtime
+- "Update on Exit": calls `download()` then `install()` (no `relaunch()`)
+
+### Portable Flow (Windows standalone .exe)
+- Backend `check_for_updates` calls GitHub Releases API directly
+- Downloads new .exe to `{original_name}.update.tmp` in the same directory
+- Swap script: PowerShell spawned detached, waits for exit → delete old → rename new → restart
+- Pending update tracked in SQLite `pending_updates` table (singleton, id=1)
+
+### Key Files
+- Backend commands: `src-tauri/src/commands/update.rs`
+- Frontend hook: `src/hooks/useUpdateCheck.ts`
+- Frontend view: `src/components/views/UpdateView.tsx`
+- DB schema: `src-tauri/src/db/schema.rs` (pending_updates table)
+- Tauri config: `src-tauri/tauri.conf.json` (updater endpoints + pubkey)
+- Release CI: `.github/workflows/release.yml` (signing + manifest)
+
+### GitHub Secrets Required for Release
+- `TAURI_SIGNING_PRIVATE_KEY`: Tauri updater signing private key
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: Password for the signing key (if set)
