@@ -2,7 +2,6 @@ use crate::cache::TextCache;
 use crate::db::DbConnection;
 use crate::error::{AppError, AppResult};
 use chardetng::EncodingDetector;
-use encoding_rs::Encoding;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -36,30 +35,28 @@ pub async fn extract_text(
     cache: State<'_, Mutex<TextCache>>,
 ) -> Result<ExtractionResult, String> {
     log::info!("Extracting text from: {}", path);
+    extract_text_internal(&path, &db, &cache)
+        .await
+        .map_err(to_command_error)
+}
 
-    // Get file metadata from database to get fingerprint
-    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
-
-    let (fingerprint, is_dir): (Option<String>, bool) = conn
-        .query_row(
-            "SELECT fingerprint, is_dir FROM files WHERE path = ?",
-            params![&path],
-            |row| Ok((row.get(0)?, row.get::<_, i32>(1)? != 0)),
-        )
-        .map_err(|e| format!("Failed to get file metadata: {}", e))?;
-
-    if is_dir {
-        return Err("Cannot extract text from directory".to_string());
+fn to_command_error(error: AppError) -> String {
+    match error {
+        AppError::Unknown(message)
+        | AppError::Path(message)
+        | AppError::InvalidArgument(message) => message,
+        other => other.to_string(),
     }
+}
 
-    let fingerprint = fingerprint.ok_or_else(|| "File fingerprint not found".to_string())?;
+async fn extract_text_internal(
+    path: &str,
+    db: &DbConnection,
+    cache: &Mutex<TextCache>,
+) -> AppResult<ExtractionResult> {
+    let fingerprint = get_indexed_file_fingerprint(path, db)?;
 
-    // Check cache first
-    let mut cache_guard = cache
-        .lock()
-        .map_err(|e| format!("Failed to lock cache: {}", e))?;
-
-    if let Ok(Some(cached_text)) = cache_guard.get(&path, &fingerprint) {
+    if let Some(cached_text) = get_cached_text(path, &fingerprint, cache)? {
         log::info!("Using cached text for: {}", path);
         return Ok(ExtractionResult {
             text: cached_text,
@@ -68,20 +65,14 @@ pub async fn extract_text(
         });
     }
 
-    drop(cache_guard); // Release lock while reading file
+    let path_for_io = path.to_string();
+    let extraction = tokio::task::spawn_blocking(move || extract_text_from_file(&path_for_io))
+        .await
+        .map_err(|e| AppError::Unknown(format!("Text extraction task failed: {}", e)))?;
 
-    // Extract text based on file type
-    let result = match extract_text_from_file(&path) {
+    let result = match extraction {
         Ok((text, encoding)) => {
-            // Cache the extracted text
-            let mut cache_guard = cache
-                .lock()
-                .map_err(|e| format!("Failed to lock cache: {}", e))?;
-            
-            if let Err(e) = cache_guard.put(&path, &fingerprint, &text) {
-                log::warn!("Failed to cache text for {}: {}", path, e);
-            }
-
+            cache_extracted_text(path, &fingerprint, &text, cache)?;
             ExtractionResult {
                 text,
                 encoding: Some(encoding),
@@ -99,6 +90,61 @@ pub async fn extract_text(
     };
 
     Ok(result)
+}
+
+fn get_indexed_file_fingerprint(path: &str, db: &DbConnection) -> AppResult<String> {
+    let conn = db
+        .lock()
+        .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))?;
+
+    let (fingerprint, is_dir): (Option<String>, bool) = conn
+        .query_row(
+            "SELECT fingerprint, is_dir FROM files WHERE path = ?",
+            params![path],
+            |row| Ok((row.get(0)?, row.get::<_, i32>(1)? != 0)),
+        )
+        .map_err(|e| AppError::Unknown(format!("Failed to get file metadata: {}", e)))?;
+
+    if is_dir {
+        return Err(AppError::InvalidArgument(
+            "Cannot extract text from directory".to_string(),
+        ));
+    }
+
+    fingerprint.ok_or_else(|| AppError::Path("File fingerprint not found".to_string()))
+}
+
+fn get_cached_text(
+    path: &str,
+    fingerprint: &str,
+    cache: &Mutex<TextCache>,
+) -> AppResult<Option<String>> {
+    let mut cache_guard = cache
+        .lock()
+        .map_err(|e| AppError::Unknown(format!("Failed to lock cache: {}", e)))?;
+
+    if let Ok(Some(cached_text)) = cache_guard.get(path, fingerprint) {
+        return Ok(Some(cached_text));
+    }
+
+    Ok(None)
+}
+
+fn cache_extracted_text(
+    path: &str,
+    fingerprint: &str,
+    text: &str,
+    cache: &Mutex<TextCache>,
+) -> AppResult<()> {
+    let mut cache_guard = cache
+        .lock()
+        .map_err(|e| AppError::Unknown(format!("Failed to lock cache: {}", e)))?;
+
+    if let Err(e) = cache_guard.put(path, fingerprint, text) {
+        log::warn!("Failed to cache text for {}: {}", path, e);
+    }
+
+    Ok(())
 }
 
 /// Extract text from a plain text file with encoding detection
