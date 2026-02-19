@@ -1,11 +1,27 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import Footer from "@/components/Footer";
+import { buildFooterPresentation } from "@/services/footerPresentation";
+
+function createPresentation(overrides?: Partial<Parameters<typeof buildFooterPresentation>[0]>) {
+  return buildFooterPresentation({
+    tokenCount: 1000,
+    tokenLimit: 10000,
+    redactionCount: 0,
+    ...overrides,
+  });
+}
 
 describe("Footer", () => {
     it("renders Copy Context button and token info", () => {
         const onCopy = vi.fn();
-        const { container } = render(<Footer onCopy={onCopy} tokenCount={1000} tokenLimit={10000} version="0.1.0" />);
+        const { container } = render(
+          <Footer
+            onCopy={onCopy}
+            version="0.1.0"
+            presentation={createPresentation()}
+          />
+        );
 
         const copyButton = screen.getByText("Copy Context");
         expect(copyButton).toBeInTheDocument();
@@ -27,7 +43,13 @@ describe("Footer", () => {
 
     it("shows green indicator when under 80% token usage", () => {
         const onCopy = vi.fn();
-        const { container } = render(<Footer onCopy={onCopy} tokenCount={5000} tokenLimit={10000} version="0.1.0" />);
+        const { container } = render(
+          <Footer
+            onCopy={onCopy}
+            version="0.1.0"
+            presentation={createPresentation({ tokenCount: 5000 })}
+          />
+        );
 
         const indicator = container.querySelector(".bg-green-500");
         expect(indicator).toBeInTheDocument();
@@ -35,7 +57,13 @@ describe("Footer", () => {
 
     it("shows orange indicator when at 80-99% token usage", () => {
         const onCopy = vi.fn();
-        const { container } = render(<Footer onCopy={onCopy} tokenCount={8500} tokenLimit={10000} version="0.1.0" />);
+        const { container } = render(
+          <Footer
+            onCopy={onCopy}
+            version="0.1.0"
+            presentation={createPresentation({ tokenCount: 8500 })}
+          />
+        );
 
         const indicator = container.querySelector(".bg-orange-500");
         expect(indicator).toBeInTheDocument();
@@ -43,9 +71,33 @@ describe("Footer", () => {
 
     it("shows red indicator when at or over 100% token usage", () => {
         const onCopy = vi.fn();
-        const { container } = render(<Footer onCopy={onCopy} tokenCount={10000} tokenLimit={10000} version="0.1.0" />);
+        const { container } = render(
+          <Footer
+            onCopy={onCopy}
+            version="0.1.0"
+            presentation={createPresentation({ tokenCount: 10000 })}
+          />
+        );
 
         const indicator = container.querySelector(".bg-red-500");
         expect(indicator).toBeInTheDocument();
+    });
+
+    it("shows scheduled update badge with redactions and hides token row", () => {
+      const onCopy = vi.fn();
+      render(
+        <Footer
+          onCopy={onCopy}
+          version="0.1.0"
+          presentation={createPresentation({
+            updateStatus: "scheduled",
+            redactionCount: 3,
+          })}
+        />
+      );
+
+      expect(screen.getByTestId("update-scheduled-badge")).toBeInTheDocument();
+      expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+      expect(screen.getByText("3 redacted")).toBeInTheDocument();
     });
 });

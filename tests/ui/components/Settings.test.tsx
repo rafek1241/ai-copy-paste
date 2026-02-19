@@ -1,6 +1,7 @@
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { createRef } from 'react';
 import { render } from '../test-utils';
-import Settings from '@/components/Settings';
+import Settings, { type SettingsRef } from '@/components/Settings';
 import { expect, it, describe, beforeEach, vi } from 'vitest';
 import { mockInvoke } from '../setup';
 
@@ -79,5 +80,20 @@ describe('Settings Component', () => {
       fireEvent.click(gitignoreToggle);
       expect(gitignoreToggle).not.toBeChecked();
     }
+  });
+
+  it('should persist settings through save API wiring', async () => {
+    const handleSavingChange = vi.fn();
+    const ref = createRef<SettingsRef>();
+    render(<Settings ref={ref} onSavingChange={handleSavingChange} />);
+    await screen.findByText('.exe');
+
+    await act(async () => {
+      await ref.current?.save();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('save_settings', expect.any(Object));
+    expect(handleSavingChange).toHaveBeenCalledWith(true);
+    expect(handleSavingChange).toHaveBeenLastCalledWith(false);
   });
 });

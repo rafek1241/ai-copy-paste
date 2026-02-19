@@ -1,29 +1,15 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import { Copy, Shield } from "lucide-react";
-import type { UpdateStatus } from "@/types";
+import type { FooterPresentationModel } from "@/services/footerPresentation";
 
 interface FooterProps {
     onCopy: () => void;
-    tokenCount: number;
-    tokenLimit: number;
     version: string;
-    redactionCount?: number;
-    updateStatus?: UpdateStatus;
+    presentation: FooterPresentationModel;
 }
 
-const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version, redactionCount = 0, updateStatus }) => {
-    const percentage = (tokenCount / tokenLimit) * 100;
-
-    const statusColor = useMemo(() => {
-        if (percentage >= 100) return 'bg-red-500';
-        if (percentage >= 80) return 'bg-orange-500';
-        return 'bg-green-500';
-    }, [percentage]);
-
-    const formattedCount = new Intl.NumberFormat('en-US').format(tokenCount);
-    const formattedLimit = new Intl.NumberFormat('en-US').format(tokenLimit);
-
+const Footer: React.FC<FooterProps> = ({ onCopy, version, presentation }) => {
     return (
         <footer className="p-2 border-t border-border-dark bg-[#0d1117] z-30" role="contentinfo">
             <button
@@ -36,29 +22,29 @@ const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version
             </button>
             <div className="mt-2 flex justify-between items-center px-1">
                 <div className="flex items-center gap-2">
-                    {updateStatus === 'scheduled' && (
+                    {presentation.showUpdateScheduledBadge && (
                         <div
                             className="flex items-center gap-1.5 text-xs text-green-400/80"
                             data-testid="update-scheduled-badge"
                         >
                             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                            Update will install on exit
+                            {presentation.updateScheduledText}
                         </div>
                     )}
-                    {updateStatus !== 'scheduled' && (
+                    {presentation.showTokenUsage && (
                         <>
-                            <div className={cn("size-2 rounded-full", statusColor)}></div>
+                            <div className={cn("size-2 rounded-full", presentation.tokenStatusClassName)}></div>
                             <span className="text-[10px] font-mono text-white/50">
-                                {formattedCount} / {formattedLimit} tokens
+                                {presentation.tokenUsageText}
                             </span>
                         </>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    {redactionCount > 0 && (
-                        <div className="flex items-center gap-1 text-amber-400" title={`${redactionCount} sensitive items redacted`}>
+                    {presentation.redactionText && (
+                        <div className="flex items-center gap-1 text-amber-400" title={presentation.redactionTitle ?? undefined}>
                             <Shield size={10} />
-                            <span className="text-[9px]">{redactionCount} redacted</span>
+                            <span className="text-[9px]">{presentation.redactionText}</span>
                         </div>
                     )}
                     <div className="text-[9px] text-white/20">v{version}</div>

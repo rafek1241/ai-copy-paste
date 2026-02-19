@@ -3,7 +3,7 @@ import { FileTree } from "../FileTree";
 import Header from "../Header";
 import Footer from "../Footer";
 import { useLayout } from "../layout/LayoutContext";
-import type { UpdateStatus } from "@/types";
+import type { FooterPresentationModel } from "@/services/footerPresentation";
 
 interface FilesViewProps {
     isActive: boolean;
@@ -18,11 +18,8 @@ interface FilesViewProps {
     onSearch: (query: string) => void;
     // Footer props
     onCopy: () => void;
-    tokenCount: number;
-    tokenLimit: number;
+    footerPresentation: FooterPresentationModel;
     version: string;
-    redactionCount?: number;
-    updateStatus?: UpdateStatus;
 }
 
 export const FilesView: React.FC<FilesViewProps> = ({
@@ -35,11 +32,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
     onClear,
     onSearch,
     onCopy,
-    tokenCount,
-    tokenLimit,
+    footerPresentation,
     version,
-    redactionCount = 0,
-    updateStatus
 }) => {
     const { setHeaderContent, setFooterContent } = useLayout();
 
@@ -55,11 +49,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
             setFooterContent(
                 <Footer
                     onCopy={onCopy}
-                    tokenCount={tokenCount}
-                    tokenLimit={tokenLimit}
+                    presentation={footerPresentation}
                     version={version}
-                    redactionCount={redactionCount}
-                    updateStatus={updateStatus}
                 />
             );
         }
@@ -71,11 +62,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
         onClear, 
         onSearch, 
         onCopy, 
-        tokenCount, 
-        tokenLimit, 
+        footerPresentation,
         version,
-        redactionCount,
-        updateStatus
     ]);
 
     return (

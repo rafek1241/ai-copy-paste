@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { save, open } from '@tauri-apps/plugin-dialog';
-import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
 import { useAppSettings } from '@/contexts/AppContext';
+import { useSettingsApi, type AppSettings } from '@/hooks/useSettingsApi';
 import SensitiveDataSettings, { SensitiveDataSettingsRef } from './SensitiveDataSettings';
 import { 
   Settings as SettingsIcon, 
@@ -16,15 +14,6 @@ import {
   Check, 
   Loader2 
 } from 'lucide-react';
-
-interface AppSettings {
-  excluded_extensions: string[];
-  token_limit: number;
-  default_template: string;
-  auto_save_history: boolean;
-  cache_size_mb: number;
-  respect_gitignore: boolean;
-}
 
 export interface SettingsRef {
   save: () => Promise<void>;
@@ -54,11 +43,12 @@ const Settings = forwardRef<SettingsRef, SettingsProps>(({ onSettingsChange, onS
   const { success, error: showError, warning } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const { updateSettings: updateGlobalSettings } = useAppSettings();
+  const settingsApi = useSettingsApi();
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const loaded = await invoke<AppSettings>('load_settings');
+      const loaded = await settingsApi.loadSettings();
       if (loaded && typeof loaded === 'object') {
         setSettings(prev => ({
           ...prev,
@@ -72,7 +62,7 @@ const Settings = forwardRef<SettingsRef, SettingsProps>(({ onSettingsChange, onS
     } finally {
       setLoading(false);
     }
-  }, [showError]);
+  }, [settingsApi, showError]);
 
   useEffect(() => {
     loadSettings();
@@ -82,7 +72,7 @@ const saveSettings = useCallback(async () => {
     setSaving(true);
     onSavingChange?.(true);
     try {
-      await invoke('save_settings', { settings });
+      await settingsApi.saveSettings(settings);
       await sensitiveSettingsRef.current?.save();
 
       // Update global context
@@ -103,7 +93,7 @@ const saveSettings = useCallback(async () => {
       setSaving(false);
       onSavingChange?.(false);
     }
-  }, [settings, onSettingsChange, success, showError, updateGlobalSettings, onSavingChange]);
+  }, [settingsApi, settings, onSettingsChange, success, showError, updateGlobalSettings, onSavingChange]);
 
   useImperativeHandle(ref, () => ({
     save: saveSettings,
@@ -112,39 +102,20 @@ const saveSettings = useCallback(async () => {
 
   const handleExport = useCallback(async () => {
     try {
-      const json = await invoke<string>('export_settings');
-
-      const filePath = await save({
-        defaultPath: 'ai-context-collector-settings.json',
-        filters: [{
-          name: 'JSON',
-          extensions: ['json']
-        }]
-      });
-
-      if (filePath) {
-        await writeTextFile(filePath, json);
+      const exported = await settingsApi.exportSettings();
+      if (exported) {
         success('Settings exported successfully');
       }
     } catch (error) {
       console.error('Failed to export settings:', error);
       showError('Failed to export settings');
     }
-  }, [success, showError]);
+  }, [settingsApi, success, showError]);
 
   const handleImport = useCallback(async () => {
     try {
-      const filePath = await open({
-        multiple: false,
-        filters: [{
-          name: 'JSON',
-          extensions: ['json']
-        }]
-      });
-
-      if (filePath) {
-        const json = await readTextFile(filePath as string);
-        await invoke('import_settings', { jsonData: json });
+      const imported = await settingsApi.importSettings();
+      if (imported) {
         await loadSettings();
         success('Settings imported successfully');
       }
@@ -152,7 +123,7 @@ const saveSettings = useCallback(async () => {
       console.error('Failed to import settings:', error);
       showError('Failed to import settings');
     }
-  }, [loadSettings, success, showError]);
+  }, [settingsApi, loadSettings, success, showError]);
 
   const handleReset = useCallback(async () => {
     const confirmed = await confirm({
@@ -166,14 +137,14 @@ const saveSettings = useCallback(async () => {
     if (!confirmed) return;
 
     try {
-      await invoke('reset_settings');
+      await settingsApi.resetSettings();
       await loadSettings();
       success('Settings reset to defaults');
     } catch (error) {
       console.error('Failed to reset settings:', error);
       showError('Failed to reset settings');
     }
-  }, [confirm, loadSettings, success, showError]);
+  }, [confirm, settingsApi, loadSettings, success, showError]);
 
   const addExtension = useCallback(() => {
     const ext = newExtension.trim();
