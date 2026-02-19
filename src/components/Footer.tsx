@@ -1,15 +1,17 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Copy } from "lucide-react";
+import type { UpdateStatus } from "@/types";
 
 interface FooterProps {
     onCopy: () => void;
     tokenCount: number;
     tokenLimit: number;
     version: string;
+    updateStatus?: UpdateStatus;
 }
 
-const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version }) => {
+const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version, updateStatus }) => {
     const percentage = (tokenCount / tokenLimit) * 100;
 
     const statusColor = useMemo(() => {
@@ -32,10 +34,23 @@ const Footer: React.FC<FooterProps> = ({ onCopy, tokenCount, tokenLimit, version
             </button>
             <div className="mt-2 flex justify-between items-center px-1">
                 <div className="flex items-center gap-2">
-                    <div className={cn("size-2 rounded-full", statusColor)}></div>
-                    <span className="text-[10px] font-mono text-white/50">
-                        {formattedCount} / {formattedLimit} tokens
-                    </span>
+                    {updateStatus === 'scheduled' && (
+                        <div
+                            className="flex items-center gap-1.5 text-xs text-green-400/80"
+                            data-testid="update-scheduled-badge"
+                        >
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                            Update will install on exit
+                        </div>
+                    )}
+                    {updateStatus !== 'scheduled' && (
+                        <>
+                            <div className={cn("size-2 rounded-full", statusColor)}></div>
+                            <span className="text-[10px] font-mono text-white/50">
+                                {formattedCount} / {formattedLimit} tokens
+                            </span>
+                        </>
+                    )}
                 </div>
                 <div className="text-[9px] text-white/20">v{version}</div>
             </div>

@@ -9,6 +9,7 @@ import { useToast } from "./components/ui/toast";
 import { useConfirmDialog } from "./components/ui/alert-dialog";
 import { useAppSettings, useAppCustomInstructions } from "./contexts/AppContext";
 import { useSessionPersistence } from "./hooks/useSessionPersistence";
+import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import "./App.css";
 
 // Layout & Views
@@ -18,6 +19,7 @@ import { FilesView } from "./components/views/FilesView";
 import { PromptView } from "./components/views/PromptView";
 import { HistoryView } from "./components/views/HistoryView";
 import { SettingsView } from "./components/views/SettingsView";
+import { UpdateView } from "./components/views/UpdateView";
 
 type View = "main" | "history" | "settings";
 
@@ -47,6 +49,26 @@ function App() {
     setSelectedPaths,
     setCustomInstructions
   );
+
+  // Update check
+  const {
+    updateInfo,
+    status: updateStatus,
+    progress: updateProgress,
+    error: updateError,
+    updateNow,
+    updateOnExit,
+    dismissError: dismissUpdateError
+  } = useUpdateCheck();
+
+  const [showUpdateView, setShowUpdateView] = useState(true);
+
+  useEffect(() => {
+    if (updateStatus === 'scheduled') {
+      const timer = setTimeout(() => setShowUpdateView(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [updateStatus]);
 
   // App version from Tauri config
   const [appVersion, setAppVersion] = useState("0.0.0");
@@ -215,6 +237,18 @@ function App() {
 
   return (
     <LayoutProvider>
+      {updateInfo && showUpdateView && updateStatus !== 'idle' && updateStatus !== 'checking' && (
+        <UpdateView
+          updateInfo={updateInfo}
+          status={updateStatus}
+          progress={updateProgress}
+          error={updateError}
+          onUpdateNow={updateNow}
+          onUpdateOnExit={updateOnExit}
+          onDismissError={dismissUpdateError}
+        />
+      )}
+      
       <AppLayout
         activeTab={currentView === "main" ? activeTab : currentView}
         onTabChange={handleSidebarChange}
@@ -237,6 +271,7 @@ function App() {
           tokenCount={tokenCount}
           tokenLimit={settings.tokenLimit}
           version={appVersion}
+          updateStatus={updateStatus}
         />
 
         <PromptView
@@ -250,6 +285,7 @@ function App() {
           tokenCount={tokenCount}
           tokenLimit={settings.tokenLimit}
           version={appVersion}
+          updateStatus={updateStatus}
         />
 
         <HistoryView

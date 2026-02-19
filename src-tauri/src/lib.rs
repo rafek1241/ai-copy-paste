@@ -23,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Initialize database
             let db = db::init_db(app.handle())?;
@@ -40,6 +41,11 @@ pub fn run() {
                 .map_err(|e| format!("Failed to initialize text cache: {}", e))?;
             app.manage(Mutex::new(text_cache));
             log::info!("Text cache initialized successfully");
+
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
 
             Ok(())
         })
@@ -70,6 +76,11 @@ pub fn run() {
             commands::settings::import_settings,
             commands::settings::delete_setting,
             commands::settings::reset_settings,
+            commands::update::check_for_updates,
+            commands::update::download_update,
+            commands::update::install_portable_update,
+            commands::update::get_pending_update,
+            commands::update::clear_pending_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

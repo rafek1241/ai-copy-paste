@@ -2,6 +2,7 @@ import { useEffect, forwardRef } from "react";
 import { PromptBuilder, PromptBuilderHandle } from "../PromptBuilder";
 import Footer from "../Footer";
 import { useLayout } from "../layout/LayoutContext";
+import type { UpdateStatus } from "@/types";
 
 interface PromptViewProps {
     isActive: boolean;
@@ -13,6 +14,7 @@ interface PromptViewProps {
     tokenCount: number;
     tokenLimit: number;
     version: string;
+    updateStatus?: UpdateStatus;
 }
 
 export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
@@ -22,7 +24,8 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
     onCopy,
     tokenCount,
     tokenLimit,
-    version
+    version,
+    updateStatus
 }, ref) => {
     const { setFooterContent, setHeaderContent } = useLayout();
 
@@ -40,6 +43,7 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
                     tokenCount={tokenCount}
                     tokenLimit={tokenLimit}
                     version={version}
+                    updateStatus={updateStatus}
                 />
             );
         }
@@ -50,7 +54,8 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
         onCopy, 
         tokenCount, 
         tokenLimit, 
-        version
+        version,
+        updateStatus
     ]);
 
     return (

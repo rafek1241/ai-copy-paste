@@ -4,6 +4,7 @@ pub mod browser;
 pub mod prompts;
 pub mod history;
 pub mod settings;
+pub mod update;
 
 // Re-export all commands for easy access
 pub use extraction::{extract_text, get_supported_file_types};
@@ -15,3 +16,4 @@ pub use settings::{
     save_setting, get_setting, get_all_settings, load_settings, save_settings,
     export_settings, import_settings, delete_setting, reset_settings,
 };
+pub use update::{check_for_updates, download_update, install_portable_update, get_pending_update, clear_pending_update};

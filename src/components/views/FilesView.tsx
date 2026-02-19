@@ -3,6 +3,7 @@ import { FileTree } from "../FileTree";
 import Header from "../Header";
 import Footer from "../Footer";
 import { useLayout } from "../layout/LayoutContext";
+import type { UpdateStatus } from "@/types";
 
 interface FilesViewProps {
     isActive: boolean;
@@ -20,6 +21,7 @@ interface FilesViewProps {
     tokenCount: number;
     tokenLimit: number;
     version: string;
+    updateStatus?: UpdateStatus;
 }
 
 export const FilesView: React.FC<FilesViewProps> = ({
@@ -34,7 +36,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
     onCopy,
     tokenCount,
     tokenLimit,
-    version
+    version,
+    updateStatus
 }) => {
     const { setHeaderContent, setFooterContent } = useLayout();
 
@@ -53,6 +56,7 @@ export const FilesView: React.FC<FilesViewProps> = ({
                     tokenCount={tokenCount}
                     tokenLimit={tokenLimit}
                     version={version}
+                    updateStatus={updateStatus}
                 />
             );
         }
@@ -66,7 +70,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
         onCopy, 
         tokenCount, 
         tokenLimit, 
-        version
+        version,
+        updateStatus
     ]);
 
     return (
