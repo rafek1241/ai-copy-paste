@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import Footer from './Footer';
+import Footer from '@/components/Footer';
 import { buildFooterPresentation } from '@/services/footerPresentation';
 
 function renderFooter(overrides?: Partial<Parameters<typeof buildFooterPresentation>[0]>, version = '1.0.0') {
