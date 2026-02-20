@@ -66,7 +66,7 @@ async fn extract_text_internal(
     }
 
     let path_for_io = path.to_string();
-    let extraction = tokio::task::spawn_blocking(move || extract_text_from_file(&path_for_io))
+    let extraction = tauri::async_runtime::spawn_blocking(move || extract_text_from_file(&path_for_io))
         .await
         .map_err(|e| AppError::Unknown(format!("Text extraction task failed: {}", e)))?;
 

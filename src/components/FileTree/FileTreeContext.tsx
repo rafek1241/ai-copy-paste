@@ -43,6 +43,7 @@ interface FileTreeProviderProps {
 export function FileTreeProvider({ children, searchQuery = "", onSelectionChange }: FileTreeProviderProps) {
   const [state, dispatch] = useReducer(fileTreeReducer, initialFileTreeState);
   const stateRef = useRef<FileTreeState>(state);
+  const toggleCheckQueueRef = useRef<Promise<void>>(Promise.resolve());
   stateRef.current = state;
 
   const { isSearchMode, searchResultRootsRef } = useFileTreeSearch({
@@ -162,6 +163,7 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
 
   const toggleCheck = useCallback(
     async (nodePath: string, checked: boolean) => {
+      const run = async () => {
       const currentState = stateRef.current;
       const newMap = { ...currentState.nodesMap };
       const node = newMap[nodePath];
@@ -207,6 +209,16 @@ export function FileTreeProvider({ children, searchQuery = "", onSelectionChange
       if (onSelectionChange) {
         onSelectionChange(collectSelectedPaths(newMap));
       }
+      };
+
+      const queuedOperation = toggleCheckQueueRef.current.then(run);
+      toggleCheckQueueRef.current = queuedOperation.then(
+        () => undefined,
+        (error) => {
+          console.error("Failed to toggle file-tree selection:", error);
+        }
+      );
+      await queuedOperation;
     },
     [
       getSensitivePathSet,
