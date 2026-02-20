@@ -31,3 +31,29 @@ export interface IndexProgress {
   current_path: string;
   errors: number;
 }
+
+export interface UpdateInfo {
+  version: string;
+  current_version: string;
+  release_notes: string;
+  pub_date: string;
+  download_url: string;
+  is_portable: boolean;
+  update_available: boolean;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number;
+  percentage: number;
+}
+
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'installing'
+  | 'error'
+  | 'scheduled';
+

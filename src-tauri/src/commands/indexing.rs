@@ -1,19 +1,23 @@
 use crate::db::DbConnection;
 use crate::error::{AppError, AppResult};
 use crate::gitignore::GitignoreManager;
-use rayon::prelude::*;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::Arc;
+use std::time::SystemTime;
 use tauri::{AppHandle, Emitter};
-use walkdir::WalkDir;
 // NOTE: Race condition fixed by always storing true parent_path and updating orphaned children when parent is indexed.
+use super::sensitive::reprocess_sensitive_marks_if_enabled;
 
 use super::settings::load_settings_internal;
+#[path = "indexing_persistence.rs"]
+mod indexing_persistence;
+#[path = "indexing_traversal.rs"]
+mod indexing_traversal;
+#[path = "search_service.rs"]
+mod search_service;
 
 /// Progress information for indexing operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,16 +164,7 @@ pub async fn index_folder(
     db: tauri::State<'_, DbConnection>,
 ) -> Result<u64, String> {
     log::info!("Indexing folder: {}", path);
-
-    let path_buf = PathBuf::from(&path);
-    if !path_buf.exists() {
-        return Err(format!("Path does not exist: {}", path));
-    }
-
-    // Use parallel traversal and batch inserts
-    let count = parallel_index_folder(&path_buf, &app, &db)
-        .map_err(|e| format!("Failed to index folder: {}", e))?;
-
+    let count = index_folder_internal(&path, &app, &db).map_err(to_command_error)?;
     log::info!("Indexed {} entries from {}", count, path);
     Ok(count)
 }
@@ -181,8 +176,90 @@ pub async fn get_children(
     db: tauri::State<'_, DbConnection>,
 ) -> Result<Vec<FileEntry>, String> {
     log::debug!("Getting children for parent_path: {:?}", parent_path);
+    get_children_internal(parent_path, &db).map_err(to_command_error)
+}
 
-    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
+/// Search for files by path pattern with advanced filter support.
+/// Supports: file:<name>, dir:<name>, regex patterns, plain text
+/// Returns results with relevance scores, sorted by score DESC.
+#[tauri::command]
+pub async fn search_path(
+    pattern: String,
+    db: tauri::State<'_, DbConnection>,
+) -> Result<Vec<SearchResult>, String> {
+    log::debug!("Searching for pattern: {}", pattern);
+    search_path_internal(&pattern, &db).map_err(to_command_error)
+}
+
+/// Clear the file index
+#[tauri::command]
+pub async fn clear_index(db: tauri::State<'_, DbConnection>) -> Result<(), String> {
+    log::info!("Clearing file index");
+    clear_index_internal(&db).map_err(to_command_error)
+}
+
+fn to_command_error(error: AppError) -> String {
+    match error {
+        AppError::Unknown(message)
+        | AppError::Path(message)
+        | AppError::InvalidArgument(message) => message,
+        other => other.to_string(),
+    }
+}
+
+fn lock_connection<'a>(
+    db: &'a DbConnection,
+) -> AppResult<std::sync::MutexGuard<'a, rusqlite::Connection>> {
+    db.lock()
+        .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))
+}
+
+fn index_folder_internal(path: &str, app: &AppHandle, db: &DbConnection) -> AppResult<u64> {
+    let path_buf = PathBuf::from(path);
+    if !path_buf.exists() {
+        return Err(AppError::Path(format!("Path does not exist: {}", path)));
+    }
+
+    // Use parallel traversal and batch inserts
+    let count = parallel_index_folder(&path_buf, app, db)
+        .map_err(|e| AppError::Unknown(format!("Failed to index folder: {}", e)))?;
+
+    reprocess_sensitive_marks_if_enabled(db).map_err(|e| {
+        AppError::Unknown(format!(
+            "Failed to refresh sensitive marks after indexing: {}",
+            e
+        ))
+    })?;
+
+    Ok(count)
+}
+
+/// Internal search function that operates on a raw connection (testable without Tauri state).
+fn search_db(conn: &rusqlite::Connection, pattern: &str) -> AppResult<Vec<SearchResult>> {
+    search_service::search_db(conn, pattern)
+}
+
+fn search_path_internal(pattern: &str, db: &DbConnection) -> AppResult<Vec<SearchResult>> {
+    let conn = lock_connection(db)?;
+    search_db(&conn, pattern)
+}
+
+fn clear_index_internal(db: &DbConnection) -> AppResult<()> {
+    let conn = lock_connection(db)?;
+
+    conn.execute("DELETE FROM files", [])
+        .map_err(|e| AppError::Unknown(format!("Failed to clear index: {}", e)))?;
+    conn.execute("DELETE FROM sensitive_paths", [])
+        .map_err(|e| AppError::Unknown(format!("Failed to clear sensitive marks: {}", e)))?;
+
+    Ok(())
+}
+
+fn get_children_internal(
+    parent_path: Option<String>,
+    db: &DbConnection,
+) -> AppResult<Vec<FileEntry>> {
+    let conn = lock_connection(db)?;
 
     // For root queries (parent_path IS NULL), also include orphaned entries
     // whose parent_path points to a non-existent path in the database.
@@ -202,310 +279,32 @@ pub async fn get_children(
          ORDER BY is_dir DESC, name ASC"
     };
 
-    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(query)?;
 
-    let entries = if parent_path.is_none() {
-        stmt.query_map([], |row| {
-            Ok(FileEntry {
-                path: row.get(0)?,
-                parent_path: row.get(1)?,
-                name: row.get(2)?,
-                size: row.get(3)?,
-                mtime: row.get(4)?,
-                is_dir: row.get::<_, i32>(5)? != 0,
-                token_count: row.get(6)?,
-                fingerprint: row.get(7)?,
-                child_count: row.get(8)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?
-    } else {
-        stmt.query_map(params![parent_path], |row| {
-            Ok(FileEntry {
-                path: row.get(0)?,
-                parent_path: row.get(1)?,
-                name: row.get(2)?,
-                size: row.get(3)?,
-                mtime: row.get(4)?,
-                is_dir: row.get::<_, i32>(5)? != 0,
-                token_count: row.get(6)?,
-                fingerprint: row.get(7)?,
-                child_count: row.get(8)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?
+    let entries = match parent_path {
+        None => stmt
+            .query_map([], row_to_file_entry)?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        Some(parent_path) => stmt
+            .query_map(params![parent_path], row_to_file_entry)?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
     };
 
     Ok(entries)
 }
 
-/// Parsed search filters for advanced query syntax
-#[derive(Debug, Default)]
-struct SearchFilter {
-    file_name: Option<String>,
-    directory_name: Option<String>,
-    regex_pattern: Option<regex::Regex>,
-    plain_text: Option<String>,
-}
-
-/// Parse a search query into structured filters.
-/// Supports: file:<name>, dir:<name>, regex (auto-detected), plain text
-fn parse_search_query(query: &str) -> SearchFilter {
-    let trimmed = query.trim();
-    if trimmed.is_empty() {
-        return SearchFilter::default();
-    }
-
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-    let mut file_name = None;
-    let mut directory_name = None;
-    let mut remaining_parts = Vec::new();
-
-    for part in &parts {
-        let lower = part.to_lowercase();
-        if lower.starts_with("file:") && part.len() > 5 {
-            file_name = Some(part[5..].to_string());
-        } else if lower.starts_with("dir:") && part.len() > 4 {
-            directory_name = Some(part[4..].to_string());
-        } else {
-            remaining_parts.push(*part);
-        }
-    }
-
-    let remaining = remaining_parts.join(" ");
-    let regex_special = regex::Regex::new(r"[.*?\[\]()|^${}+\\]").unwrap();
-
-    let (regex_pattern, plain_text) = if !remaining.is_empty() {
-        if regex_special.is_match(&remaining) {
-            match regex::Regex::new(&format!("(?i){}", &remaining)) {
-                Ok(re) => (Some(re), None),
-                Err(_) => (None, Some(remaining)),
-            }
-        } else {
-            (None, Some(remaining))
-        }
-    } else {
-        (None, None)
-    };
-
-    SearchFilter {
-        file_name,
-        directory_name,
-        regex_pattern,
-        plain_text,
-    }
-}
-
-/// Compute relevance score for a search result.
-/// Higher score = better match. Scoring factors:
-/// - Exact name match (case-insensitive): +100
-/// - Name starts with query: +50
-/// - Name contains query: +30
-/// - Path contains query: +10
-fn compute_score(name: &str, path: &str, query: &str, is_dir: bool) -> i32 {
-    if query.is_empty() {
-        return 0;
-    }
-    let name_lower = name.to_lowercase();
-    let path_lower = path.to_lowercase();
-    let query_lower = query.to_lowercase();
-    let mut score = 0i32;
-
-    // Name-based scoring
-    if name_lower == query_lower {
-        score += 100; // Exact name match
-    } else if name_lower.starts_with(&query_lower) {
-        score += 50; // Name starts with query
-    } else if name_lower.contains(&query_lower) {
-        score += 30; // Name contains query
-    } else if path_lower.contains(&query_lower) {
-        score += 10; // Only path contains query
-    }
-
-    // Bonus for shorter names (more specific match)
-    if name_lower.contains(&query_lower) && name.len() < 20 {
-        score += 5;
-    }
-
-    // Slight bonus for files over directories in general text search
-    // (users typically search for files)
-    if !is_dir && score > 0 {
-        score += 1;
-    }
-
-    score
-}
-
-/// Internal search function that operates on a raw connection (testable without Tauri state).
-fn search_db(conn: &rusqlite::Connection, pattern: &str) -> Result<Vec<SearchResult>, String> {
-    let filters = parse_search_query(pattern);
-
-    // Empty query returns nothing
-    if filters.file_name.is_none()
-        && filters.directory_name.is_none()
-        && filters.regex_pattern.is_none()
-        && filters.plain_text.is_none()
-    {
-        return Ok(Vec::new());
-    }
-
-    // Build SQL conditions based on parsed filters
-    let mut conditions: Vec<String> = Vec::new();
-    let mut param_values: Vec<String> = Vec::new();
-
-    if let Some(ref file_name) = filters.file_name {
-        // file: matches FILES by name
-        conditions.push("(is_dir = 0 AND LOWER(name) LIKE ?)".to_string());
-        param_values.push(format!("%{}%", file_name.to_lowercase()));
-    }
-
-    if let Some(ref dir_name) = filters.directory_name {
-        // dir: matches DIRECTORIES by name
-        conditions.push("(is_dir = 1 AND LOWER(name) LIKE ?)".to_string());
-        param_values.push(format!("%{}%", dir_name.to_lowercase()));
-    }
-
-    // When both file: and dir: are present, we need files matching file: that are inside dirs matching dir:
-    if filters.file_name.is_some() && filters.directory_name.is_some() {
-        // Override: find files with name matching file: AND path containing dir:
-        conditions.clear();
-        param_values.clear();
-        let file_name = filters.file_name.as_ref().unwrap();
-        let dir_name = filters.directory_name.as_ref().unwrap();
-        conditions.push("(is_dir = 0 AND LOWER(name) LIKE ? AND LOWER(path) LIKE ?)".to_string());
-        param_values.push(format!("%{}%", file_name.to_lowercase()));
-        param_values.push(format!("%/{}/%", dir_name.to_lowercase()));
-    }
-
-    if let Some(ref plain_text) = filters.plain_text {
-        conditions.push("(LOWER(name) LIKE ? OR LOWER(path) LIKE ?)".to_string());
-        param_values.push(format!("%{}%", plain_text.to_lowercase()));
-        param_values.push(format!("%{}%", plain_text.to_lowercase()));
-    }
-
-    // For regex, we fetch broadly and filter in Rust
-    if filters.regex_pattern.is_some() && conditions.is_empty() {
-        // No SQL filters, query everything (limited)
-    }
-
-    let where_clause = if conditions.is_empty() {
-        "1=1".to_string()
-    } else {
-        conditions.join(" AND ")
-    };
-
-    let query = format!(
-        "SELECT path, parent_path, name, size, mtime, is_dir, token_count, fingerprint,
-         (SELECT COUNT(*) FROM files f2 WHERE f2.parent_path = files.path) as child_count
-         FROM files
-         WHERE {}
-         LIMIT 500",
-        where_clause
-    );
-
-    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
-
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
-        .iter()
-        .map(|p| p as &dyn rusqlite::types::ToSql)
-        .collect();
-
-    let entries: Vec<(String, Option<String>, String, Option<i64>, Option<i64>, bool, Option<i64>, Option<String>, Option<i64>)> = stmt
-        .query_map(rusqlite::params_from_iter(param_refs), |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, Option<String>>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<i64>>(3)?,
-                row.get::<_, Option<i64>>(4)?,
-                row.get::<_, i32>(5)? != 0,
-                row.get::<_, Option<i64>>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, Option<i64>>(8)?,
-            ))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-    // Build the score query string (what the user actually typed for scoring)
-    let score_query = if let Some(ref file_name) = filters.file_name {
-        file_name.clone()
-    } else if let Some(ref dir_name) = filters.directory_name {
-        dir_name.clone()
-    } else if let Some(ref plain_text) = filters.plain_text {
-        plain_text.clone()
-    } else {
-        String::new()
-    };
-
-    let mut results: Vec<SearchResult> = entries
-        .into_iter()
-        .map(|(path, parent_path, name, size, mtime, is_dir, token_count, fingerprint, child_count)| {
-            let score = compute_score(&name, &path, &score_query, is_dir);
-            SearchResult {
-                path,
-                parent_path,
-                name,
-                size,
-                mtime,
-                is_dir,
-                token_count,
-                fingerprint,
-                child_count,
-                score,
-            }
-        })
-        .collect();
-
-    // Apply regex filter in Rust if present
-    if let Some(ref re) = filters.regex_pattern {
-        results.retain(|r| re.is_match(&r.name) || re.is_match(&r.path));
-        // Score regex matches
-        for r in &mut results {
-            r.score = if re.is_match(&r.name) { 50 } else { 10 };
-        }
-    }
-
-    // Filter out zero-score results (no match)
-    results.retain(|r| r.score > 0);
-
-    // Sort by score DESC, then name ASC
-    results.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.name.cmp(&b.name)));
-
-    Ok(results)
-}
-
-/// Search for files by path pattern with advanced filter support.
-/// Supports: file:<name>, dir:<name>, regex patterns, plain text
-/// Returns results with relevance scores, sorted by score DESC.
-#[tauri::command]
-pub async fn search_path(
-    pattern: String,
-    db: tauri::State<'_, DbConnection>,
-) -> Result<Vec<SearchResult>, String> {
-    log::debug!("Searching for pattern: {}", pattern);
-    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
-    search_db(&conn, &pattern)
-}
-
-/// Clear the file index
-#[tauri::command]
-pub async fn clear_index(
-    db: tauri::State<'_, DbConnection>,
-) -> Result<(), String> {
-    log::info!("Clearing file index");
-
-    let conn = db.lock().map_err(|e| format!("Failed to lock database: {}", e))?;
-
-    conn.execute("DELETE FROM files", [])
-        .map_err(|e| format!("Failed to clear index: {}", e))?;
-
-    Ok(())
+fn row_to_file_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileEntry> {
+    Ok(FileEntry {
+        path: row.get(0)?,
+        parent_path: row.get(1)?,
+        name: row.get(2)?,
+        size: row.get(3)?,
+        mtime: row.get(4)?,
+        is_dir: row.get::<_, i32>(5)? != 0,
+        token_count: row.get(6)?,
+        fingerprint: row.get(7)?,
+        child_count: row.get(8)?,
+    })
 }
 
 /// Internal function to recursively traverse and insert files
@@ -605,172 +404,33 @@ fn parallel_index_folder(
 
 
     // First pass: collect all entries using parallel walkdir
-    let processed_count = Arc::new(AtomicU64::new(0));
-    let error_count = Arc::new(AtomicU64::new(0));
-    let ignored_count = Arc::new(AtomicU64::new(0));
-    let last_progress_time = Arc::new(Mutex::new(Instant::now()));
+    let traversal =
+        indexing_traversal::collect_entries(root, app, gitignore_manager.clone());
 
-    // Clone Arc for closure
-    let gitignore_manager_for_filter: Option<Arc<GitignoreManager>> = gitignore_manager.clone();
-
-
-    // Collect entries with parallel iteration
-    let entries: Vec<FileEntry> = WalkDir::new(root)
-        .follow_links(false) // Don't follow symlinks to avoid cycles
-        .into_iter()
-        .filter_entry(|entry| {
-            if entry.path_is_symlink() {
-                return false;
-            }
-
-            if let Some(ref manager) = gitignore_manager_for_filter {
-                let is_dir = entry.file_type().is_dir();
-                if manager.is_ignored_with_type(entry.path(), is_dir) {
-                    ignored_count.fetch_add(1, Ordering::Relaxed);
-                    return false;
-                }
-            }
-
-            true
-        })
-        .par_bridge() // Enable parallel processing
-        .filter_map(|entry_result| {
-            let count = processed_count.fetch_add(1, Ordering::Relaxed);
-
-            // Throttle progress events to max 10 per second
-            let should_emit = {
-                let mut last_time = last_progress_time.lock().unwrap();
-                let now = Instant::now();
-                if now.duration_since(*last_time) > Duration::from_millis(100) {
-                    *last_time = now;
-                    true
-                } else {
-                    false
-                }
-            };
-
-            if should_emit {
-                let current_path = entry_result
-                    .as_ref()
-                    .map(|e| e.path().to_string_lossy().to_string())
-                    .unwrap_or_else(|_| "Unknown".to_string());
-
-                let progress = IndexProgress {
-                    processed: count,
-                    total_estimate: count + 100, // Rough estimate
-                    current_path,
-                    errors: error_count.load(Ordering::Relaxed),
-                };
-
-                if let Err(e) = app.emit("indexing-progress", &progress) {
-                    log::warn!("Failed to emit progress event: {}", e);
-                }
-            }
-
-            match entry_result {
-                Ok(entry) => {
-                    match FileEntry::from_dir_entry(&entry) {
-                        Ok(file_entry) => Some(file_entry),
-                        Err(e) => {
-                            error_count.fetch_add(1, Ordering::Relaxed);
-                            log::warn!("Failed to process entry {:?}: {}", entry.path(), e);
-                            None
-                        }
-                    }
-                }
-                Err(e) => {
-                    error_count.fetch_add(1, Ordering::Relaxed);
-                    log::warn!("Error during traversal: {}", e);
-                    None
-                }
-            }
-        })
-        .collect();
-
-    let ignored = ignored_count.load(Ordering::Relaxed);
-    if ignored > 0 {
-        log::info!("Ignored {} entries due to .gitignore patterns", ignored);
+    if traversal.ignored_count > 0 {
+        log::info!(
+            "Ignored {} entries due to .gitignore patterns",
+            traversal.ignored_count
+        );
     }
 
-    let total_entries = entries.len();
+    let total_entries = traversal.entries.len();
     log::info!(
         "Collected {} entries, now inserting into database",
         total_entries
     );
 
     // Second pass: batch insert into database
-    let mut conn = db
-        .lock()
-        .map_err(|e| AppError::Unknown(format!("Failed to lock database: {}", e)))?;
-
-    // Sort entries by path depth to ensure parents are processed before children
-    // Use Path::components() for reliable cross-platform depth calculation
-    let mut sorted_entries = entries;
-    sorted_entries.sort_by_key(|entry| Path::new(&entry.path).components().count());
-
-    // Insert in batches of 1000
-    const BATCH_SIZE: usize = 1000;
-    let mut total_inserted = 0u64;
-
-    for (batch_idx, chunk) in sorted_entries.chunks(BATCH_SIZE).enumerate() {
-        let tx = conn.transaction()?;
-
-        for entry in chunk {
-            // Always use the true parent_path from the file system.
-            // This ensures correct hierarchy even if parent isn't indexed yet.
-            // When we later index the parent, orphaned children will be found correctly.
-            let parent_path = &entry.parent_path;
-
-            // Check if entry already exists
-            let existing_fingerprint: Option<Option<String>> = tx
-                .query_row(
-                    "SELECT fingerprint FROM files WHERE path = ?",
-                    params![&entry.path],
-                    |row| row.get(0),
-                )
-                .optional()?;
-
-            if let Some(existing_fp) = existing_fingerprint {
-                // Entry exists - check if we need to update
-                if existing_fp != entry.fingerprint {
-                    tx.execute(
-                        "UPDATE files SET size = ?, mtime = ?, fingerprint = ?, name = ?, parent_path = ? WHERE path = ?",
-                        params![entry.size, entry.mtime, entry.fingerprint, entry.name, parent_path, entry.path],
-                    )?;
-                }
-            } else {
-                // Insert new entry
-                tx.execute(
-                    "INSERT INTO files (path, parent_path, name, size, mtime, is_dir, fingerprint)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    params![
-                        entry.path,
-                        parent_path,
-                        entry.name,
-                        entry.size,
-                        entry.mtime,
-                        entry.is_dir as i32,
-                        entry.fingerprint,
-                    ],
-                )?;
-            }
-        }
-
-        tx.commit()?;
-        total_inserted += chunk.len() as u64;
-        log::debug!(
-            "Inserted batch {} ({} entries)",
-            batch_idx + 1,
-            total_inserted
-        );
-    }
+    let mut conn = lock_connection(db)?;
+    let total_inserted =
+        indexing_persistence::persist_entries_in_batches(&mut conn, traversal.entries)?;
 
     // Send final progress event
     let final_progress = IndexProgress {
         processed: total_entries as u64,
         total_estimate: total_entries as u64,
         current_path: "Complete".to_string(),
-        errors: error_count.load(Ordering::Relaxed),
+        errors: traversal.error_count,
     };
 
     if let Err(e) = app.emit("indexing-progress", &final_progress) {
@@ -780,7 +440,7 @@ fn parallel_index_folder(
     log::info!(
         "Parallel indexing complete: {} entries inserted, {} errors",
         total_inserted,
-        error_count.load(Ordering::Relaxed)
+        traversal.error_count
     );
 
     Ok(total_inserted)
@@ -793,6 +453,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+    use walkdir::WalkDir;
 
     fn create_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -834,7 +495,6 @@ mod tests {
     fn test_traverse_and_insert() {
         let temp_dir = create_test_directory();
         let conn = create_test_db();
-        let root_path = temp_dir.path().to_str().unwrap().to_string();
 
         let count = traverse_and_insert(&conn, temp_dir.path(), None).unwrap();
 
@@ -1037,82 +697,6 @@ mod tests {
             )
             .unwrap();
         assert_eq!(folder2_children, 1, "folder2 should have 1 child");
-    }
-
-    mod search_filter_tests {
-        use super::*;
-
-        #[test]
-        fn test_parse_empty_query() {
-            let f = parse_search_query("");
-            assert!(f.file_name.is_none());
-            assert!(f.directory_name.is_none());
-            assert!(f.regex_pattern.is_none());
-            assert!(f.plain_text.is_none());
-        }
-
-        #[test]
-        fn test_parse_whitespace_query() {
-            let f = parse_search_query("   ");
-            assert!(f.file_name.is_none());
-            assert!(f.plain_text.is_none());
-        }
-
-        #[test]
-        fn test_parse_file_prefix() {
-            let f = parse_search_query("file:App");
-            assert_eq!(f.file_name.as_deref(), Some("App"));
-            assert!(f.plain_text.is_none());
-        }
-
-        #[test]
-        fn test_parse_dir_prefix() {
-            let f = parse_search_query("dir:src");
-            assert_eq!(f.directory_name.as_deref(), Some("src"));
-            assert!(f.plain_text.is_none());
-        }
-
-        #[test]
-        fn test_parse_combined_file_dir() {
-            let f = parse_search_query("file:App dir:src");
-            assert_eq!(f.file_name.as_deref(), Some("App"));
-            assert_eq!(f.directory_name.as_deref(), Some("src"));
-        }
-
-        #[test]
-        fn test_parse_plain_text() {
-            let f = parse_search_query("test");
-            assert_eq!(f.plain_text.as_deref(), Some("test"));
-            assert!(f.regex_pattern.is_none());
-        }
-
-        #[test]
-        fn test_parse_regex_pattern() {
-            let f = parse_search_query("\\.test\\.ts$");
-            assert!(f.regex_pattern.is_some());
-            assert!(f.plain_text.is_none());
-        }
-
-        #[test]
-        fn test_parse_invalid_regex_falls_back_to_plain() {
-            let f = parse_search_query("[invalid");
-            assert!(f.regex_pattern.is_none());
-            assert_eq!(f.plain_text.as_deref(), Some("[invalid"));
-        }
-
-        #[test]
-        fn test_parse_mixed_file_and_plain() {
-            let f = parse_search_query("file:App test");
-            assert_eq!(f.file_name.as_deref(), Some("App"));
-            assert_eq!(f.plain_text.as_deref(), Some("test"));
-        }
-
-        #[test]
-        fn test_parse_case_insensitive_prefix() {
-            let f = parse_search_query("FILE:App DIR:src");
-            assert_eq!(f.file_name.as_deref(), Some("App"));
-            assert_eq!(f.directory_name.as_deref(), Some("src"));
-        }
     }
 
     mod search_integration_tests {

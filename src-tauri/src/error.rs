@@ -23,6 +23,9 @@ pub enum AppError {
     #[error("Browser automation error: {0}")]
     BrowserError(String),
 
+    #[error("Update error: {0}")]
+    UpdateError(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
@@ -52,6 +55,9 @@ mod tests {
             browser_error.to_string(),
             "Browser automation error: connection failed"
         );
+
+        let update_error = AppError::UpdateError("download failed".to_string());
+        assert_eq!(update_error.to_string(), "Update error: download failed");
 
         let unknown = AppError::Unknown("unexpected".to_string());
         assert_eq!(unknown.to_string(), "Unknown error: unexpected");

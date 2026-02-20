@@ -32,8 +32,10 @@ export const Selectors = {
   treeNodeFile: '[data-testid="tree-node"][data-node-type="file"]',
   expandIcon: '[data-testid="expand-icon"]',
   treeCheckbox: '[data-testid="tree-checkbox"]',
+  treeCheckboxHidden: '[data-testid="tree-checkbox-hidden"]',
   treeLabel: '[data-testid="tree-label"]',
   treeIcon: '[data-testid="tree-icon"]',
+  sensitiveIndicator: '[data-testid="sensitive-indicator"]',
 
   // Prompt Builder
   promptBuilder: '[data-testid="prompt-builder"]',
@@ -41,10 +43,10 @@ export const Selectors = {
   modelSelect: '[data-testid="model-select"]',
   customInstructions: '[data-testid="custom-instructions"]',
   selectedFilesInfo: '[data-testid="selected-files-info"]',
-  buildPromptBtn: '[data-testid="build-prompt-btn"]',
+  buildPromptBtn: '[data-testid="copy-btn"]',
   errorDisplay: '[data-testid="error-display"]',
   promptPreview: '[data-testid="prompt-preview"]',
-  copyToClipboardBtn: '[data-testid="copy-clipboard-btn"]',
+  copyToClipboardBtn: '[data-testid="copy-btn"]',
 
   // Token Counter
   tokenCounter: '[data-testid="token-counter"]',
@@ -53,7 +55,7 @@ export const Selectors = {
   tokenWarning: '[data-testid="token-warning"]',
 
   // Settings
-  settingsContainer: '[data-testid="settings-container"]',
+  settingsContainer: '[data-testid="settings-view"]',
   settingsForm: '[data-testid="settings-form"]',
   excludedExtensions: '[data-testid="excluded-extensions"]',
   tokenLimitSetting: '[data-testid="token-limit-setting"]',
@@ -62,6 +64,20 @@ export const Selectors = {
   resetSettingsBtn: '[data-testid="reset-settings-btn"]',
   exportSettingsBtn: '[data-testid="export-settings-btn"]',
   importSettingsBtn: '[data-testid="import-settings-btn"]',
+  sensitiveSettings: '[data-testid="sensitive-settings"]',
+  sensitiveFeatureToggle: '[data-testid="sensitive-feature-toggle"]',
+  sensitivePreventSelectionToggle: '[data-testid="sensitive-prevent-selection-toggle"]',
+  sensitiveAddCustomBtn: '[data-testid="sensitive-add-custom-btn"]',
+  sensitiveCustomForm: '[data-testid="sensitive-custom-form"]',
+  sensitivePatternNameInput: '[data-testid="sensitive-pattern-name-input"]',
+  sensitivePatternRegexInput: '[data-testid="sensitive-pattern-regex-input"]',
+  sensitivePatternPlaceholderInput: '[data-testid="sensitive-pattern-placeholder-input"]',
+  sensitivePatternTestInput: '[data-testid="sensitive-pattern-test-input"]',
+  sensitivePatternTestBtn: '[data-testid="sensitive-pattern-test-btn"]',
+  sensitivePatternTestResults: '[data-testid="sensitive-pattern-test-results"]',
+  sensitivePatternSaveBtn: '[data-testid="sensitive-pattern-save-btn"]',
+  sensitivePatternRow: '[data-testid="sensitive-pattern-row"]',
+  sensitivePatternToggle: '[data-testid="sensitive-pattern-toggle"]',
 
   // History Panel
   historyContainer: '[data-testid="history-container"]',
@@ -108,6 +124,7 @@ export const FallbackSelectors = {
   treeNode: '[data-testid="tree-node"]',
   expandIcon: '[data-testid="expand-icon"]',
   treeCheckbox: '[data-testid="tree-checkbox"], input[type="checkbox"]',
+  treeCheckboxHidden: '[data-testid="tree-checkbox-hidden"]',
   treeLabel: '[data-testid="tree-label"]',
 
   // Prompt Builder
@@ -115,7 +132,7 @@ export const FallbackSelectors = {
   modelSelect: 'select:near(label:has-text("Target AI Model"))',
   customInstructions: '[data-testid="prompt-builder"] textarea',
   buildPromptBtn: 'button:has-text("Build")',
-  copyToClipboardBtn: 'button:has-text("Copy to Clipboard")',
+  copyToClipboardBtn: 'button*=Copy Context',
 };
 
 /**

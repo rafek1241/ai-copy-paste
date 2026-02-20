@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { save, open } from '@tauri-apps/plugin-dialog';
-import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import { cn } from '@/lib/utils';
+import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
 import { useToast } from './ui/toast';
 import { useConfirmDialog } from './ui/alert-dialog';
 import { useAppSettings } from '@/contexts/AppContext';
+import { useSettingsApi, type AppSettings } from '@/hooks/useSettingsApi';
+import SensitiveDataSettings, { SensitiveDataSettingsRef } from './SensitiveDataSettings';
 import { 
   Settings as SettingsIcon, 
   Upload, 
@@ -14,24 +12,20 @@ import {
   X, 
   ChevronDown, 
   Check, 
-  Save, 
   Loader2 
 } from 'lucide-react';
 
-interface AppSettings {
-  excluded_extensions: string[];
-  token_limit: number;
-  default_template: string;
-  auto_save_history: boolean;
-  cache_size_mb: number;
-  respect_gitignore: boolean;
+export interface SettingsRef {
+  save: () => Promise<void>;
+  isSaving: boolean;
 }
 
 interface SettingsProps {
   onSettingsChange?: (settings: AppSettings) => void;
+  onSavingChange?: (saving: boolean) => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
+const Settings = forwardRef<SettingsRef, SettingsProps>(({ onSettingsChange, onSavingChange }, ref) => {
   const [settings, setSettings] = useState<AppSettings>({
     excluded_extensions: [],
     token_limit: 200000,
@@ -44,15 +38,17 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newExtension, setNewExtension] = useState('');
+  const sensitiveSettingsRef = useRef<SensitiveDataSettingsRef>(null);
 
   const { success, error: showError, warning } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const { updateSettings: updateGlobalSettings } = useAppSettings();
+  const settingsApi = useSettingsApi();
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const loaded = await invoke<AppSettings>('load_settings');
+      const loaded = await settingsApi.loadSettings();
       if (loaded && typeof loaded === 'object') {
         setSettings(prev => ({
           ...prev,
@@ -66,16 +62,18 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
     } finally {
       setLoading(false);
     }
-  }, [showError]);
+  }, [settingsApi, showError]);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
-  const saveSettings = useCallback(async () => {
+const saveSettings = useCallback(async () => {
     setSaving(true);
+    onSavingChange?.(true);
     try {
-      await invoke('save_settings', { settings });
+      await settingsApi.saveSettings(settings);
+      await sensitiveSettingsRef.current?.save();
 
       // Update global context
       updateGlobalSettings({
@@ -93,44 +91,31 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
       showError('Failed to save settings');
     } finally {
       setSaving(false);
+      onSavingChange?.(false);
     }
-  }, [settings, onSettingsChange, success, showError, updateGlobalSettings]);
+  }, [settingsApi, settings, onSettingsChange, success, showError, updateGlobalSettings, onSavingChange]);
+
+  useImperativeHandle(ref, () => ({
+    save: saveSettings,
+    isSaving: saving,
+  }), [saveSettings, saving]);
 
   const handleExport = useCallback(async () => {
     try {
-      const json = await invoke<string>('export_settings');
-
-      const filePath = await save({
-        defaultPath: 'ai-context-collector-settings.json',
-        filters: [{
-          name: 'JSON',
-          extensions: ['json']
-        }]
-      });
-
-      if (filePath) {
-        await writeTextFile(filePath, json);
+      const exported = await settingsApi.exportSettings();
+      if (exported) {
         success('Settings exported successfully');
       }
     } catch (error) {
       console.error('Failed to export settings:', error);
       showError('Failed to export settings');
     }
-  }, [success, showError]);
+  }, [settingsApi, success, showError]);
 
   const handleImport = useCallback(async () => {
     try {
-      const filePath = await open({
-        multiple: false,
-        filters: [{
-          name: 'JSON',
-          extensions: ['json']
-        }]
-      });
-
-      if (filePath) {
-        const json = await readTextFile(filePath as string);
-        await invoke('import_settings', { jsonData: json });
+      const imported = await settingsApi.importSettings();
+      if (imported) {
         await loadSettings();
         success('Settings imported successfully');
       }
@@ -138,7 +123,7 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
       console.error('Failed to import settings:', error);
       showError('Failed to import settings');
     }
-  }, [loadSettings, success, showError]);
+  }, [settingsApi, loadSettings, success, showError]);
 
   const handleReset = useCallback(async () => {
     const confirmed = await confirm({
@@ -152,14 +137,14 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
     if (!confirmed) return;
 
     try {
-      await invoke('reset_settings');
+      await settingsApi.resetSettings();
       await loadSettings();
       success('Settings reset to defaults');
     } catch (error) {
       console.error('Failed to reset settings:', error);
       showError('Failed to reset settings');
     }
-  }, [confirm, loadSettings, success, showError]);
+  }, [confirm, settingsApi, loadSettings, success, showError]);
 
   const addExtension = useCallback(() => {
     const ext = newExtension.trim();
@@ -404,32 +389,20 @@ const Settings: React.FC<SettingsProps> = ({ onSettingsChange }) => {
                     <div className="text-[9px] text-white/30 leading-relaxed">Persist file selections to history automatically on building prompt.</div>
                   </div>
                 </label>
-              </div>
+</div>
             </section>
           </div>
 
-          <div className="pt-4 mt-4 border-t border-white/5">
-            <button
-              onClick={saveSettings}
-              disabled={saving}
-              className={cn(
-                "w-full h-10 rounded font-bold text-[11px] tracking-widest uppercase transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/50",
-                saving ? "bg-white/5 text-white/20 cursor-wait" : "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/10 active:scale-[0.99]"
-              )}
-            >
-              {saving ? (
-                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Save size={16} aria-hidden="true" />
-              )}
-              {saving ? 'SAVING...' : 'SAVE CONFIGURATION'}
-            </button>
+<div className="pt-4 border-t border-white/5">
+            <SensitiveDataSettings ref={sensitiveSettingsRef} />
           </div>
         </div>
       </div>
       <ConfirmDialog />
     </>
   );
-};
+});
+
+Settings.displayName = 'Settings';
 
 export default Settings;

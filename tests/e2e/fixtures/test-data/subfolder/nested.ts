@@ -1,1 +1,1 @@
-export const nested = true;
+export const nested = "nested file";

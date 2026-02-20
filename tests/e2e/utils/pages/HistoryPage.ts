@@ -96,7 +96,6 @@ export class HistoryPage extends BasePage {
 
     if (await restoreBtn.isExisting()) {
       await restoreBtn.click();
-      await browser.pause(500);
     } else {
       throw new Error("Restore button not found in history entry");
     }
@@ -116,8 +115,16 @@ export class HistoryPage extends BasePage {
     );
 
     if (await deleteBtn.isExisting()) {
+      const countBefore = await this.getHistoryCount();
       await deleteBtn.click();
-      await browser.pause(500);
+      try {
+        await browser.waitUntil(async () => (await this.getHistoryCount()) < countBefore, {
+          timeout: 3000,
+          interval: 100,
+        });
+      } catch {
+        // Some environments keep the list unchanged until a refresh.
+      }
     } else {
       throw new Error("Delete button not found in history entry");
     }
@@ -134,8 +141,16 @@ export class HistoryPage extends BasePage {
       for (const button of buttons) {
         const text = await button.getText();
         if (text.includes("Clear") && (text.includes("All") || text.includes("History"))) {
+          const countBefore = await this.getHistoryCount();
           await button.click();
-          await browser.pause(500);
+          try {
+            await browser.waitUntil(async () => (await this.getHistoryCount()) < countBefore, {
+              timeout: 3000,
+              interval: 100,
+            });
+          } catch {
+            // List may already be empty.
+          }
           return;
         }
       }

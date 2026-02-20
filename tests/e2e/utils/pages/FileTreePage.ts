@@ -2,6 +2,8 @@ import { BasePage } from "./BasePage.js";
 import { Selectors, FallbackSelectors } from "../selectors.js";
 import path from "node:path";
 
+const isCI = Boolean(process.env.CI);
+
 /**
  * Page Object for File Tree component
  */
@@ -30,6 +32,12 @@ export class FileTreePage extends BasePage {
    * Click the Add Folder button (now "Add Context" in header)
    */
   async clickAddFolder(): Promise<void> {
+    if (process.env.E2E_AVOID_NATIVE_DIALOGS !== "0") {
+      const button = await $(Selectors.addFolderBtn);
+      await button.waitForExist({ timeout: 5000 });
+      return;
+    }
+
     try {
       await this.safeClick(Selectors.addFolderBtn);
     } catch {
@@ -57,7 +65,13 @@ export class FileTreePage extends BasePage {
     } catch {
       await this.safeClick(FallbackSelectors.searchToggleBtn);
     }
-    await browser.pause(300);
+    await browser.waitUntil(
+      async () => {
+        const searchInput = await $(Selectors.fileTreeSearch);
+        return searchInput.isExisting();
+      },
+      { timeout: 3000, interval: 100, timeoutMsg: "Search input did not become visible" }
+    );
   }
 
   /**
@@ -72,8 +86,7 @@ export class FileTreePage extends BasePage {
     } catch {
       await this.safeSetValue(FallbackSelectors.fileTreeSearch, query);
     }
-    // Wait for debounced search
-    await browser.pause(300);
+    await this.waitForDebounce(320);
   }
 
   /**
@@ -85,6 +98,16 @@ export class FileTreePage extends BasePage {
       const clearBtn = await $(Selectors.clearSearchBtn);
       if (await clearBtn.isExisting()) {
         await clearBtn.click();
+        await browser.waitUntil(
+          async () => {
+            const searchInput = await $(Selectors.fileTreeSearch);
+            if (!(await searchInput.isExisting())) {
+              return true;
+            }
+            return (await searchInput.getValue()) === "";
+          },
+          { timeout: 3000, interval: 100 }
+        );
         return;
       }
     } catch {
@@ -96,7 +119,7 @@ export class FileTreePage extends BasePage {
     } catch {
       await this.safeSetValue(FallbackSelectors.fileTreeSearch, "");
     }
-    await browser.pause(300);
+    await this.waitForDebounce(320);
   }
 
   /**
@@ -133,17 +156,53 @@ export class FileTreePage extends BasePage {
    * Find a tree node by name
    */
   async findNodeByName(name: string): Promise<WebdriverIO.Element | null> {
-    const nodes = await this.getVisibleNodes();
+    const findInVisibleNodes = async (): Promise<WebdriverIO.Element | null> => {
+      const nodes = await this.getVisibleNodes();
+      for (const node of nodes) {
+        const label = await node.$(Selectors.treeLabel);
+        if (!(await label.isExisting())) {
+          continue;
+        }
 
-    for (const node of nodes) {
-      const labels = await node.$$(Selectors.treeLabel);
-      for (const label of labels) {
         const text = await label.getText();
         if (text === name) {
           return node;
         }
       }
+
+      return null;
+    };
+
+    const scrollContainer = await $(Selectors.fileTreeScroll);
+    if (!(await scrollContainer.isExisting())) {
+      return findInVisibleNodes();
     }
+
+    const maxScrollTop = await browser.execute((element) => {
+      const htmlElement = element as unknown as HTMLElement;
+      return Math.max(0, htmlElement.scrollHeight - htmlElement.clientHeight);
+    }, scrollContainer);
+
+    const step = 160;
+    for (let scrollTop = 0; scrollTop <= maxScrollTop; scrollTop += step) {
+      await browser.execute(
+        (element, nextScrollTop) => {
+          (element as unknown as HTMLElement).scrollTop = nextScrollTop;
+        },
+        scrollContainer,
+        scrollTop
+      );
+      await this.waitForDebounce(30);
+
+      const match = await findInVisibleNodes();
+      if (match) {
+        return match;
+      }
+    }
+
+    await browser.execute((element) => {
+      (element as unknown as HTMLElement).scrollTop = 0;
+    }, scrollContainer);
 
     return null;
   }
@@ -161,20 +220,49 @@ export class FileTreePage extends BasePage {
     if (await expandIcon.isExisting()) {
       const isExpanded = await expandIcon.getAttribute("data-expanded");
       if (isExpanded !== "true") {
-        const beforeCount = await this.getVisibleNodeCount();
         await expandIcon.click();
-        // Wait for children to load (node count should increase)
         try {
           await browser.waitUntil(
-            async () => (await this.getVisibleNodeCount()) > beforeCount,
-            { timeout: 5000, interval: 200 }
+            async () => (await expandIcon.getAttribute("data-expanded")) === "true",
+            {
+              timeout: 5000,
+              interval: 100,
+            }
           );
-        } catch {
-          // Fallback to fixed pause if children didn't appear
-          await browser.pause(500);
-        }
+        } catch {}
       }
     }
+  }
+
+  /**
+   * Expand a folder only when currently collapsed
+   */
+  async expandFolderIfCollapsed(name: string): Promise<void> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      throw new Error(`Node "${name}" not found`);
+    }
+
+    const expandIcon = await node.$(Selectors.expandIcon);
+    if (!(await expandIcon.isExisting())) {
+      return;
+    }
+
+    const isExpanded = await expandIcon.getAttribute("data-expanded");
+    if (isExpanded === "true") {
+      return;
+    }
+
+    await expandIcon.click();
+    try {
+      await browser.waitUntil(
+        async () => (await expandIcon.getAttribute("data-expanded")) === "true",
+        {
+          timeout: 5000,
+          interval: 100,
+        }
+      );
+    } catch {}
   }
 
   /**
@@ -191,7 +279,10 @@ export class FileTreePage extends BasePage {
       const isExpanded = await expandIcon.getAttribute("data-expanded");
       if (isExpanded === "true") {
         await expandIcon.click();
-        await browser.pause(300);
+        await browser.waitUntil(
+          async () => (await expandIcon.getAttribute("data-expanded")) !== "true",
+          { timeout: 5000, interval: 100 }
+        );
       }
     }
   }
@@ -210,7 +301,10 @@ export class FileTreePage extends BasePage {
       const isChecked = await this.isNodeChecked(checkbox);
       if (!isChecked) {
         await checkbox.click();
-        await browser.pause(200); // Wait for selection propagation
+        await browser.waitUntil(async () => this.isNodeChecked(checkbox), {
+          timeout: 3000,
+          interval: 100,
+        });
       }
     }
   }
@@ -243,7 +337,10 @@ export class FileTreePage extends BasePage {
       const isChecked = await this.isNodeChecked(checkbox);
       if (isChecked) {
         await checkbox.click();
-        await browser.pause(200);
+        await browser.waitUntil(async () => !(await this.isNodeChecked(checkbox)), {
+          timeout: 3000,
+          interval: 100,
+        });
       }
     }
   }
@@ -263,6 +360,89 @@ export class FileTreePage extends BasePage {
     }
 
     return false;
+  }
+
+  /**
+   * Check whether a node shows a sensitive indicator icon
+   */
+  async hasSensitiveIndicator(name: string): Promise<boolean> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      return false;
+    }
+
+    const indicator = await node.$(Selectors.sensitiveIndicator);
+    return indicator.isExisting();
+  }
+
+  /**
+   * Wait for a file node's sensitive indicator to match expected state
+   */
+  async waitForSensitiveIndicatorState(
+    name: string,
+    expected: boolean,
+    timeout: number = 15000
+  ): Promise<void> {
+    let node = await this.findNodeByName(name);
+    if (!node) {
+      throw new Error(`Node "${name}" not found`);
+    }
+
+    await browser.waitUntil(
+      async () => {
+        try {
+          const currentNode = node;
+          if (!currentNode) {
+            return false;
+          }
+          const indicator = await currentNode.$(Selectors.sensitiveIndicator);
+          return (await indicator.isExisting()) === expected;
+        } catch {
+          node = await this.findNodeByName(name);
+          if (!node) {
+            return false;
+          }
+
+          try {
+            const indicator = await node.$(Selectors.sensitiveIndicator);
+            return (await indicator.isExisting()) === expected;
+          } catch {
+            return false;
+          }
+        }
+      },
+      {
+        timeout,
+        interval: 200,
+        timeoutMsg: `Sensitive indicator for ${name} did not become ${expected}`,
+      }
+    );
+  }
+
+  /**
+   * Check whether a node currently has a selectable checkbox input
+   */
+  async hasSelectionCheckbox(name: string): Promise<boolean> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      return false;
+    }
+
+    const checkbox = await node.$(Selectors.treeCheckbox);
+    return checkbox.isExisting();
+  }
+
+  /**
+   * Check whether selection is blocked for a file node
+   */
+  async isSelectionBlocked(name: string): Promise<boolean> {
+    const node = await this.findNodeByName(name);
+    if (!node) {
+      return false;
+    }
+
+    const blocked = await node.getAttribute("data-selection-blocked");
+    return blocked === "true";
   }
 
   /**
@@ -333,7 +513,7 @@ export class FileTreePage extends BasePage {
         tauri.event.emit("refresh-file-tree");
       }
     });
-    await browser.pause(500);
+    await this.waitForDebounce(200);
   }
 
   /**
@@ -357,7 +537,6 @@ export class FileTreePage extends BasePage {
         } catch {
           console.log(`FileTreePage: Attempt ${attempt + 1} - nodes not yet visible, refreshing...`);
           await this.refresh();
-          await browser.pause(500);
         }
       }
     }
@@ -439,6 +618,88 @@ export class FileTreePage extends BasePage {
     );
   }
 
+  private async emitDragDropAndWaitForComplete(
+    paths: string[],
+    timeout: number = 8000
+  ): Promise<boolean> {
+    return browser.executeAsync(
+      (dragDropPaths: string[], timeoutMs: number, done: (result: boolean) => void) => {
+        const tauri = (window as any).__TAURI__;
+        if (!tauri?.event?.listen || !tauri?.event?.emit) {
+          done(false);
+          return;
+        }
+
+        let finished = false;
+        let unlisten: (() => void) | undefined;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+        const finalize = (result: boolean) => {
+          if (finished) {
+            return;
+          }
+
+          finished = true;
+
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+
+          if (unlisten) {
+            unlisten();
+          }
+
+          done(result);
+        };
+
+        timeoutId = setTimeout(() => finalize(false), timeoutMs);
+
+        tauri.event
+          .listen("indexing-progress", (event: { payload?: { current_path?: string } }) => {
+            if (event?.payload?.current_path === "Complete") {
+              finalize(true);
+            }
+          })
+          .then(async (cleanup: () => void) => {
+            unlisten = cleanup;
+
+            try {
+              await tauri.event.emit("tauri://drag-drop", {
+                paths: dragDropPaths,
+                position: { x: 0, y: 0 },
+              });
+            } catch {
+              finalize(false);
+            }
+          })
+          .catch(() => {
+            finalize(false);
+          });
+      },
+      paths,
+      timeout
+    );
+  }
+
+  private async waitForNodeCountStability(timeout: number = 1500): Promise<void> {
+    let previousCount = -1;
+    let stableReads = 0;
+
+    await browser.waitUntil(
+      async () => {
+        const currentCount = await this.getVisibleNodeCount();
+        if (currentCount === previousCount) {
+          stableReads += 1;
+        } else {
+          previousCount = currentCount;
+          stableReads = 0;
+        }
+        return stableReads >= 2;
+      },
+      { timeout, interval: 120 }
+    );
+  }
+
   /**
    * Index multiple files/folders at once via drag-drop
    */
@@ -448,44 +709,20 @@ export class FileTreePage extends BasePage {
     const countBefore = await this.getVisibleNodeCount();
     const normalizedPaths = paths.map(p => p.replace(/\\/g, '/'));
 
-    await browser.execute((filePaths: string[]) => {
-      const tauri = (window as any).__TAURI__;
-      if (!tauri?.event?.emit) {
-        throw new Error("Tauri API not available");
-      }
-      void tauri.event.emit("tauri://drag-drop", {
-        paths: filePaths,
-        position: { x: 0, y: 0 }
-      });
-      return true;
-    }, normalizedPaths);
+    const indexingCompleted = await this.emitDragDropAndWaitForComplete(normalizedPaths);
 
-    await this.waitForIndexingComplete();
-
-    // Wait for indexing to complete: poll for node count change, then stabilize
-    try {
-      await browser.waitUntil(
-        async () => (await this.getVisibleNodeCount()) !== countBefore,
-        { timeout: 10000, interval: 300 }
-      );
-    } catch {
-      // Count may not change - fall through
-    }
-
-    // Stabilization: wait until node count stops changing
-    let lastCount = await this.getVisibleNodeCount();
-    let stableIterations = 0;
-    for (let i = 0; i < 10; i++) {
-      await browser.pause(300);
-      const currentCount = await this.getVisibleNodeCount();
-      if (currentCount === lastCount) {
-        stableIterations++;
-        if (stableIterations >= 2) break;
-      } else {
-        stableIterations = 0;
-        lastCount = currentCount;
+    if (!indexingCompleted) {
+      try {
+        await browser.waitUntil(
+          async () => (await this.getVisibleNodeCount()) !== countBefore,
+          { timeout: 3000, interval: 100 }
+        );
+      } catch {
+        // Count may not change if re-indexing the same content.
       }
     }
+
+    await this.waitForNodeCountStability(isCI ? 3000 : 1500);
   }
 
   /**
@@ -499,44 +736,20 @@ export class FileTreePage extends BasePage {
     // Normalize path for Windows to avoid escaping issues
     const normalizedPath = folderPath.replace(/\\/g, '/');
 
-    await browser.execute((path) => {
-      const tauri = (window as any).__TAURI__;
-      if (!tauri?.event?.emit) {
-        throw new Error("Tauri API not available");
-      }
-      void tauri.event.emit("tauri://drag-drop", {
-        paths: [path],
-        position: { x: 0, y: 0 }
-      });
-      return true;
-    }, normalizedPath);
+    const indexingCompleted = await this.emitDragDropAndWaitForComplete([normalizedPath]);
 
-    await this.waitForIndexingComplete();
-
-    // Wait for indexing to complete: poll for node count change, then stabilize
-    try {
-      await browser.waitUntil(
-        async () => (await this.getVisibleNodeCount()) !== countBefore,
-        { timeout: 10000, interval: 300 }
-      );
-    } catch {
-      // Count may not change if re-indexing same content - fall through
-    }
-
-    // Stabilization: wait until node count stops changing
-    let lastCount = await this.getVisibleNodeCount();
-    let stableIterations = 0;
-    for (let i = 0; i < 10; i++) {
-      await browser.pause(300);
-      const currentCount = await this.getVisibleNodeCount();
-      if (currentCount === lastCount) {
-        stableIterations++;
-        if (stableIterations >= 2) break;
-      } else {
-        stableIterations = 0;
-        lastCount = currentCount;
+    if (!indexingCompleted) {
+      try {
+        await browser.waitUntil(
+          async () => (await this.getVisibleNodeCount()) !== countBefore,
+          { timeout: 3000, interval: 100 }
+        );
+      } catch {
+        // Count may not change if re-indexing same content.
       }
     }
+
+    await this.waitForNodeCountStability(isCI ? 3000 : 1500);
   }
 
   /**
@@ -550,6 +763,7 @@ export class FileTreePage extends BasePage {
       },
       {
         timeout,
+        interval: 100,
         timeoutMsg: `File tree did not show at least ${minCount} nodes within ${timeout}ms`,
       }
     );

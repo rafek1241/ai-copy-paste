@@ -3,6 +3,7 @@ import { FileTree } from "../FileTree";
 import Header from "../Header";
 import Footer from "../Footer";
 import { useLayout } from "../layout/LayoutContext";
+import type { FooterPresentationModel } from "@/services/footerPresentation";
 
 interface FilesViewProps {
     isActive: boolean;
@@ -17,8 +18,7 @@ interface FilesViewProps {
     onSearch: (query: string) => void;
     // Footer props
     onCopy: () => void;
-    tokenCount: number;
-    tokenLimit: number;
+    footerPresentation: FooterPresentationModel;
     version: string;
 }
 
@@ -32,9 +32,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
     onClear,
     onSearch,
     onCopy,
-    tokenCount,
-    tokenLimit,
-    version
+    footerPresentation,
+    version,
 }) => {
     const { setHeaderContent, setFooterContent } = useLayout();
 
@@ -50,8 +49,7 @@ export const FilesView: React.FC<FilesViewProps> = ({
             setFooterContent(
                 <Footer
                     onCopy={onCopy}
-                    tokenCount={tokenCount}
-                    tokenLimit={tokenLimit}
+                    presentation={footerPresentation}
                     version={version}
                 />
             );
@@ -64,9 +62,8 @@ export const FilesView: React.FC<FilesViewProps> = ({
         onClear, 
         onSearch, 
         onCopy, 
-        tokenCount, 
-        tokenLimit, 
-        version
+        footerPresentation,
+        version,
     ]);
 
     return (

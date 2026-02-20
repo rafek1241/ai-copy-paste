@@ -5,6 +5,63 @@ import { Selectors, FallbackSelectors } from "../selectors.js";
  * Page Object for main application navigation and header
  */
 export class AppPage extends BasePage {
+  private async waitForViewReady(view: "files" | "prompt" | "history" | "settings"): Promise<void> {
+    if (view === "files") {
+      await browser.waitUntil(
+        async () => {
+          const container = await $(Selectors.fileTreeContainer);
+          return container.isExisting();
+        },
+        { timeout: 5000, interval: 100, timeoutMsg: "Files view did not become ready" }
+      );
+      return;
+    }
+
+    if (view === "prompt") {
+      await browser.waitUntil(
+        async () => {
+          const container = await $(Selectors.promptBuilder);
+          return container.isExisting();
+        },
+        { timeout: 5000, interval: 100, timeoutMsg: "Prompt view did not become ready" }
+      );
+      return;
+    }
+
+    if (view === "history") {
+      await browser.waitUntil(
+        async () => {
+          const container = await $(Selectors.historyContainer);
+          if (await container.isExisting()) {
+            return true;
+          }
+          const heading = await $("h2");
+          if (!(await heading.isExisting())) {
+            return false;
+          }
+          return (await heading.getText()).toLowerCase().includes("history");
+        },
+        { timeout: 5000, interval: 100, timeoutMsg: "History view did not become ready" }
+      );
+      return;
+    }
+
+    await browser.waitUntil(
+      async () => {
+        const container = await $(Selectors.settingsContainer);
+        if (await container.isExisting()) {
+          return true;
+        }
+        const heading = await $("h2");
+        if (!(await heading.isExisting())) {
+          return false;
+        }
+        return (await heading.getText()).toLowerCase().includes("settings");
+      },
+      { timeout: 5000, interval: 100, timeoutMsg: "Settings view did not become ready" }
+    );
+  }
+
   /**
    * Wait for application to fully load
    */
@@ -45,11 +102,10 @@ export class AppPage extends BasePage {
       },
       {
         timeout,
-        interval: 1000,
+        interval: 200,
         timeoutMsg: `App container did not appear within ${timeout / 1000} seconds`,
       }
     );
-
   }
 
   /**
@@ -74,7 +130,7 @@ export class AppPage extends BasePage {
       // Fallback to finding button by title
       await this.safeClick(FallbackSelectors.navFiles);
     }
-    await browser.pause(300); // Wait for navigation
+    await this.waitForViewReady("files");
   }
 
   /**
@@ -93,7 +149,7 @@ export class AppPage extends BasePage {
     } catch {
       await this.safeClick(FallbackSelectors.navPrompt);
     }
-    await browser.pause(300);
+    await this.waitForViewReady("prompt");
   }
 
   /**
@@ -105,7 +161,7 @@ export class AppPage extends BasePage {
     } catch {
       await this.safeClick(FallbackSelectors.navHistory);
     }
-    await browser.pause(300);
+    await this.waitForViewReady("history");
   }
 
   /**
@@ -117,7 +173,7 @@ export class AppPage extends BasePage {
     } catch {
       await this.safeClick(FallbackSelectors.navSettings);
     }
-    await browser.pause(300);
+    await this.waitForViewReady("settings");
   }
 
   /**
@@ -199,7 +255,14 @@ export class AppPage extends BasePage {
       );
     } catch {
     }
-    await browser.pause(500);
+    try {
+      await browser.waitUntil(async () => (await this.getSelectedFilesCount()) === 0, {
+        timeout: 3000,
+        interval: 100,
+      });
+    } catch {
+      // Selection count may already be zero but not rendered consistently.
+    }
   }
 
   /**
@@ -258,5 +321,49 @@ export class AppPage extends BasePage {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Click the Copy Context button in footer
+   */
+  async clickCopyContext(): Promise<void> {
+    try {
+      await this.safeClick(Selectors.copyToClipboardBtn);
+    } catch {
+      await this.safeClick('button*=Copy Context');
+    }
+  }
+
+  /**
+   * Attempt to read clipboard text from the browser context
+   */
+  async getClipboardText(): Promise<string> {
+    return browser.execute(async () => {
+      const tauri = (window as any).__TAURI__;
+
+      try {
+        if (tauri?.core?.invoke) {
+          const text = await tauri.core.invoke("plugin:clipboard-manager|read_text");
+          if (typeof text === "string") {
+            return text;
+          }
+        }
+      } catch {
+        // Continue with other clipboard fallbacks.
+      }
+
+      try {
+        if (tauri?.clipboardManager?.readText) {
+          const text = await tauri.clipboardManager.readText();
+          if (typeof text === "string") {
+            return text;
+          }
+        }
+      } catch {
+        // Continue with browser API fallback.
+      }
+
+      return "";
+    });
   }
 }

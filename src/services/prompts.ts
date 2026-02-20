@@ -17,6 +17,7 @@ export interface BuildPromptResponse {
   prompt: string;
   file_count: number;
   total_chars: number;
+  redaction_count: number;
 }
 
 export interface FileContent {

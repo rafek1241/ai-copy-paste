@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
-import { FilterType, useFileTreeActions, useFilterType } from "./FileTreeContext";
+import { useFileTreeActions, useFilterType } from "./FileTreeContext";
+import type { FilterType } from "./FileTreeContext";
 import { ChevronDown, ChevronsUpDown } from "lucide-react";
 
 const FILTER_OPTIONS: { id: FilterType; label: string }[] = [

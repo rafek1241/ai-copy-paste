@@ -2,16 +2,16 @@ import { useEffect, forwardRef } from "react";
 import { PromptBuilder, PromptBuilderHandle } from "../PromptBuilder";
 import Footer from "../Footer";
 import { useLayout } from "../layout/LayoutContext";
+import type { FooterPresentationModel } from "@/services/footerPresentation";
 
 interface PromptViewProps {
     isActive: boolean;
     // PromptBuilder props
     selectedFilePaths: string[];
-    onPromptBuilt: (prompt: string) => void;
+    onPromptBuilt: (prompt: string, redactionCount: number) => void;
     // Footer props
     onCopy: () => void;
-    tokenCount: number;
-    tokenLimit: number;
+    footerPresentation: FooterPresentationModel;
     version: string;
 }
 
@@ -20,9 +20,8 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
     selectedFilePaths,
     onPromptBuilt,
     onCopy,
-    tokenCount,
-    tokenLimit,
-    version
+    footerPresentation,
+    version,
 }, ref) => {
     const { setFooterContent, setHeaderContent } = useLayout();
 
@@ -37,8 +36,7 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
             setFooterContent(
                 <Footer
                     onCopy={onCopy}
-                    tokenCount={tokenCount}
-                    tokenLimit={tokenLimit}
+                    presentation={footerPresentation}
                     version={version}
                 />
             );
@@ -48,9 +46,8 @@ export const PromptView = forwardRef<PromptBuilderHandle, PromptViewProps>(({
         setFooterContent, 
         setHeaderContent, 
         onCopy, 
-        tokenCount, 
-        tokenLimit, 
-        version
+        footerPresentation,
+        version,
     ]);
 
     return (

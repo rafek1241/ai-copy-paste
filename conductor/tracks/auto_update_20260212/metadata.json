@@ -1,8 +1,8 @@
 {
   "track_id": "auto_update_20260212",
   "type": "feature",
-  "status": "new",
+  "status": "planned",
   "created_at": "2026-02-12T10:00:00Z",
-  "updated_at": "2026-02-12T10:00:00Z",
+  "updated_at": "2026-02-14T00:00:00Z",
   "description": "Auto-update mechanism that on startup checks if there is new version in repository and shows a mandatory update dialog with changelog."
 }

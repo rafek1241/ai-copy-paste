@@ -6,6 +6,10 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "clipboard-manager:default",
+    "updater:default",
+    "process:allow-restart",
+    "process:allow-exit"
   ]
 }

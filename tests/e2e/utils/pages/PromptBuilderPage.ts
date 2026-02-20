@@ -122,21 +122,40 @@ export class PromptBuilderPage extends BasePage {
    * Click Build & Copy button
    */
   async clickBuildPrompt(): Promise<void> {
+    await browser.waitUntil(
+      async () => await this.isBuildButtonEnabled(),
+      {
+        timeout: 8000,
+        interval: 200,
+        timeoutMsg: "Copy Context button was not enabled in time",
+      }
+    );
+
     try {
       await this.safeClick(Selectors.buildPromptBtn);
     } catch {
-      // Fallback: find button by text
       const buttons = await $$("button");
       for (const button of buttons) {
-        const text = await button.getText();
-        if (text.includes("Build") && text.includes("Clipboard")) {
-          await button.click();
-          return;
+        const text = (await button.getText()).toLowerCase();
+        if (text.includes("copy context")) {
+          const disabled = await button.getAttribute("disabled");
+          if (!disabled) {
+            await button.click();
+            return;
+          }
         }
       }
+
+      throw new Error("Unable to click Copy Context button");
     }
-    // Wait for prompt building
-    await browser.pause(1000);
+    try {
+      await browser.waitUntil(
+        async () => (await this.isPromptPreviewDisplayed()) || !(await this.isBuildButtonEnabled()),
+        { timeout: 5000, interval: 100 }
+      );
+    } catch {
+      // Copy can succeed without visible prompt preview changes.
+    }
   }
 
   /**
@@ -160,13 +179,21 @@ export class PromptBuilderPage extends BasePage {
   async isBuildButtonEnabled(): Promise<boolean> {
     try {
       const button = await $(Selectors.buildPromptBtn);
-      return !(await button.getAttribute("disabled"));
+      if (!(await button.isExisting())) {
+        return false;
+      }
+
+      const disabledAttr = await button.getAttribute("disabled");
+      const ariaDisabled = await button.getAttribute("aria-disabled");
+      return !disabledAttr && ariaDisabled !== "true";
     } catch {
       const buttons = await $$("button");
       for (const button of buttons) {
-        const text = await button.getText();
-        if (text.includes("Build")) {
-          return !(await button.getAttribute("disabled"));
+        const text = (await button.getText()).toLowerCase();
+        if (text.includes("copy context")) {
+          const disabledAttr = await button.getAttribute("disabled");
+          const ariaDisabled = await button.getAttribute("aria-disabled");
+          return !disabledAttr && ariaDisabled !== "true";
         }
       }
       return false;

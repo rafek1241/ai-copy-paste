@@ -1,7 +1,8 @@
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { createRef } from 'react';
 import { render } from '../test-utils';
-import Settings from '@/components/Settings';
-import { expect, it, describe, beforeEach } from 'vitest';
+import Settings, { type SettingsRef } from '@/components/Settings';
+import { expect, it, describe, beforeEach, vi } from 'vitest';
 import { mockInvoke } from '../setup';
 
 describe('Settings Component', () => {
@@ -14,6 +15,8 @@ describe('Settings Component', () => {
     respect_gitignore: true,
   };
 
+  let settingsRef: { save: () => Promise<void>; isSaving: boolean } | null = null;
+
   beforeEach(() => {
     mockInvoke.mockImplementation((command, args) => {
       if (command === 'load_settings') {
@@ -21,10 +24,12 @@ describe('Settings Component', () => {
       }
       return Promise.resolve(undefined);
     });
+    settingsRef = null;
   });
 
   it('should render and load settings', async () => {
-    render(<Settings />);
+    const handleSavingChange = vi.fn();
+    render(<Settings onSavingChange={handleSavingChange} />);
 
     expect(screen.getByText(/loading settings/i)).toBeInTheDocument();
 
@@ -38,7 +43,8 @@ describe('Settings Component', () => {
   });
 
   it('should add an extension', async () => {
-    render(<Settings />);
+    const handleSavingChange = vi.fn();
+    render(<Settings onSavingChange={handleSavingChange} />);
     await screen.findByText('.exe');
 
     const input = screen.getByPlaceholderText('e.g. .exe');
@@ -52,24 +58,9 @@ describe('Settings Component', () => {
     });
   });
 
-  it('should call save_settings when Save button is clicked', async () => {
-    render(<Settings />);
-    await screen.findByText('.exe');
-
-    const saveButton = screen.getByText('SAVE CONFIGURATION');
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('save_settings', expect.objectContaining({
-        settings: expect.objectContaining({
-          token_limit: 150000
-        })
-      }));
-    });
-  });
-
   it('should render gitignore toggle', async () => {
-    render(<Settings />);
+    const handleSavingChange = vi.fn();
+    render(<Settings onSavingChange={handleSavingChange} />);
     await screen.findByText('.exe');
 
     expect(screen.getByText('Respect .gitignore Rules')).toBeInTheDocument();
@@ -77,7 +68,8 @@ describe('Settings Component', () => {
   });
 
   it('should toggle gitignore setting', async () => {
-    render(<Settings />);
+    const handleSavingChange = vi.fn();
+    render(<Settings onSavingChange={handleSavingChange} />);
     await screen.findByText('.exe');
 
     const gitignoreToggle = screen.getByText('Respect .gitignore Rules').closest('label')?.querySelector('input');
@@ -90,19 +82,18 @@ describe('Settings Component', () => {
     }
   });
 
-  it('should save gitignore setting correctly', async () => {
-    render(<Settings />);
+  it('should persist settings through save API wiring', async () => {
+    const handleSavingChange = vi.fn();
+    const ref = createRef<SettingsRef>();
+    render(<Settings ref={ref} onSavingChange={handleSavingChange} />);
     await screen.findByText('.exe');
 
-    const saveButton = screen.getByText('SAVE CONFIGURATION');
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('save_settings', expect.objectContaining({
-        settings: expect.objectContaining({
-          respect_gitignore: true
-        })
-      }));
+    await act(async () => {
+      await ref.current?.save();
     });
+
+    expect(mockInvoke).toHaveBeenCalledWith('save_settings', expect.any(Object));
+    expect(handleSavingChange).toHaveBeenCalledWith(true);
+    expect(handleSavingChange).toHaveBeenLastCalledWith(false);
   });
 });

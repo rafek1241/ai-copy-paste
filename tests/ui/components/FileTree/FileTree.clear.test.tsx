@@ -143,15 +143,20 @@ describe('FileTree Clear Context', () => {
       await findNodeLabel('file1.ts');
 
       // Select all files
-      const checkboxes = screen.getAllByTestId('tree-checkbox');
-      fireEvent.click(checkboxes[1]); // file1.ts
-      fireEvent.click(checkboxes[2]); // file2.ts
-      fireEvent.click(checkboxes[3]); // file3.ts
+      fireEvent.click(screen.getByLabelText('Select file1.ts'));
+      await waitFor(() => {
+        expect(screen.getByLabelText('Select file1.ts')).toBeChecked();
+      });
+      fireEvent.click(screen.getByLabelText('Select file2.ts'));
+      await waitFor(() => {
+        expect(screen.getByLabelText('Select file2.ts')).toBeChecked();
+      });
+      fireEvent.click(screen.getByLabelText('Select file3.ts'));
 
       await waitFor(() => {
-        expect(checkboxes[1]).toBeChecked();
-        expect(checkboxes[2]).toBeChecked();
-        expect(checkboxes[3]).toBeChecked();
+        expect(screen.getByLabelText('Select file1.ts')).toBeChecked();
+        expect(screen.getByLabelText('Select file2.ts')).toBeChecked();
+        expect(screen.getByLabelText('Select file3.ts')).toBeChecked();
       });
 
       // Clear selections

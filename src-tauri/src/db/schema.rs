@@ -53,6 +53,35 @@ pub fn init_database(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Sensitive path marks table (files and ancestor directories)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sensitive_paths (
+            path TEXT PRIMARY KEY,
+            is_sensitive_file INTEGER NOT NULL DEFAULT 0,
+            matched_patterns TEXT NOT NULL DEFAULT '[]',
+            match_count INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    // Pending update tracking for "Update on Exit" feature
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pending_updates (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            version TEXT NOT NULL,
+            download_url TEXT NOT NULL,
+            release_notes TEXT,
+            downloaded_path TEXT,
+            created_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sensitive_paths_file ON sensitive_paths(is_sensitive_file)",
+        [],
+    )?;
     Ok(())
 }
 
@@ -74,7 +103,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(table_count, 3); // files, history, settings
+    assert_eq!(table_count, 5); // files, history, settings, sensitive_paths, pending_updates
 
         // Verify path is primary key
         let pk_info: String = conn
@@ -85,5 +114,38 @@ mod tests {
             )
             .unwrap();
         assert_eq!(pk_info, "path");
+    }
+
+    #[test]
+    fn test_pending_updates_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_database(&conn).unwrap();
+
+        // Insert a pending update
+        conn.execute(
+            "INSERT INTO pending_updates (id, version, download_url, release_notes, created_at)
+             VALUES (1, '1.0.1', 'https://example.com/update.exe', 'Release notes', 1234567890)",
+            [],
+        )
+        .unwrap();
+
+        // Read it back
+        let (version, download_url): (String, String) = conn
+            .query_row(
+                "SELECT version, download_url FROM pending_updates WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(version, "1.0.1");
+        assert_eq!(download_url, "https://example.com/update.exe");
+
+        // Test CHECK constraint - inserting id=2 should fail
+        let result = conn.execute(
+            "INSERT INTO pending_updates (id, version, download_url, created_at)
+             VALUES (2, '1.0.2', 'https://example.com/update2.exe', 1234567890)",
+            [],
+        );
+        assert!(result.is_err());
     }
 }

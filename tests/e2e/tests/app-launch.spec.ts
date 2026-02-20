@@ -94,6 +94,17 @@ describe("Application Launch", () => {
 });
 
 describe("Navigation", () => {
+  const waitForContainer = async (): Promise<void> => {
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          return document.querySelector('[data-testid="app-container"]') !== null;
+        });
+      },
+      { timeout: 3000, interval: 100 }
+    );
+  };
+
   before(async () => {
     await browser.waitUntil(
       async () => {
@@ -111,7 +122,7 @@ describe("Navigation", () => {
       btn?.click();
     });
 
-    await browser.pause(1000);
+    await waitForContainer();
 
     // Just verify app container still exists
     const hasContainer = await browser.execute(() => {
@@ -127,7 +138,7 @@ describe("Navigation", () => {
       btn?.click();
     });
 
-    await browser.pause(1000);
+    await waitForContainer();
 
     const hasContainer = await browser.execute(() => {
       return document.querySelector('[data-testid="app-container"]') !== null;
@@ -142,7 +153,7 @@ describe("Navigation", () => {
       btn?.click();
     });
 
-    await browser.pause(1000);
+    await waitForContainer();
 
     const hasContainer = await browser.execute(() => {
       return document.querySelector('[data-testid="app-container"]') !== null;
@@ -157,7 +168,7 @@ describe("Navigation", () => {
       btn?.click();
     });
 
-    await browser.pause(1000);
+    await waitForContainer();
 
     const hasContainer = await browser.execute(() => {
       return document.querySelector('[data-testid="app-container"]') !== null;

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import { FileTree } from '@/components/FileTree/FileTree';
 import { vi, expect, it, describe, beforeEach, afterEach } from 'vitest';
 import { mockInvoke, mockListen, mockEmit } from '../../setup';
@@ -160,16 +160,21 @@ describe('FileTree User Scenarios', () => {
     // Select the file
     const checkbox = await screen.findByLabelText('Select c.txt');
     fireEvent.click(checkbox);
+    await waitFor(() => {
+      expect(screen.getByLabelText('Select c.txt')).toBeChecked();
+    });
     
     // 2. Collapse the parent manually
     const expandIcon = screen.getByTestId('expand-icon');
     fireEvent.click(expandIcon);
     expect(expandIcon).toHaveAttribute('data-expanded', 'false');
 
-    // 3. Trigger refresh (e.g. adding another file somewhere else)
-    mockNodes.push({ path: '/other/file.txt', parent_path: '/other', name: 'file.txt', is_dir: false, size: 100, mtime: 125, token_count: null, fingerprint: 'fp2', child_count: null });
-    
-    await mockEmit('refresh-file-tree');
+    // 3. Trigger refresh
+    await act(async () => {
+      await mockEmit('refresh-file-tree');
+    });
+
+    await findNodeLabel('c.txt');
 
     // The parent of c.txt should be auto-expanded again because the file is checked
     await waitFor(() => {

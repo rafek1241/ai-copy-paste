@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fuzzyScore, fuzzyMatch } from './fuzzyMatch';
+import { fuzzyScore, fuzzyMatch } from '@/lib/fuzzyMatch';
 
 describe('fuzzyMatch', () => {
   describe('fuzzyScore', () => {

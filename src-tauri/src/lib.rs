@@ -3,12 +3,26 @@ mod commands;
 mod db;
 mod error;
 pub mod gitignore;
+mod sensitive;
 mod templates;
 
 use cache::TextCache;
-use db::DbConnection;
+use std::env;
 use std::sync::Mutex;
 use tauri::Manager;
+
+fn env_flag(name: &str) -> bool {
+    env::var(name)
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on"
+        })
+        .unwrap_or(false)
+}
+
+fn e2e_background_mode() -> bool {
+    env_flag("E2E_BACKGROUND") && !env_flag("E2E_VISIBLE")
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,6 +37,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Initialize database
             let db = db::init_db(app.handle())?;
@@ -40,6 +56,26 @@ pub fn run() {
                 .map_err(|e| format!("Failed to initialize text cache: {}", e))?;
             app.manage(Mutex::new(text_cache));
             log::info!("Text cache initialized successfully");
+
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
+
+            if e2e_background_mode() {
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(error) = window.set_skip_taskbar(true) {
+                        log::warn!("E2E background mode: failed to hide taskbar icon: {}", error);
+                    }
+                    if let Err(error) = window.hide() {
+                        log::warn!("E2E background mode: failed to hide main window: {}", error);
+                    } else {
+                        log::info!("E2E background mode enabled: main window hidden");
+                    }
+                } else {
+                    log::warn!("E2E background mode enabled but main window was not found");
+                }
+            }
 
             Ok(())
         })
@@ -70,6 +106,23 @@ pub fn run() {
             commands::settings::import_settings,
             commands::settings::delete_setting,
             commands::settings::reset_settings,
+            commands::sensitive::get_sensitive_patterns,
+            commands::sensitive::get_sensitive_data_enabled,
+            commands::sensitive::set_sensitive_data_enabled,
+            commands::sensitive::get_prevent_selection,
+            commands::sensitive::set_prevent_selection,
+            commands::sensitive::add_custom_pattern,
+            commands::sensitive::delete_custom_pattern,
+            commands::sensitive::toggle_pattern_enabled,
+            commands::sensitive::scan_files_sensitive,
+            commands::sensitive::get_sensitive_marked_paths,
+            commands::sensitive::validate_regex_pattern,
+            commands::sensitive::test_pattern,
+            commands::update::check_for_updates,
+            commands::update::download_update,
+            commands::update::install_portable_update,
+            commands::update::get_pending_update,
+            commands::update::clear_pending_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

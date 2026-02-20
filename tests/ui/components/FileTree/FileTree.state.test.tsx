@@ -143,13 +143,15 @@ describe('FileTree State Preservation', () => {
       await screen.findByText('file2.ts');
 
       // Select both files
-      let checkboxes = screen.getAllByTestId('tree-checkbox');
-      fireEvent.click(checkboxes[1]); // file1.ts
-      fireEvent.click(checkboxes[2]); // file2.ts
+      fireEvent.click(screen.getByLabelText('Select file1.ts'));
+      await waitFor(() => {
+        expect(screen.getByLabelText('Select file1.ts')).toBeChecked();
+      });
+      fireEvent.click(screen.getByLabelText('Select file2.ts'));
 
       await waitFor(() => {
-        expect(checkboxes[1]).toBeChecked();
-        expect(checkboxes[2]).toBeChecked();
+        expect(screen.getByLabelText('Select file1.ts')).toBeChecked();
+        expect(screen.getByLabelText('Select file2.ts')).toBeChecked();
       });
 
       // Collapse and re-expand
@@ -161,9 +163,8 @@ describe('FileTree State Preservation', () => {
       fireEvent.click(screen.getByTestId('expand-icon'));
 
       await waitFor(() => {
-        checkboxes = screen.getAllByTestId('tree-checkbox');
-        expect(checkboxes[1]).toBeChecked();
-        expect(checkboxes[2]).toBeChecked();
+        expect(screen.getByLabelText('Select file1.ts')).toBeChecked();
+        expect(screen.getByLabelText('Select file2.ts')).toBeChecked();
       });
     });
   });

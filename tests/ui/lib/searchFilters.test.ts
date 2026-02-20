@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSearchQuery, matchesSearchFilters, SearchFilters } from './searchFilters';
+import { parseSearchQuery, matchesSearchFilters, SearchFilters } from '@/lib/searchFilters';
 
 describe('searchFilters', () => {
   describe('parseSearchQuery', () => {
